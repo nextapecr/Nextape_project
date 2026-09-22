@@ -9,14 +9,24 @@ Este archivo es **contexto de arranque**. La documentación profunda por área e
 
 Plataforma de **evaluación técnica con IA** que construye el "DNA técnico verificado" de desarrolladores.
 Roles: `developer` y `recruiter`.
-- **The LINE**: simulaciones técnicas generadas por IA (Genkit + Gemini) → puntúan skills.
+- **The LINE**: examen técnico **determinista**. Las preguntas se **precargan** con IA en
+  `line_question_pools/{tech}_{nivel}` (`npm run seed:questions`); en runtime **NO se llama al modelo**,
+  solo se sortean. 55 tecnologías × 3 niveles (`junior|mid|senior`), 5 tipos de pregunta.
+  **Es la única fuente del DNA.**
 - **CORE**: identidad técnica persistida (scores por skill) en Firestore.
-- **Roadmap**: plan de mejora generado por IA a partir de los gaps.
+- **GitHub**: analiza el código real de tus repos con **tree-sitter (AST)** y produce 5 dimensiones de
+  ingeniería. **No escribe el DNA**: solo influye en el tamaño del examen y en el roadmap.
+- **Roadmap**: motor **determinista, sin IA** (`src/lib/roadmap-engine.ts`) sobre `skill_catalog` +
+  `roadmap_routes`. The LINE es obligatorio; GitHub es un proxy opcional que nunca penaliza.
 - **Jobs / Compatibility**: match entre `job.requiredSkills` y el DNA del usuario.
 
 **Stack:** Next.js 15 (App Router) · React 19 · TypeScript (strict) · Firebase (Auth/Firestore/Storage,
-Web SDK) · Genkit 1.28 + **`genkitx-groq`** (proveedor **Groq**, modelo `llama-3.3-70b-versatile`) · Tailwind 3 + shadcn/ui.
-Hosting: **Netlify** (Firebase solo Auth+DB). Dev env: Firebase Studio / Project IDX (usa backends de **producción**).
+Web SDK + Admin SDK) · **tree-sitter** (`@kreuzberg/tree-sitter-language-pack`, 21 gramáticas) ·
+Genkit 1.28 · Tailwind 3 + shadcn/ui.
+**IA — tres proveedores:** **Groq** principal (`genkitx-groq`, `llama-3.3-70b-versatile`), **NVIDIA NIM**
+como fallback ante 429, y **Mistral** para el feedback del análisis de GitHub.
+Hosting: **Netlify** (Firebase solo Auth+DB). La config de Cloudflare/App Hosting que queda en el repo
+está **muerta** — no la uses como referencia.
 
 **Arquitectura en una frase:** monolito modular sobre Firebase (cliente) **+ una capa de confianza en
 servidor** (route handlers `src/app/api/*` con Firebase Admin SDK) para todo lo sensible: scoring/DNA y
@@ -34,6 +44,11 @@ npm run build        # Build de producción (los errores de tipos BLOQUEAN)
 npm run typecheck    # tsc --noEmit  ← EJECUTAR SIEMPRE tras cambios de TS
 npm run lint         # eslint .      ← 0 errores requerido (warnings permitidos)
 npm test             # vitest run    ← tests unitarios; los de reglas requieren emulador
+
+# Datos (escriben en el Firestore configurado — normalmente PRODUCCIÓN; nada escribe sin --yes)
+npm run inventory:pools   # SOLO LECTURA: qué bancos de preguntas existen y con cuántas preguntas
+npm run seed:questions    # precarga el banco de The LINE (--dry-run / --only=<id> / --top-up / --yes)
+npm run seed:catalog:full # catálogo del roadmap: 112 skills + 10 rutas
 ```
 Antes de dar por terminado un cambio: `typecheck` + `lint` + `test` en verde (es lo que valida CI).
 
@@ -93,8 +108,15 @@ Estas reglas son **vinculantes**. Si una tarea requiere romper una, **detente y 
     Consúmelos vía el wrapper `export async function`.
 12. **Nunca importes el Firebase Web SDK dentro de un archivo `'use server'`.** Si un flow necesita
     escribir datos de forma confiable, usa Admin SDK en servidor, no el Web SDK del cliente.
-13. **Proveedor IA = Groq** (plugin `genkitx-groq`), no Gemini ni Anthropic. Modelo y API key (`GROQ_API_KEY`)
-    centralizados en `src/ai/genkit.ts` (`GROQ_MODEL`). Genera JSON con `generateJson` (parseo + validación Zod).
+13. **Proveedores IA = Groq · NVIDIA NIM · Mistral.** Nunca Gemini ni Anthropic.
+    - **Groq** es el principal (`genkitx-groq`, `GROQ_API_KEY`/`GROQ_MODEL`, centralizado en `src/ai/genkit.ts`).
+    - **NVIDIA NIM** es el fallback automático ante 429 (`NVIDIA_API_KEY`/`NVIDIA_MODEL`).
+    - **Mistral** solo genera el feedback del análisis de GitHub (`MISTRAL_API_KEY`/`MISTRAL_MODEL`), y
+      **recibe únicamente números, nunca código**. No cambies eso.
+    Genera JSON con `generateJson` (esquema tolerante → normalización → esquema estricto Zod).
+    - ⚠️ **La IA NO se invoca en tiempo de petición.** El banco de preguntas se precarga con un script.
+      Si una tecnología no tiene banco, la respuesta correcta es `503 pool_not_seeded` — **nunca** generar
+      al vuelo en el handler.
 
 ### 4.4 Frontend
 14. **Consume `src/services/*`**, reutiliza `components/ui/*` (shadcn) y las utilidades de marca
@@ -124,7 +146,7 @@ En [`.claude/agents/`](./.claude/agents/) hay agentes por área. Úsalos (o dele
 | Agente | Cuándo |
 |---|---|
 | `frontend-engineer` | UI, rutas, componentes, estado, diseño. |
-| `backend-ai-engineer` | Servicios, server actions, flows de Genkit/Gemini. |
+| `backend-ai-engineer` | Servicios, route handlers, flows de Genkit (Groq/NVIDIA/Mistral). |
 | `database-architect` | Modelo de datos Firestore, colecciones, tipos, migraciones. |
 | `security-auditor` | Reglas Firestore/Storage, auth, integridad, revisión de seguridad. |
 | `ai-flow-reviewer` | Revisión de prompts/flows de IA (calidad, coste, structured output). |
@@ -134,12 +156,22 @@ En [`.claude/agents/`](./.claude/agents/) hay agentes por área. Úsalos (o dele
 
 ## 6. Estado actual (lee antes de prometer "listo para prod")
 
-MVP saneado en la rama **`fix/system-hardening`** (ver [`docs/CHANGELOG_FIXES.md`](./docs/CHANGELOG_FIXES.md)).
-Ya resuelto: código muerto eliminado, tipos consolidados, bugs de runtime/lógica, **scoring/DNA movido a
-servidor (integridad, B2)**, reglas endurecidas, **motor de matching / cierre del loop reclutador
-(`candidate_matches`, A4)**, build/typecheck/lint/tests en verde y CI configurado.
-`typecheck` + `lint` + `test` pasan; `build` OK.
+La rama viva es **`main`**. 👉 **Lee [`docs/CONTEXT.md`](./docs/CONTEXT.md)**: es el mapa del sistema y su
+estado real (snapshot `main` @ `5e4beb7`, 2026-09-22). `thelineRAG` es hoy el mismo commit que `main`;
+`fix/system-hardening` quedó 29 commits atrás.
 
-**Pendiente** (ver [`docs/TECH_DEBT.md`](./docs/TECH_DEBT.md) / [`docs/PRODUCTION_READINESS.md`](./docs/PRODUCTION_READINESS.md)):
-configurar el **secreto de Gemini** y las **credenciales del Admin SDK** en hosting; probar el pipeline
-end-to-end en staging; reducir warnings de ESLint.
+Ya construido: capa de confianza en servidor (DNA/scoring), banco de preguntas precargado (5 tipos,
+55 tecnologías), **motor de GitHub** (AST con tree-sitter, 21 lenguajes), **roadmap determinista v2**
+(112 skills / 10 rutas), cierre del loop reclutador (`candidate_matches`), rate limiting y CI.
+
+**Estado verificado:** `lint` 0 errores / 21 warnings · `test` 116 pasan, 8 *skipped* (los de reglas
+necesitan el emulador y **CI no lo arranca**) · `typecheck` falla **solo en local** por dependencias
+nativas no instaladas (`tree-sitter`, `@genkit-ai/compat-oai`); en CI pasa.
+
+**Pendiente destacado** (detalle en [`docs/CONTEXT.md`](./docs/CONTEXT.md) §9 y [`docs/TECH_DEBT.md`](./docs/TECH_DEBT.md)):
+- 🔴 **Los vocabularios de The LINE y del roadmap están desacoplados** (ids de tecnología vs. slugs del
+  catálogo: solo coinciden 2 de 112). El roadmap apenas se alimenta del DNA real.
+- 🔴 **`.env.example` no documenta `GITHUB_TOKEN`, `MISTRAL_API_KEY` ni `NVIDIA_API_KEY`**: un despliegue
+  que la siga deja `/api/github/*` roto.
+- 🟠 `jobs` valida campos server-only en `update` pero no en `create`; `/api/line/*` sin rate limit y
+  `line_sessions` sin TTL.

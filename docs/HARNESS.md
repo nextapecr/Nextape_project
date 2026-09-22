@@ -1,4 +1,4 @@
-# NEXTAPE — Arnés de ingeniería (harness) para `thelineRAG`
+# NEXTAPE — Arnés de ingeniería (harness)
 
 > **Qué es este archivo.** El arnés con el que iteramos sobre este código usando agentes especializados:
 > qué verifica cada iteración, quién toca qué, cuánto contexto lee cada agente y cómo se cierra el ciclo.
@@ -7,7 +7,7 @@
 > deterministas** que hacen que un agente pueda equivocarse **sin romper el sistema**. La calidad del
 > resultado la fija el arnés, no el modelo.
 >
-> Contexto del sistema: [`CONTEXT.md`](./CONTEXT.md) · Reglas vinculantes: [`/CLAUDE.md`](../CLAUDE.md)
+> Contexto del sistema y estado real: [`CONTEXT.md`](./CONTEXT.md) (snapshot `main` @ `5e4beb7`) · Reglas vinculantes: [`/CLAUDE.md`](../CLAUDE.md)
 > · Agentes actuales: [`.claude/agents/`](../.claude/agents/README.md)
 
 ---

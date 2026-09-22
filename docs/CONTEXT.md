@@ -1,596 +1,352 @@
-# NEXTAPE — Contexto del sistema (rama `thelineRAG`)
+# NEXTAPE — Contexto del sistema (rama `main`)
 
-> **Qué es este archivo.** Análisis del sistema hecho leyendo el código de la rama `thelineRAG`, con el
-> estado **verificado ejecutando** el proyecto (no inferido de la documentación). Es el contexto de
-> arranque para trabajar con agentes: qué existe, cómo fluye, qué está roto y dónde encaja el trabajo nuevo.
+> **Qué es este archivo.** El mapa del sistema y su **estado real**, hecho leyendo el código de `main`
+> y ejecutando las verificaciones (no inferido de la documentación previa, que estaba desfasada).
+> Es el contexto de arranque para trabajar con agentes: qué existe, cómo fluye, qué está roto y dónde
+> encaja el trabajo nuevo.
 >
 > **Complementa, no reemplaza:** [`/CLAUDE.md`](../CLAUDE.md) son las reglas vinculantes;
-> [`docs/README.md`](./README.md) indexa la documentación por área. Este archivo es el **mapa + el estado real**.
-> El arnés de trabajo está en [`HARNESS.md`](./HARNESS.md).
+> [`docs/README.md`](./README.md) indexa la documentación por área.
 >
-> Snapshot: rama `thelineRAG` @ `aa9e91a` · analizado el 2026-08-01.
+> **Snapshot:** `main` @ `5e4beb7` · analizado el **2026-09-22**.
+> Sustituye al contexto anterior, que describía la rama `thelineRAG` @ `aa9e91a` (1-ago) y hoy es falso.
 
 ---
 
 ## 0. Lo primero que hay que saber
 
-**`thelineRAG` es hoy byte-idéntica a `fix/system-hardening`.** Mismo HEAD (`aa9e91a`), mismos 12 commits,
-`git diff` vacío entre ambas. **No hay una sola línea de RAG en el repositorio**: cero embeddings, cero
-retrieval, cero vector store, cero corpus. Búsqueda de `rag|embedding|vector|retriev|index` en `src/` y
-`docs/` → 0 resultados reales.
-
-Es decir: la rama es un **punto de partida limpio con el nombre del objetivo**, no un trabajo a medias.
-Todo el trabajo de RAG está por hacer, y eso es una ventaja — se diseña desde cero sobre una base sana.
-
-**Segundo dato relevante:** `main` y `thelineRAG` **no comparten historia** (`git merge-base` → *no merge
-base*). El commit `d74ee15` ("CORE: Full system migration to Next.js 15 + Genkit") de la rama `migration`
-es un commit huérfano que reemplazó el árbol completo. `main` (75 commits) es el sistema **viejo**; la línea
-viva es `migration → fix/system-hardening → thelineRAG` (12 commits). Un `merge` a `main` no será trivial:
-requiere decisión de equipo (probablemente `main` se reescribe, no se mergea).
+1. **`main` es la rama viva.** `thelineRAG` es hoy **el mismo commit** que `main`. `fix/system-hardening`
+   quedó 29 commits atrás. El resto (`main-legacy`, `migration`, `develop`, `Dashboard`,
+   `feat/mvp-core-modules`, `roadmap`, `feature/multi-language-support`) son históricas.
+2. **No hay RAG.** Pese al nombre de la rama, no hay embeddings, vector store ni retrieval. Lo que sí
+   existe es `TECHNOLOGY_SOURCES` (`src/lib/server/sources.ts`): una lista de URLs de referencia que se
+   inyectan **como texto en el prompt**. El modelo no lee esas páginas, así que el campo `source` de una
+   pregunta es una atribución suya, no una cita verificada. Por eso nunca se envía al cliente.
+3. **La IA ya NO corre en tiempo de petición.** Las preguntas se **precargan** con un script y en runtime
+   solo se sortean. Ver §3.1.
+4. **Hay tres proveedores de IA**, no uno: Groq (principal), NVIDIA NIM (fallback ante 429) y Mistral
+   (feedback del análisis de GitHub). Ver §6.
+5. **El experimento de Cloudflare se abandonó.** El despliegue real es **Netlify**. Queda configuración
+   muerta en el repo (§7).
 
 ---
 
 ## 1. El producto
 
-Plataforma de **evaluación técnica con IA** que construye el *"DNA técnico verificado"* de un developer.
-Dos roles, `developer` y `recruiter`, con navegación distinta sobre el mismo dashboard.
+Plataforma de **evaluación técnica** que construye el **"DNA técnico verificado"** de un desarrollador y
+lo conecta con vacantes. Dos roles: `developer` y `recruiter`.
 
-| Módulo | Qué hace | Dónde vive |
+| Módulo | Qué hace | Ruta |
 |---|---|---|
-| **The LINE** | Simulación técnica con preguntas de cinco tipos sorteadas de un banco precargado: **10 si el usuario tiene su GitHub analizado y verificado, 20 si no** (la evidencia de código compensa la otra mitad). Es el **motor de todo**: sin LINE no hay DNA. | [`dashboard/line/`](../src/app/dashboard/line/page.tsx) + [`api/line/*`](../src/app/api/line/) |
-| **CORE** | La identidad técnica persistida: un score 0–100 por skill. | [`dashboard/core/`](../src/app/dashboard/core/page.tsx) → `user_skill_scores` |
-| **Roadmap** | Plan de mejora generado por IA a partir de los gaps del CORE. | [`dashboard/roadmap/`](../src/app/dashboard/roadmap/page.tsx) |
-| **Jobs / Compatibility** | Match entre `job.requiredSkills` y el DNA. | [`dashboard/jobs/`](../src/app/dashboard/jobs/page.tsx), [`match.ts`](../src/lib/match.ts) |
-| **Vacancies / Candidates** | Lado reclutador: publicar vacante, generar su prueba, ver el ranking de candidatos. | [`dashboard/vacancies/`](../src/app/dashboard/vacancies/page.tsx), [`dashboard/candidates/`](../src/app/dashboard/candidates/page.tsx) |
+| **The LINE** | Examen técnico determinista por tecnología×nivel, o por vacante. **Única fuente del DNA.** | `/dashboard/line` |
+| **CORE** | El DNA: score por skill, persistido. | `/dashboard/core` |
+| **GitHub** | Analiza el código real de tus repos (AST) y produce 5 dimensiones de ingeniería. | `/dashboard/github` |
+| **Roadmap** | Plan de progresión determinista hacia un rol/nivel. | `/dashboard/roadmap` |
+| **Empleos / Compatibilidad** | Match entre `job.requiredSkills` y el DNA. | `/dashboard/jobs`, `/dashboard/compatibility` |
+| **Vacantes / Candidatos** | El reclutador publica, se genera la prueba, y ve candidatos rankeados. | `/dashboard/vacancies`, `/dashboard/candidates` |
 
-**La tesis del producto es la integridad.** Se vende un DNA *verificado*; si el score fuese falsificable el
-producto no vale nada. Toda la arquitectura de la rama gira alrededor de eso.
+**Navegación por rol** (`DashboardShell.tsx`): *developer* ve Panel, The LINE, CORE, GitHub, Roadmap,
+Empleos, Compatibilidad, Perfil. *Recruiter* ve Panel, Mis Vacantes, Publicar, Candidatos.
+
+⚠️ `AuthGuard` comprueba **sesión, no rol**: un developer que escriba `/dashboard/candidates` a mano
+renderiza la página. No ve datos ajenos (las reglas filtran por `recruiterId`), así que es un problema de
+UX, no de seguridad.
 
 ---
 
-## 2. Arquitectura
-
-### 2.1 La frontera de confianza (lo esencial)
-
-Monolito modular sobre Firebase **+ una capa de confianza en servidor**. La regla que ordena todo el sistema:
-
-> **El cliente LEE. El servidor ESCRIBE todo lo que vale.**
-
-```
-┌──────────────────────── Browser ('use client') ────────────────────────┐
-│  app/dashboard/*  →  services/*  →  lib/firebase/client.ts (Web SDK)   │
-│                   →  lib/api.ts  ── apiPost(+ Firebase ID token) ──┐   │
-└────────────┬───────────────────────────────────────────────────────┼───┘
-             │ read  (sujeto a firestore.rules)                       │ POST /api/*
-             ▼                                                        ▼
-      Firebase Auth + Firestore  ◄──────────  Route handlers (runtime nodejs)
-             ▲                                 lib/firebase/admin.ts (Admin SDK)
-             │  escrituras de confianza         └── ai/flows/* (Genkit) ──► Groq
-             └──── DNA · intentos · claves ────────────┘                  llama-3.3-70b
-```
-
-- **Admin SDK bypassa las reglas** → por eso el DNA es `write:false` para el cliente y su integridad no
-  depende del navegador.
-- **`correctIndex` nunca sale al cliente.** El tipo público es
-  [`PublicQuestion = Omit<Question,"correctIndex">`](../src/types/job.types.ts#L17) y
-  [`stripAnswerKey()`](../src/lib/server/assessment.ts#L16) lo garantiza en el borde.
-- **`AuthGuard` es solo UX**, no seguridad. La autoridad real son las reglas + `verifyRequestUid`.
-
-### 2.2 Stack
+## 2. Stack y arquitectura
 
 | Capa | Tecnología |
 |---|---|
-| Framework | Next.js **15.5.22** (App Router, RSC) · React **19.2** |
-| Lenguaje | TypeScript 5 `strict` · alias `@/* → src/*` |
-| UI | Tailwind 3 + shadcn/ui (34 componentes en `components/ui/`) · lucide-react · recharts |
-| Auth/DB/Storage | Firebase Web SDK 11 (cliente) + firebase-admin 13 (servidor) |
-| IA | Genkit **1.28** + **`genkitx-groq`** → `groq/llama-3.3-70b-versatile` |
-| Validación | Zod 3 · react-hook-form |
-| Tests | Vitest 2 (`environment: node`, solo `src/**/*.test.ts`) |
-| Hosting | **ambiguo — ver §6.2** |
+| Framework | **Next.js 15.5** (App Router, RSC) + **React 19** |
+| Lenguaje | TypeScript 5 (`strict`), alias `@/* → src/*` |
+| UI | **shadcn/ui** (Radix + CVA) + **Tailwind CSS 3** · recharts |
+| Auth/DB/Storage | **Firebase** Web SDK v11 (cliente) + **firebase-admin** (servidor) |
+| Análisis de código | **tree-sitter** + `@kreuzberg/tree-sitter-language-pack` (21 gramáticas) |
+| IA | **Genkit 1.28** — Groq · NVIDIA NIM · Mistral (§6) |
+| Hosting | **Netlify** (`netlify.toml`, `@netlify/plugin-nextjs`, Node 22) |
 
-### 2.3 Tamaño real del código
+### Patrón: monolito modular + capa de confianza en servidor
 
-| Área | Líneas | Archivos | Nota |
-|---|---:|---:|---|
-| `src/components/ui` | 3 655 | 34 | shadcn generado — **no es código propio**, no lo revises |
-| `src/app` | 2 263 | 17 | 12 páginas + 3 route handlers |
-| `src/lib` | 494 | 14 | incluye los 4 archivos de test |
-| `src/ai` | 293 | 5 | **toda la capa de IA cabe aquí** |
-| `src/hooks` | 242 | 3 | |
-| `src/types` | 112 | 5 | tipos canónicos `*.types.ts` |
-| `src/services` | 75 | 5 | wrappers finísimos de lectura |
+- El **cliente LEE** Firestore con el Web SDK, sujeto a `firestore.rules`.
+- Todo lo sensible (corrección de exámenes, escritura del DNA, claves de respuesta, evidencia de GitHub)
+  ocurre en **route handlers** `src/app/api/*` (runtime Node) con el **Admin SDK**, que bypassa las reglas.
+  Por eso los datos verificados son `write: false` para el cliente.
+- El cliente llama con `apiPost`/`apiGet` (`src/lib/api.ts`), que espera `authStateReady()` y adjunta el
+  ID token; el servidor lo verifica con `verifyRequestUid` (`verifyIdToken(token, true)`, comprueba
+  revocación). **Ningún handler confía en un `uid` del body.**
 
-**El código propio no llega a 3 500 líneas.** Cabe entero en contexto. Esto es importante para el arnés:
-no hace falta RAG sobre el propio repo, hace falta disciplina de lectura dirigida.
+```
+Browser (React 19)
+  ├─ lectura directa de Firestore ───────────► firestore.rules
+  └─ apiPost/apiGet + Bearer ID token ───────► /api/* (Node) ── Admin SDK ─► Firestore
+                                                   ├─ tree-sitter (motor de GitHub)
+                                                   └─ Genkit → Groq / NVIDIA / Mistral
+```
+
+**Excepción consciente:** el **motor de roadmap corre en el CLIENTE** (`src/lib/roadmap-engine.ts`).
+Está documentado y es aceptable porque **solo lee y calcula**: no escribe ningún dato verificado (el DNA
+es `write:false` y los catálogos son inmutables desde cliente).
 
 ---
 
-## 3. Flujos críticos (trazados sobre el código real)
+## 3. Los subsistemas
 
-### 3.0-bis Tipos de prueba *(desde 2026-08-02)*
+### 3.1 The LINE — evaluación
 
-The LINE **ya no es solo "marca con X"**. Una prueba combina cinco tipos, definidos como unión
-discriminada en [`question.types.ts`](../src/types/question.types.ts):
+**Determinista y sin IA en tiempo de petición.** Las preguntas se precargan con `npm run seed:questions`
+en `line_question_pools/{tech}_{level}`; en runtime solo se **sortean**.
 
-| Tipo | Qué evalúa | Respuesta | Crédito parcial |
+**Esquema del repertorio:** `{key, kind, label, category, level, questions[] (CON clave), count,
+status: complete|incomplete, byType, generator, updatedAt}`. Regla: `read, write: if false`.
+
+**Catálogo:** **55 tecnologías** (`src/lib/technologies.ts`) en 10 categorías × **3 niveles**
+(`junior|mid|senior`) + 3 stacks históricos = **174 combinaciones** (~4 350 preguntas, ~58 min de seed).
+Alias → id canónico en `TECHNOLOGY_ALIASES` (40 entradas). Los `id` van **en minúsculas** (invariante del DNA).
+
+Reparto por categoría: frontend 9 · backend 8 · **languages 9** · mobile 4 · databases 6 · cloud 3 ·
+devops 5 · api 3 · testing 5 · architecture 3.
+
+**Los 5 tipos de pregunta** (`src/types/question.types.ts`):
+
+| Tipo | Por banco | Clave (server-only) | Corrección |
 |---|---|---|---|
-| `multiple_choice` | criterio de ingeniería | `number` | — |
-| `code_output` | leer código y predecir su comportamiento | `number` | — |
-| `multi_select` | varias afirmaciones correctas de una lista | `number[]` | ✅ los fallos restan |
-| `true_false` | precisión sobre una afirmación técnica | `boolean` | — |
-| `ordering` | orden correcto de un procedimiento | `number[]` | ✅ por posición |
+| `multiple_choice` | 8 | `correctIndex` | acierto / fallo |
+| `true_false` | 5 | `correct: boolean` | acierto / fallo |
+| `multi_select` | 4 | `correctIndexes[]` | **crédito parcial**: `max(0,(aciertos−fallos)/correctas)` |
+| `ordering` | 4 | `correctOrder[]` | **crédito parcial por posición** |
+| `code_output` | 4 | `correctIndex` | acierto / fallo |
 
-**Todos se corrigen en servidor y sin IA.** Es lo que sostiene el objetivo de coste: hacer una
-prueba no cuesta ni una llamada al modelo.
+→ **25 preguntas por combinación** por defecto; `--top-up --target=50` las **añade** sin reemplazar.
 
-> ⚠️ **Si algún día se añade un tipo de respuesta abierta**, su corrección exigirá un LLM *por
-> entrega* y `/api/line/submit` volverá a ser un disparador de trabajo caro — el agujero de coste y
-> DDoS que el repertorio cerró, movido de sitio. La salida sería corregir en diferido, no en el submit.
+**Invariante I1 — las claves nunca salen.** `toPublicQuestion` construye la versión pública **por lista
+blanca**, no borrando campos: un tipo nuevo con clave nueva no se filtra por descuido. Verificado:
+`correctIndex|correctIndexes|correctOrder` → 0 apariciones en `src/app/dashboard` y `src/components`.
 
-Dos detalles de integridad que no son obvios:
-- **`stripAnswerKey` construye la versión pública por lista blanca**, no borrando campos. Cada tipo
-  tiene su propia clave (`correctIndex`, `correctIndexes`, `correct`, `correctOrder`) y un
-  *denylist* filtraría en cuanto alguien añadiera un tipo nuevo. Es la invariante I1.
-- **`ordering` guarda los pasos desordenados.** El modelo los devuelve en orden correcto y el
-  servidor los permuta, guardando la permutación como clave. Si se guardaran en orden, enviarlos al
-  cliente sería servirle la respuesta.
+**Flujo:** `/api/line/start` lee el repertorio, sortea con `pickRandomQuestions` (estratificado por
+`(tag, tipo)` para que los scores sean comparables entre candidatos), crea `line_sessions` (con las claves,
+server-only) y devuelve `PublicQuestion[]`. `/api/line/submit` valida la forma de cada respuesta, corrige,
+escribe el DNA **en transacción** (`max(actual, nuevo)` por skill), registra el intento y **borra la sesión**
+(un solo uso).
 
-### 3.0 Repertorio de preguntas *(desde 2026-08-02)*
+**Tamaño del examen:** **10** con GitHub verificado, **20** sin él; `job.examQuestionCount` del reclutador
+lo sobreescribe, acotado a `[10, 30]`.
 
-The LINE ya **no genera preguntas cuando un candidato hace la prueba**, y desde 2026-09-14 **tampoco al
-publicar la vacante**: el repertorio de cada vacante se **compone desde el banco precargado**
-(`line_question_pools`) en [`job-pool.ts`](../src/lib/server/job-pool.ts). Generarlo con IA dentro de
-una Netlify Function dejaba vacantes sin prueba en cuanto el proveedor fallaba (Groq 401, NVIDIA 410):
-el candidato pulsaba "Postular" y recibía un error.
+**Modo vacante:** el repertorio se compone del banco al publicar (`/api/jobs/assessment`, idempotente) y se
+guarda en `job_answer_keys`. Si no alcanza 10 preguntas → `422 no_bank_for_skills`. Si se pide sin
+repertorio, `/api/line/start` lo compone al vuelo **en transacción**, para que dos candidatos simultáneos
+compartan el mismo.
 
-```
-PUBLICAR VACANTE (1 vez)                      HACER LA PRUEBA (por candidato)
-  POST /api/jobs/assessment                     POST /api/line/start
-    └─ composeJobPoolFromBank()                   └─ lee job_answer_keys/{jobId}
-        ├─ skills → ids canónicos (alias)         │   (si falta, lo compone ahí, en transacción)
-        ├─ banco del nivel de la vacante          └─ pickRandomQuestions(pool, examSizeFor(...))
-        │   o del más cercano                         · 10 con GitHub analizado, 20 sin él
-        ├─ ≤ 30 preguntas/skill, ≤ 8 skills           · o job.examQuestionCount (10–30)
-        ├─ < 10 preguntas → 422 no_bank_for_skills    · estratificado por skill Y tipo
-        └─ job_answer_keys/{jobId}.questions          · SIN llamada a IA
-```
+**Tecnología sin banco:** `503 pool_not_seeded`. El selector **solo ofrece lo precargado**
+(`/api/line/catalog`) — decisión explícita: ofrecer algo que no funciona es peor que no ofrecerlo.
 
-Cada vacante sigue teniendo **su** prueba (un subconjunto propio sorteado del banco) y cada candidato
-un sorteo de ella. El formulario de vacantes solo deja elegir tecnologías con banco
-([`SkillPicker`](../src/components/vacancies/SkillPicker.tsx)), así que una vacante publicada es evaluable.
+### 3.2 Motor de GitHub
 
-En la precarga de los stacks amplios (`buildQuestionPool`), los tipos **rotan entre skills** en vez de generarse los cinco para cada una: con 5 skills serían
-25 llamadas, y rotando son 15 con la misma variedad en el repertorio global. Cada skill recibe
-opción múltiple —el tipo más fiable, que hace de columna vertebral— más dos tipos distintos.
+**El cliente orquesta, el servidor ejecuta.** Analizar decenas de repos en una sola petición excede el
+tiempo de una Netlify Function, así que el bucle por repositorio vive en el navegador (concurrencia 3).
 
-Dos motivos, ambos del equipo:
-- **Coste.** Una vacante con 20 candidatos pasa de 20 generaciones a 1.
-- **Superficie de abuso.** `/api/line/start` deja de disparar trabajo caro, así que no sirve para
-  quemar la cuota de Groq a base de peticiones.
+1. **`POST /api/github/repos`** — lista repos analizables, **poda evidencia obsoleta** y marca cuáles ya
+   están analizados (`engineVersion` + `pushedAt`).
+2. **`POST /api/github/evaluate`** — un repo: señales + árbol, caché por SHA, descarga de archivos y
+   **parseo AST → IR → analyzers → skill mapper**. Sin IA.
+3. **`POST /api/github/aggregate`** — combina la subcolección, hace **una** llamada a Mistral (sobre los
+   números, nunca sobre el código), resuelve la identidad OAuth y escribe el agregado.
 
-Efectos de diseño que conviene tener presentes:
-- **Comparabilidad.** Cada candidato recibe preguntas distintas, así que el ranking es comparable
-  de forma *estadística*, no idéntica. Por eso el sorteo es **estratificado por `tag` y por tipo**
-  ([`pickRandomQuestions`](../src/lib/server/assessment.ts)): todos reciben el mismo reparto de
-  skills y la misma mezcla de tipos aunque cambien las preguntas concretas.
-- **Anti-copia.** Como contrapartida, dos candidatos ya no pueden compartir respuestas.
-- **El repertorio no se publica.** `jobs` es `read: if true`; publicar el banco entero dejaría que
-  un candidato se lo estudiara. El doc público solo lleva `assessmentReady` y `assessmentPoolSize`.
+**Descubrimiento:** `GET /users/{u}/repos?type=owner` → **solo repos propios**, sin forks, archivados ni
+vacíos. Tope 100 repos; 12 archivos descargados por repo, de los que **8** entran al IR. Los archivos se
+eligen **repartidos entre lenguajes** (round-robin), priorizando los de más código dentro de cada uno.
 
-### 3.0-ter The LINE general (modo práctica) *(desde 2026-08-02)*
+**Parseo:** `EXTENSION_MAP` cubre ~40 extensiones → **21 gramáticas**: ts, tsx, js, c, cpp, python, java,
+kotlin, scala, c_sharp, go, php, rust, ruby, swift, dart, bash, hcl, elixir, lua, solidity.
 
-Además de la prueba de una vacante, cualquier usuario puede practicar eligiendo **tecnología y
-nivel**. El catálogo son 55 tecnologías agrupadas en 10 categorías
-([`src/lib/technologies.ts`](../src/lib/technologies.ts)), más los 3 stacks amplios históricos.
+**Analyzers** (puros, sobre el IR): `complexity`, `coupling`, `dead-code` (**devuelve `null` a propósito:
+no está implementado**), `testing`, `documentation`. El **skill mapper** produce
+`architecture · security · maintainability · testing · documentation` + `overall`.
 
-**Aquí no se genera nada en tiempo de petición.** El banco se precarga con un script y
-`/api/line/start` solo lee un documento y sortea:
+> **Regla de diseño transversal: cuando no se puede medir, se devuelve `null`, no un número.**
+> Se respeta en los analyzers, el mapper y la agregación. Cualquier cambio debe mantenerla.
 
-```
-UNA VEZ, EN LOCAL                            CADA PRÁCTICA (por usuario)
-  npm run seed:questions -- --yes              POST /api/line/start {technology, level}
-    └─ por (tecnología × nivel):                 └─ lee line_question_pools/{tec}_{nivel}
-        5 llamadas (una por tipo)                └─ pickRandomQuestions(pool, 10 | 20)
-        ancladas en sources.ts                       · SIN llamada a IA
-        → line_question_pools/{tec}_{nivel}          · si no está precargado → 503
-```
+**Caché en 3 niveles:** por repo+SHA, por `pushedAt` en el listado, y reuso del feedback de Mistral si los
+scores no cambiaron. `GITHUB_ENGINE_VERSION` (hoy `2.0.0`) invalida todo al subirlo.
 
-Si la combinación no está en el banco, el endpoint devuelve **503 `pool_not_seeded`** en vez de
-generar. Es deliberado: generar bajo demanda sobre un catálogo de 55 tecnologías × 4 niveles sería
-exactamente el disparador de coste y DDoS que el banco viene a cerrar.
+**Identidad:** el username se escribe a mano, así que cualquiera puede analizar el GitHub de otro. La prueba
+es OAuth: se compara el id numérico de GitHub del proveedor vinculado en Firebase Auth. Si no coincide, el
+análisis **no se bloquea**, pero `identity.verified = false` y **no reduce el examen**.
 
-**El progreso ya se guarda**: `/api/line/submit` escribe el DNA (`user_skill_scores`) y el intento
-(`assessment_attempts`) tanto si hay vacante como si no — solo `candidate_matches` depende del
-`jobId`. Como el `tag` de cada pregunta es el id de la tecnología, practicar `postgresql` sube el
-score de `postgresql` en el CORE.
+**Rate limits** (en Firestore, porque la memoria del proceso no sirve en Netlify): `repos` 12/h,
+`evaluate` 150/h, `aggregate` 20/h. Limitación conocida: acotan por cuenta, no por persona, y todas
+comparten la cuota del `GITHUB_TOKEN` global.
 
-Escala del banco completo: **174 combinaciones ≈ 4 350 preguntas ≈ 870 llamadas ≈ 58 min**.
+**🔑 GitHub NO escribe el DNA.** `user_skill_scores` lo escribe **exclusivamente** `/api/line/submit`.
+La evidencia de GitHub vive aparte y solo influye en (a) el **tamaño del examen** y (b) el **roadmap**,
+como proxy de prioridad 2. **GitHub nunca penaliza.**
 
-**Variedad con exámenes de 20.** Un repertorio de ~25 preguntas hace que casi todos vean las mismas.
-`npm run seed:questions -- --top-up --target=50 --yes` amplía cada combinación hasta ~50 **añadiendo**
-preguntas deduplicadas, sin reemplazar las existentes (requiere un proveedor de IA operativo).
+### 3.3 Roadmap determinístico v2
 
-**Niveles: `junior` | `mid` | `senior`.** Se retiró `master` (2026-08-03) — un cuarto escalón por
-encima de senior no daba señal distinguible al evaluar y multiplicaba por 4/3 el coste de precarga.
-Los documentos `*_master` que queden en Firestore ya no son alcanzables y se pueden borrar.
+**100 % determinista, sin IA**, ejecutado en cliente. El flow de IA (`generate-roadmap-flow.ts`) está
+marcado `@deprecated` y **solo lo importa el Dev UI de Genkit**: es código muerto en producción.
 
-**Respaldo sin IA:** [`question-bank.ts`](../src/lib/server/question-bank.ts) tiene un banco curado a
-mano (frontend, backend, bases de datos, APIs, seguridad, testing e infra) que funciona sin proveedor
-de IA ni credenciales. Su consulta a Firestore tiene techo de 1,5 s: si la base no responde, entra el
-banco local en vez de dejar al candidato esperando.
+- Catálogos sembrados: **`skill_catalog`** (112 skills) y **`roadmap_routes`** (10 rutas =
+  `backend|frontend|fullstack|devops|mobile` × `junior_to_mid|mid_to_senior`).
+  Los seeds **validan antes de escribir** que los pesos de cada ruta sumen 1.0 (±0.001), que cada id de
+  `skillWeights` exista en el catálogo y que cada prerequisito exista.
+- **Gate:** sin ninguna entrada en el DNA lanza `ROADMAP_REQUIRES_LINE_EVALUATION` — The LINE es obligatorio.
+- **Resolución del score, en cascada:** `dna[skill.id]` (`line`) → proxy de GitHub por dimensión (`github`)
+  → promedio de la categoría (`category-inferred`) → `null` (`unknown`, **no** "gap con 0").
+- **Orden:** topológico de Kahn (nivel topológico primario), `rawPriority` como desempate dentro del nivel.
+- **Estado por skill:** `unknown` → `completed` → `blocked` (prerequisito no dominado) → `gap`.
 
-### 3.1 The LINE — el flujo que sostiene el producto
+---
 
-```
-[cliente] dashboard/line/page.tsx
-   │ apiPost("/api/line/start", { jobId } | { technology, level })
-   ▼
-[servidor] api/line/start/route.ts                             ← runtime "nodejs"
-   1. verifyRequestUid(Authorization: Bearer)          → 401 si falla
-   2. ¿jobId?  SÍ → vacante activa con createdBy y requiredSkills   (409 job_closed / job_incomplete)
-      │             └─ lee job_answer_keys/{jobId}; si no existe → composeJobPoolFromBank (409 job_without_bank)
-      └─ NO → lee line_question_pools/{technology}_{level}           (503 pool_not_seeded)
-   2b. N = examSizeFor(github_evidence/{uid}, job.examQuestionCount) → 10 | 20 | 10–30
-   3. crea line_sessions/{id} = { userId, jobId, questions CON correctIndex, createdAt }
-   4. responde { sessionId, questions: stripAnswerKey(...), examSize } ← SIN la clave
-   ▼
-[cliente] el usuario responde; se acumulan índices en answers[]
-   │ apiPost("/api/line/submit", { sessionId, answers })
-   ▼
-[servidor] api/line/submit/route.ts
-   1. verifyRequestUid → 401
-   2. lee line_sessions/{sessionId}; valida session.userId === uid → 403
-   3. gradeAnswers(questions, answers)  → { skillScores por tag, overall }
-   4. user_skill_scores/{uid}: merge quedándose con Math.max por skill    ⚠️ sin transacción, §6.5
-   5. assessment_attempts/{uid}_{sessionId}: historial del intento
-   6. si session.jobId → candidate_matches/{uid}_{jobId} + jobs.applicantsCount++   (best-effort)
-   7. borra la sesión (un solo uso)
-   8. responde { overall, skillScores }
-```
+## 4. Modelo de datos — 14 colecciones, **todas con regla**
 
-**Invariantes que este flujo garantiza y que ningún cambio puede romper:**
-1. La clave de respuestas nunca cruza la red hacia el cliente.
-2. El score lo calcula el servidor contra una clave que el cliente no vio.
-3. El DNA solo se escribe con Admin SDK, y solo **sube** (`Math.max`) — un reintento peor no castiga.
-4. La sesión es de un solo uso.
-
-### 3.2 Generación de la prueba de una vacante
-
-```
-[reclutador] apiPost("/api/jobs/assessment", { jobId, force? })
-   → valida job.createdBy === uid  → 403
-   → composeJobPoolFromBank(job.requiredSkills, job.level)          ← sin IA
-   → < 10 preguntas → 422 no_bank_for_skills (+ jobs.assessmentMissingSkills)
-   → job_answer_keys/{jobId} = { questions CON clave, covered, missing }   ← server-only
-   → jobs/{jobId}: assessmentReady, assessmentPoolSize, assessmentMissingSkills (sin preguntas)
-```
-
-### 3.2-bis Evidencia de GitHub — todos los repositorios *(desde 2026-09-14)*
-
-```
-[cliente] GithubEvidenceCard (disparo SIEMPRE manual)
-   1. POST /api/github/repos      → repos propios (paginado; sin forks, archivados ni vacíos) + analyzed
-   2. POST /api/github/evaluate   → por repo, 3 a la vez: snapshot + ≤ 12 archivos repartidos entre
-                                    lenguajes → motor determinístico (20 lenguajes)
-                                    → github_evidence/{uid}/repos/{owner__repo}  (caché por commit; sin IA)
-   3. POST /api/github/aggregate  → aggregateRepoEvidence + 1 lectura de Mistral (nullable)
-                                    + identidad (providerData github.com) → github_evidence/{uid}
-```
-
-Antes se analizaba un solo repositorio (el último con push) y ese era todo el perfil. El análisis se
-trocea por repositorio porque una Netlify Function síncrona tiene ~10 s: un usuario con 30 repos no
-cabe en una sola petición. Con `reposWithCode > 0` **y la cuenta verificada** (la misma que el usuario vinculó
-con GitHub), The LINE pasa de 20 a 10 preguntas; sin verificar no compensa, porque cualquiera podría escribir el
-usuario de otra persona. Límites por usuario (`api_rate_limits`) y tope de 100 repos protegen el token compartido.
-
-### 3.3 La capa de IA completa
-
-Son 293 líneas. Todo pasa por [`generateJson()`](../src/ai/generate.ts):
-
-```ts
-ai.generate({ model, prompt })  →  limpia fences ```json  →  JSON.parse  →  schema.parse (Zod)
-                                   └─ 2 intentos; si ambos fallan, throw
-```
-
-Y cada flow usa el patrón **lenient → normalize → strict**: un esquema Zod tolerante para lo que devuelve
-Llama (difficulty como `string` libre, `resources` opcional, `correctIndex` con `z.coerce`), y luego
-funciones de normalización hacia el tipo canónico. Es una decisión deliberada y buena: el structured output
-nativo de Genkit es poco fiable con Llama.
-
-| Flow | Input | Output | Detalle no obvio |
+| Colección | Escribe | Lee | Regla |
 |---|---|---|---|
-| [`generateQuestions`](../src/ai/flows/generate-assessment-flow.ts) | `{ stack[], level, count=5 }` | `{ questions: Question[] }` | [`normalizeTag()`](../src/ai/flows/generate-assessment-flow.ts#L65) fuerza el `tag` de la IA al vocabulario exacto del `stack`. **Sin esto el match se rompe**: un tag `"react hooks"` no casaría con `"react"` y el usuario no recibiría crédito. |
-| [`generateRoadmap`](../src/ai/flows/generate-roadmap-flow.ts) | `{ currentSkills[], targetRole, gaps[] }` | `{ steps[], summary }` | Se invoca como **server action directa** desde la página, no vía route handler — inconsistente con The LINE. |
+| `users/{uid}` | Cliente (dueño) | dueño + Admin | `read, write: isOwner` |
+| `user_skill_scores/{uid}` — **el DNA** | **Solo Admin** (`line/submit`) | dueño | `read: isOwner` · `write: false` |
+| `assessment_attempts/{uid}_{sid}` | **Solo Admin** | dueño | `read` filtrado · `write: false` |
+| `line_sessions/{id}` — **con claves** | Solo Admin | Solo Admin | `read, write: false` |
+| `job_answer_keys/{jobId}` — **con claves** | Solo Admin | Solo Admin | `read, write: false` |
+| `line_question_pools/{tech}_{lvl}` — **con claves** | Seed (Admin) | Solo Admin | `read, write: false` |
+| `questions/{id}` — banco curado | Seed (Admin) | Solo Admin | `read, write: false` |
+| `jobs/{jobId}` | Cliente (dueño) + Admin | **público, sin auth** | `read/list: true`; `create`: dueño; `update`: dueño **y** bloquea campos server-only; `delete: false` |
+| `candidate_matches/{uid}_{jobId}` | **Solo Admin** | candidato o reclutador | `write: false` |
+| `github_evidence/{uid}` (+ `/repos/{id}`) | **Solo Admin** | dueño | `write: false` (dos bloques: la regla del doc no cubre subcolecciones) |
+| `api_rate_limits/{scope}:{uid}` | Solo Admin | Solo Admin | `read, write: false` |
+| `skill_catalog/{id}` · `roadmap_routes/{id}` | Seed (Admin) | autenticado | `read: isAuthenticated` · `write: false` |
+| `user_roadmaps/{uid}` | — | — | `read, write: isOwner` ⚠️ **sin ningún consumidor** |
+
+`storage.rules`: solo `users/{userId}/**`, dueño, escritura < 5 MB.
 
 ---
 
-## 4. Modelo de datos y su matriz de seguridad
+## 5. Endpoints — 7 rutas, todas `runtime = "nodejs"`
 
-Firestore, proyecto `studio-4462619429-470d8`.
-
-| Colección | Doc ID | Cliente lee | Cliente escribe | Escritor real |
-|---|---|---|---|---|
-| `users` | `{uid}` | owner | **owner** | `UserService.saveUser` (cliente) |
-| `user_skill_scores` | `{uid}` | owner | ❌ `false` | `/api/line/submit` (Admin) |
-| `assessment_attempts` | `{uid}_{sessionId}` | owner (query filtrada) | ❌ `false` | `/api/line/submit` (Admin) |
-| `line_sessions` | auto | ❌ `false` | ❌ `false` | `/api/line/start` (Admin) |
-| `job_answer_keys` | `{jobId}` | ❌ `false` | ❌ `false` | `/api/jobs/assessment` (Admin) — **repertorio de la vacante** |
-| `line_question_pools` | `{especialidad}_{nivel}` | ❌ `false` | ❌ `false` | `/api/line/start` (Admin) — repertorio de la simulación general |
-| `jobs` | auto | **público** (`read: true`) | owner `createdBy` (no delete) | cliente + `/api/*` |
-| `candidate_matches` | `{uid}_{jobId}` | candidato **o** reclutador | ❌ `false` | `/api/line/submit` (Admin) |
-| `github_evidence` | `{uid}` | owner | ❌ `false` | `/api/github/aggregate` (Admin) — perfil agregado |
-| `github_evidence/{uid}/repos` | `{owner__repo}` | owner | ❌ `false` | `/api/github/evaluate` (Admin) — evidencia por repo |
-| `api_rate_limits` | `{scope}:{uid}` | ❌ `false` | ❌ `false` | endpoints de GitHub (Admin) — límites por usuario |
-| `user_roadmaps` | `{uid}` | owner | owner | cliente |
-| `questions` | — | auth | ❌ `false` | **nadie — regla huérfana, §6.7** |
-
-Las tres colecciones `false/false` (`line_sessions`, `job_answer_keys`, `line_question_pools`) son
-**el corazón de la integridad**: contienen `correctIndex`. Si alguna vez alguien las abre a lectura,
-el producto muere.
-
-**Invariante transversal:** las skills se guardan y comparan **siempre en minúsculas y con su id canónico**
-(`canonicalSkillKey`: "Next.js" → `nextjs`, "Node" → `node.js`). Se rompe en tres
-sitios distintos si se olvida: `normalizeTag`, `gradeAnswers`, `calculateMatch`.
+| Endpoint | Qué hace | Auth | Rate limit |
+|---|---|---|---|
+| `POST /api/line/start` | Sortea preguntas, crea sesión, devuelve `PublicQuestion[]` | ID token | ❌ |
+| `POST /api/line/submit` | Corrige, escribe DNA + intento + candidatura | ID token + dueño de la sesión | ❌ |
+| `GET /api/line/catalog` | Combinaciones disponibles + `examSize` (nunca preguntas) | ID token | ❌ |
+| `POST /api/jobs/assessment` | Compone el repertorio de una vacante | ID token + dueño del job | ❌ |
+| `POST /api/github/repos` | Lista repos + poda evidencia | ID token | ✅ 12/h |
+| `POST /api/github/evaluate` | Analiza 1 repo (AST) | ID token + owner == username | ✅ 150/h |
+| `POST /api/github/aggregate` | Agrega + 1 llamada a Mistral | ID token | ✅ 20/h |
 
 ---
 
-## 5. Estado verificado (ejecutado, no leído)
+## 6. IA — tres proveedores
 
-Ejecutado sobre `thelineRAG @ aa9e91a` con `npm ci` limpio, Node 22:
-
-| Gate | Al clonar (`aa9e91a`) | Estado actual (2026-08-02) |
+| Proveedor | Para qué | Variables |
 |---|---|---|
-| `npm run typecheck` | ✅ limpio | ✅ limpio |
-| `npm test` | ✅ 14 pasan, 5 skipped | ✅ **54 pasan**, 5 skipped |
-| `npm run build` | ✅ 19 páginas, 3 route handlers `ƒ` | ✅ OK (+ `/dashboard/vacancies/[id]`) |
-| `npm run lint` | ❌ **CRASHEA — OOM de V8** (§6.1) | ✅ 0 errores, 14 warnings |
+| **Groq** (principal) | Generación del banco de preguntas (`llama-3.3-70b-versatile`) | `GROQ_API_KEY`, `GROQ_MODEL` |
+| **NVIDIA NIM** (fallback) | Se usa cuando Groq responde 429 | `NVIDIA_API_KEY`, `NVIDIA_MODEL` |
+| **Mistral** | Feedback textual del análisis de GitHub (solo números, nunca código) | `MISTRAL_API_KEY`, `MISTRAL_MODEL` |
 
-Cobertura de tests: 5 archivos. Lo cubierto es exactamente lo que importa — corrección por tipo,
-validación de la forma de cada respuesta, `stripAnswerKey` **de los cinco tipos** (invariante I1),
-sorteo estratificado, compatibilidad con repertorios antiguos, `calculateMatch`, `grading` y las
-reglas (5, dormidos sin emulador). **Cero tests de los route handlers, de los flows de IA y de la UI.**
+Generación de JSON: esquema **tolerante** por tipo → normalización → esquema **estricto**. Las preguntas de
+`ordering` se **desordenan en servidor**, guardando la permutación como `correctOrder`.
 
 ---
 
-## 6. Hallazgos
+## 7. Despliegue y configuración
 
-Todo lo de esta sección lo verifiqué contra el código. Lo marcado 🆕 **no está** en
-[`TECH_DEBT.md`](./TECH_DEBT.md).
+**Plataforma real: Netlify.** `netlify.toml` (build `npm run build`, Node 22, `@netlify/plugin-nextjs`).
+Firebase aporta solo Auth + Firestore + Storage.
 
-### 6.1 ✅🆕 `npm run lint` revienta — y con él, CI · *resuelto 2026-08-01*
+**Configuración muerta que sigue en el repo** (fuente de confusión): `wrangler.jsonc` y
+`open-next.config.ts` (Cloudflare — sin ningún script npm que los invoque; además `tree-sitter` usa
+bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.json.hosting`.
 
-`eslint .` agota el heap de V8 y aborta con stack dump. Causa: se está linteando
-**`.open-next/` — 17 MB y 103 archivos de bundle de Cloudflare Workers commiteados al repo**.
+**CI** (`.github/workflows/ci.yml`): Node 22, `npm ci`, typecheck, lint, test, build.
 
-- [`.gitignore`](../.gitignore) no ignora `.open-next/` ni `.wrangler/` → los artefactos entraron a git.
-- [`eslint.config.mjs:29`](../eslint.config.mjs#L29) ignora `.next/**` y `node_modules/**`, pero **no** `.open-next/**`.
+---
 
-Impacto real: [`ci.yml`](../.github/workflows/ci.yml) corre `npm run lint` en **todo PR**. Cualquier PR
-desde esta rama falla CI por una razón que no tiene nada que ver con el cambio. Es el primer arreglo.
+## 8. Estado verificado (ejecutado, no leído)
 
-**Resuelto:** `.open-next/` y `.wrangler/` añadidos a `.gitignore` y al array `ignores` de
-[`eslint.config.mjs`](../eslint.config.mjs); 106 archivos destrackeados con `git rm -r --cached`.
-`npm run lint` ahora termina con 0 errores.
-
-### 6.2 🔴🆕 Cuatro configuraciones de hosting coexistiendo
-
-El repo declara simultáneamente:
-
-| Archivo | Destino |
+| Comando | Resultado |
 |---|---|
-| [`netlify.toml`](../netlify.toml) | Netlify + `@netlify/plugin-nextjs` |
-| [`wrangler.jsonc`](../wrangler.jsonc) + [`open-next.config.ts`](../open-next.config.ts) | **Cloudflare Workers** |
-| [`apphosting.yaml`](../apphosting.yaml) | Firebase App Hosting |
-| [`firebase.json`](../firebase.json) `hosting` | Firebase Hosting |
+| `npm run lint` | ✅ **0 errores, 21 warnings** |
+| `npm test` | ⚠️ **116 pasan, 8 *skipped*, 2 suites no cargan** |
+| `npm run typecheck` | ⚠️ **5 errores `TS2307`** — *fallo de entorno local*, no de código |
 
-Los **3 commits más recientes** de la rama son todos de Cloudflare (`fix(cloudflare)`, `exclude jose and
-opentelemetry from edge bundle`). Pero [`docs/DEPLOYMENT.md`](./DEPLOYMENT.md) y
-[`CLAUDE.md`](../CLAUDE.md) siguen diciendo **Netlify**, y dicen explícitamente que `apphosting.yaml` y
-`firebase.json:hosting` son "config muerta".
-
-Riesgo concreto: los tres route handlers declaran `export const runtime = "nodejs"` porque el Admin SDK lo
-exige. En Cloudflare Workers eso se traduce vía `nodejs_compat`, y el propio `open-next.config.ts` ya tiene
-que excluir `jose` y OpenTelemetry a mano del bundle edge. **Nadie ha verificado end-to-end que
-`firebase-admin` funcione en Workers.** Antes de invertir en features hay que cerrar esta decisión.
-
-### 6.3 🔴 El deploy no funciona sin secretos (heredado, sigue abierto)
-
-`GROQ_API_KEY` y `FIREBASE_SERVICE_ACCOUNT` no están configuradas en el hosting. Sin ellas **The LINE, el
-roadmap y la generación de pruebas fallan en producción** — es todo el producto. Ver
-[`HANDOFF.md §3`](../HANDOFF.md) y [`DEPLOYMENT.md`](./DEPLOYMENT.md).
-
-### 6.4 ✅🆕 Preguntas inconsistentes entre candidatos de la misma vacante · *resuelto 2026-08-01*
-
-En [`api/line/start/route.ts:33-47`](../src/app/api/line/start/route.ts#L33-L47): si llega un `jobId` y
-**no existe** `job_answer_keys/{jobId}`, se generan preguntas nuevas al vuelo… **y no se persisten**.
-
-Consecuencias: (a) cada candidato de esa vacante responde un examen **distinto**, y el ranking de
-`candidate_matches` deja de ser comparable — que es justo el valor que se le vende al reclutador;
-(b) una llamada a Groq extra por candidato; (c) tampoco se valida que el `jobId` exista.
-
-**Resuelto:** las preguntas generadas se persisten en `job_answer_keys` dentro de una transacción (que
-resuelve la carrera entre dos candidatos que empiezan a la vez), el doc público `jobs` recibe la versión
-sin clave, y un `jobId` inexistente devuelve 404 en vez de caer al stack por defecto.
-
-### 6.5 ✅🆕 Escritura del DNA sin transacción (lost update) · *resuelto 2026-08-01*
-
-`api/line/submit/route.ts` hacía *read → merge → write* sobre `user_skill_scores/{uid}` sin
-`runTransaction`. Dos simulaciones concurrentes del mismo usuario (dos pestañas) podían perder una de las
-dos actualizaciones. **No había una sola transacción ni batch en todo el repo.**
-
-**Resuelto:** el merge del DNA va en `runTransaction`. Y el mismo patrón en `candidate_matches` —
-`bestScore` y el incremento de `jobs.applicantsCount` ahora son atómicos entre sí, así que el contador no
-puede desincronizarse del número real de candidatos.
-
-Sigue abierto (menor): las 4 escrituras de `submit` no son atómicas *entre ellas*, así que un fallo a
-medias puede dejar DNA escrito e intento no. Requiere rediseño, no un parche.
-
-### 6.6 🟠🆕 Sin rate limiting en endpoints que llaman al LLM
-
-`grep rateLimit|throttle src` → 0. Cada `POST /api/line/start` es una generación con Groq. Un usuario
-autenticado puede llamarlo en bucle y quemar la cuota o la factura. Autenticación ≠ límite de uso.
-
-### 6.7 🟡🆕 Otros
-
-- **Regla huérfana:** `questions/{qId}` tiene regla en [`firestore.rules:67`](../firestore.rules#L67) y
-  **cero uso en el código**.
-- ✅ **`gradeAnswers` no validaba longitud** — *resuelto 2026-08-01*: nueva
-  [`isValidAnswerSet()`](../src/lib/server/assessment.ts) (pura, 6 tests) verifica correspondencia 1:1 y
-  rango de índices; `submit` devuelve **400 `invalid_answers`** en vez de puntuar en silencio.
-- **Config de Firebase hardcodeada como fallback** ([`client.ts:14-19`](../src/lib/firebase/client.ts#L14-L19)):
-  no es secreto (la config web es pública), pero un deploy sin env vars apunta **al proyecto de producción**
-  sin avisar.
-- ✅ **CI no cubría esta rama en push** — *resuelto 2026-08-01*: `thelineRAG` añadida a
-  [`ci.yml`](../.github/workflows/ci.yml).
-- **`role` autoasignado:** cualquiera puede registrarse como `recruiter` (documentado en
-  [`SECURITY.md`](./SECURITY.md), sin resolver).
-- **Telemetría falsa en la UI:** "Latencia 12ms / Cifrado" hardcodeado en
-  [`line/page.tsx:226-234`](../src/app/dashboard/line/page.tsx#L226-L234).
-
-### 6.9 ✅🆕 Flujo de reclutador roto de punta a punta · *resuelto 2026-08-02*
-
-Revisión completa del journey empresa → vacante → prueba → candidatos. Cinco fallos, todos corregidos:
-
-1. **🔴 El índice compuesto que rompía las dos páginas principales.**
-   `where("createdBy","==",uid) + orderBy("postedAt","desc")` exige un **índice compuesto** en
-   Firestore. Sin él la query lanza `failed-precondition`, el `catch` lo mandaba a `console.error`
-   y la página caía al estado vacío: **"Mis Vacantes" y "Candidatos" decían "No tienes vacantes
-   activas" aunque las hubiera.** Estaba en `vacancies/page.tsx` y en `JobService.getJobsByRecruiter`.
-   *Resuelto* ordenando en cliente — mismo criterio que ya usaba `CompatibilityService`
-   deliberadamente. Sin pasos de infraestructura.
-2. **Errores tragados:** un fallo de permisos era indistinguible de "no tienes vacantes". Ahora se
-   muestra el error.
-3. **"The LINE Activado" hardcodeado:** siempre en verde, aunque la generación hubiera fallado al
-   publicar. Ahora lee `assessmentReady` y muestra "Prueba pendiente".
-4. **`company` fijo a `"Empresa NEXTAPE"`** en toda vacante → el developer veía la misma empresa en
-   todos los empleos. Ahora es un campo del formulario, prefijado con el nombre del perfil.
-5. **`type` de contrato sin UI:** existía en el estado con valor fijo `"Full-time"`; toda vacante se
-   guardaba como tiempo completo. Ahora es un selector.
-
-**Gestión de vacantes — no existía.** Publicar era irreversible: sin edición, el botón `⋮` no tenía
-handler, `delete: if false` y ningún campo de estado. Añadido
-[`/dashboard/vacancies/[id]`](../src/app/dashboard/vacancies/) con edición completa, **archivar y
-reabrir** (`active`, en vez de borrar: preserva los `candidate_matches` ya obtenidos) y
-**regenerar el repertorio** (`force: true`). `getLatestJobs` filtra las archivadas y
-`/api/line/start` devuelve 409 si la vacante está cerrada.
-
-### 6.10 🔴🆕 La clave de respuestas era legible por cualquier usuario · *resuelto 2026-08-03*
-
-`questions` —el banco curado, cuyos documentos incluyen `correctIndex`— tenía la regla
-`allow read: if isAuthenticated()`. **Cualquier usuario logueado podía leer la colección entera y
-con ella la respuesta correcta de todas las preguntas.** Eso invalida por completo el "DNA
-verificado": basta una consulta desde la consola del navegador para aprobar cualquier prueba.
-
-Su único consumidor (`sampleBankQuestions`) usa el Admin SDK, que bypassa las reglas, así que
-cerrarla a `read, write: if false` no rompe nada. Es la misma clasificación que `line_sessions`,
-`job_answer_keys` y `line_question_pools`: **toda colección que contenga una clave de respuesta es
-server-only**, sin excepción.
-
-### 6.11 ✅🆕 La rama no compilaba · *resuelto 2026-08-03*
-
-`typecheck` fallaba con 8 errores, así que `build` también (ya no se ignoran los errores de tipos) y
-The LINE no funcionaba. Causas: el tipo `BankQuestion` se usaba en tres archivos pero nunca se
-definió, y `question-bank.ts` devolvía preguntas sin el campo `type`, que la unión discriminada
-exige desde que existen los cinco tipos de prueba.
-
-De paso, tres defectos del mismo módulo:
-- `sampleBankQuestions` podía **repetir una pregunta** en el mismo examen: el conjunto de ids vistos
-  se tomaba como foto antes de la primera inserción y no se actualizaba.
-- La conversión buscaba la respuesta correcta con `indexOf` sobre el texto: con dos opciones de
-  texto idéntico, `correctIndex` acababa apuntando a la equivocada. Ahora permuta por índice.
-- La consulta a Firestore **no tenía timeout**: sin credenciales o con la red degradada, el Admin
-  SDK se queda esperando y bloquea el arranque del examen en una función que promete milisegundos.
-
-### 6.12 🟠🆕 El script de precarga no leía `.env.local` · *resuelto 2026-08-03*
-
-`scripts/seed-question-bank.ts` llamaba a `dotenv.config()` dentro de `main()`, pero los módulos ES
-se evalúan en el orden de sus `import` y `src/ai/genkit.ts` construye el cliente de Groq **al
-importarse**:
-
-```ts
-export const ai = genkit({ plugins: [groq({ apiKey: process.env.GROQ_API_KEY })] });
-```
-
-Resultado: el cliente se creaba con la clave a `undefined` y todas las generaciones fallaban, aunque
-`.env.local` tuviera la clave y la comprobación posterior del script la viera. Verificado
-experimentalmente. Resuelto con [`scripts/load-env.ts`](../scripts/load-env.ts), que carga el
-entorno por efecto secundario y debe ser **el primer import** de cualquier script.
-
-### 6.8 Documentación desincronizada (arreglar al tocar cada área)
-
-| Documento | Dice | Realidad |
-|---|---|---|
-| [`README.md`](../README.md) | "Genkit + Gemini 1.5 Flash" | Es **Groq / Llama 3.3 70b** |
-| [`DATABASE.md`](./DATABASE.md) §1 | "No hay Admin SDK ni backend con service account" | Existe y es el núcleo de la integridad |
-| [`DATABASE.md`](./DATABASE.md) §1 | `.firebaserc` → `nextape-prod` | Ya es `studio-4462619429-470d8` (**B3 resuelto en código, no en doc**) |
-| [`ARCHITECTURE.md`](./ARCHITECTURE.md) §2 | three.js + `@react-three/*` + `laptop.glb` | Eliminado en el saneamiento |
-| [`BACKEND_AI.md`](./BACKEND_AI.md) §2 | patrón `ai.definePrompt` + Handlebars | El código usa `generateJson` + prompt en template literal |
-| [`DEPLOYMENT.md`](./DEPLOYMENT.md) | Netlify; App Hosting es "config muerta" | Los últimos commits van a **Cloudflare** |
+- Los 5 errores de typecheck y las 2 suites caídas son **la misma causa**: `tree-sitter`,
+  `@genkit-ai/compat-oai` y `@opennextjs/cloudflare` están en `package.json` pero **no instalados** en
+  `node_modules` (los binarios nativos fallaron en Windows). En CI, con `npm ci` sobre Linux, pasa.
+- Los **8 tests *skipped* son los de `firestore.rules`**: requieren el emulador y **CI no lo arranca**.
+  La seguridad crítica del producto **no tiene verificación automática**.
 
 ---
 
-## 7. Dónde encaja el RAG
+## 9. Hallazgos y deuda (priorizados)
 
-El nombre de la rama fija el objetivo: **traer retrieval a The LINE**. El punto de inserción es único y
-está bien aislado — [`generateQuestions()`](../src/ai/flows/generate-assessment-flow.ts), llamado
-únicamente desde [`buildQuestionPool()`](../src/lib/server/question-pool.ts).
+### 🔴 Graves
 
-```
-   ANTES:  stack + level ─────────────────────────────► prompt ──► Groq ──► preguntas
-     HOY:  stack + level ──► sources.ts (URLs) ────────► prompt ──► Groq ──► preguntas
-  CON RAG: stack + level ──► retrieve(índice BGE-M3) ──► prompt + TEXTO ──► Groq ──► preguntas
-```
+- **H1 — Los vocabularios de The LINE y del roadmap están desacoplados.** El motor busca `dna[skill.id]`,
+  pero las claves del DNA son ids de tecnología (`react`, `node.js`, `typescript`) y los del catálogo son
+  slugs conceptuales (`typescript-basics`, `unit-testing`, `api-design-rest`). **De las 112 skills del
+  catálogo solo 2 (`postgresql`, `terraform`) coinciden con alguna de las 55 tecnologías —y en la práctica
+  solo `postgresql`, porque `terraform` únicamente colisiona si tiene banco sembrado—. No existe capa de
+  mapeo.** Consecuencia real: casi todo cae a `category-inferred` y de ahí a `unknown`; `gap` queda vacío,
+  no hay "siguiente paso", el progreso sale 0, y el gate "The LINE obligatorio" se pasa sin que ninguna
+  medición real alimente el plan. `docs/TECH_DEBT.md` (A10) registra una versión **más estrecha** del
+  problema (resolución de alias); el desajuste real es **taxonómico** y no está documentado en ningún sitio.
+- **H2 — `.env.example` está incompleto.** Faltan `GITHUB_TOKEN`, `MISTRAL_API_KEY` y `NVIDIA_API_KEY`
+  (+ sus `_MODEL`). Un despliegue que siga la plantilla al pie de la letra deja `/api/github/*` roto
+  (Mistral lanza → 500) y el motor cae a 60 req/h anónimas **para toda la plataforma**.
 
-**Lo que ya existe (2026-08-02):** el catálogo de fuentes del equipo está en
-[`src/lib/server/sources.ts`](../src/lib/server/sources.ts) — 13 categorías, ~60 URLs de
-documentación oficial, OWASP/MITRE, arquitectura y blogs de ingeniería — con un índice
-`tecnología → fuentes` y `resolveSourcesForSkill()`. Las URLs se le pasan al modelo como **anclaje
-del prompt** y cada pregunta guarda un campo `source`.
+### 🟠 Medias
 
-> ⚠️ **Esto todavía no es RAG.** El modelo **no lee** esas páginas: recibe la lista de URLs y
-> declara cuál corresponde. `source` es por tanto una *atribución del modelo*, no una cita
-> verificada (se descarta si la URL no estaba en la lista, pero eso solo evita enlaces inventados).
-> Sirve para dirigir la generación hacia tecnología real y para dejar el pipeline montado. La
-> auditabilidad de verdad llega cuando se recupere el **texto** de la fuente.
+- **H3 — `jobs` valida los campos server-only en `update` pero NO en `create`.** Se puede crear una vacante
+  con `applicantsCount` o `assessmentReady` arbitrarios desde el navegador.
+- **H4 — `/api/line/start` y `/api/line/submit` no tienen rate limit**, y cada `start` **escribe un documento**
+  con claves de respuesta. Sumado a que **`line_sessions` no tiene TTL** (solo se borra al enviar), las
+  sesiones abandonadas se acumulan indefinidamente.
+- **H5 — El estado vacío del roadmap es inalcanzable:** el error `ROADMAP_REQUIRES_LINE_EVALUATION` lo captura
+  un `catch` genérico, así que quien no ha hecho The LINE ve un error genérico en vez del CTA para hacerla.
+- **H6 — Agujero de rutas en el escalón superior:** un usuario con nivel inferido `senior` construye
+  `${role}_senior_to_senior`, que no existe para ningún rol. En backend cae al fallback `backend_junior_to_mid`
+  (un senior recibe la ruta junior→mid); en los otros 4 roles, banner de error.
+- **H7 — `precision` se calcula y se tira:** la página solo lee `.items`, así que el mensaje "conecta GitHub
+  para más precisión" que promete el tipo no se muestra jamás.
+- **H8 — `docs/ROADMAP_DETERMINISTIC.md` no existe** pese a estar referenciado en 5 archivos como la única
+  documentación de los algoritmos.
 
-**El problema que el RAG debería resolver** (y que conviene tener explícito antes de escribir código): hoy
-las preguntas salen del conocimiento paramétrico de Llama 3.3. Eso produce escenarios genéricos, **no
-auditables** (nadie puede justificar por qué una opción es la correcta) y potencialmente alucinados —
-lo cual es una contradicción directa con vender evaluación *verificada*.
+### 🟡 Menores
 
-**Restricciones que el diseño hereda y no puede violar:**
-
-1. La recuperación ocurre **en servidor**. El corpus y el índice nunca se exponen al cliente — si un
-   candidato puede leer la fuente de la pregunta, puede deducir la respuesta.
-2. `correctIndex` sigue sin salir del servidor. RAG no cambia el contrato `PublicQuestion`.
-3. Toda colección nueva (`rag_documents`, `rag_chunks`, lo que sea) necesita su regla en
-   `firestore.rules` **en el mismo cambio**, y será `read, write: if false`.
-4. Groq **no ofrece endpoint de embeddings**, así que la inferencia del modelo es una pieza aparte.
-   ✅ El equipo ya eligió **BGE-M3** (2026-08-01) — 1024 dims, 8 192 tokens de contexto, multilingüe.
-   Con ~568M parámetros **no cabe en un cold start serverless**: sigue abierto dónde corre y en qué
-   vector store vive el índice. Ver [`HARNESS.md §6.0`](./HARNESS.md).
-5. La latencia de `/api/line/start` ya la domina la llamada al LLM. Añadir retrieval **antes** la empeora;
-   hay que medirla.
-
-**Decisión pendiente del equipo — qué se indexa.** El modelo ya está elegido, el corpus no. Las opciones
-no son equivalentes y llevan a arquitecturas distintas; están desarrolladas en
-[`HARNESS.md §6.1`](./HARNESS.md).
+- `scripts/verify-roadmap-engine.ts` **no es un gate**: las violaciones imprimen ❌ pero el proceso sale con
+  código 0. Además una de sus aserciones ya está obsoleta.
+- 4 skills del catálogo (`backup-recovery`, `javascript-es6`, `networking-basics`,
+  `responsive-mobile-design`) **no aparecen en ninguna ruta**: solo son alcanzables como prerequisitos.
+- `user_roadmaps` es la **única colección escribible por el cliente sin ningún consumidor**.
+- `src/lib/server/question-bank.ts` (40 KB, 38 preguntas curadas) está **huérfano**: solo lo importan tests.
+- `generate-roadmap-flow.ts` es código muerto registrado en el Dev UI. `ROLE_WEIGHTS` no se usa.
+- Las 18 skills del catálogo MVP están **duplicadas verbatim** entre los dos seeders, sin nota de cuál usar.
+- `src/types/index.ts` **no reexporta** `roadmap.types`, así que `@/types` no alcanza `Skill`/`RoadmapRoute`.
+- El motor de roadmap **no tiene tests unitarios**; solo un script manual contra Firestore de producción.
+- Basura en la raíz: `check-firestore-state.ts`, `migration.sh` (**hace `rm -rf .git`**), `graphify-out/`,
+  `tsconfig.tsbuildinfo` versionado.
 
 ---
 
-## 8. Mapa de lectura para un agente
+## 10. Mapa de lectura para un agente
 
-No leas el repo entero. Según lo que toques:
-
-| Si trabajas en… | Lee exactamente esto |
+| Si vas a tocar… | Lee primero |
 |---|---|
-| **The LINE / RAG** | `ai/genkit.ts`, `ai/generate.ts`, `ai/flows/generate-assessment-flow.ts`, `api/line/start/route.ts`, `api/line/submit/route.ts`, `lib/server/assessment.ts`, `types/job.types.ts` |
-| **Scoring / DNA** | `lib/server/assessment.ts`, `api/line/submit/route.ts`, `lib/grading.ts`, `lib/match.ts` + sus `.test.ts` |
-| **Seguridad** | `firestore.rules`, `storage.rules`, `lib/firebase/admin.ts`, `lib/api.ts`, `docs/SECURITY.md` |
-| **Datos** | `types/*.types.ts`, `services/*`, `lib/firebase/firestore.ts`, `docs/DATABASE.md` |
-| **Frontend** | `app/dashboard/<ruta>/page.tsx`, `components/layout/DashboardShell.tsx`, `hooks/use-auth-user.ts` |
-| **Infra / deploy** | `next.config.ts`, `open-next.config.ts`, `wrangler.jsonc`, `netlify.toml`, `ci.yml`, `.env.example` |
+| Exámenes / preguntas | `src/lib/server/assessment.ts`, `question-pool.ts`, `src/types/question.types.ts`, `src/app/api/line/*` |
+| Catálogo de tecnologías | `src/lib/technologies.ts`, `src/lib/server/sources.ts`, `scripts/seed-question-bank.ts` |
+| Motor de GitHub | `src/services/github-engine/index.ts`, `parsers/universal-parser.ts`, `aggregate.ts`, `src/services/github-signals.service.ts` |
+| Roadmap | `src/lib/roadmap-engine.ts`, `src/types/roadmap.types.ts`, `scripts/seed-skill-catalog-full.ts` |
+| Datos / reglas | `firestore.rules`, `src/types/*.types.ts`, `docs/DATABASE.md` |
+| Despliegue | `netlify.toml`, `.env.example`, `docs/DEPLOYMENT.md` |
 
-**Nunca leas** `src/components/ui/**` (3 655 líneas de shadcn generado) ni `.open-next/**` ni
-`package-lock.json`. Es el 80 % del peso del repo y el 0 % de la información.
+**Para añadir una tecnología al catálogo** hay que tocar, como mínimo:
+
+1. `src/lib/technologies.ts` → `TECHNOLOGIES` (y `TECHNOLOGY_ALIASES` si tiene grafías habituales).
+2. `src/lib/server/sources.ts` → `TECHNOLOGY_SOURCES`. **No es opcional:** `technologies.test.ts` exige que
+   *todas* las tecnologías resuelvan documentación específica.
+3. `npm run seed:questions -- --only=<id> --yes` (y `--top-up --target=50 --yes` para variedad).
+
+**No** hay que tocar `firestore.rules`, los índices, el selector de la UI ni `/api/line/catalog`: todos
+derivan del catálogo o de los documentos existentes.
+
+**Herramienta de diagnóstico:** `npm run inventory:pools` lista (solo lectura) qué combinaciones están
+realmente sembradas, con cuántas preguntas y de qué tipos.
