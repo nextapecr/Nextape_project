@@ -48,3 +48,6 @@ genkit.log
 # Firebase Admin Service Account
 firebase-admin-key.json
 *.firebase-adminsdk-*.json
+
+# Graphify output
+graphify-out/
