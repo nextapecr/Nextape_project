@@ -146,6 +146,42 @@ export interface GithubIdentity {
   linkedLogin?: string | null;
 }
 
+// ─────────────────────────────────────────────────────────
+// GitHub OAuth Token Storage (server-only, Admin SDK)
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Encrypted GitHub OAuth token stored in `github_tokens/{uid}`.
+ * Server-only collection (write:false for clients).
+ * 
+ * Security:
+ * - Token encrypted with AES-256-GCM (key in TOKEN_ENCRYPTION_KEY env var)
+ * - IV and authTag ensure uniqueness and integrity
+ * - Never exposed to client (Admin SDK only)
+ */
+export interface GithubToken {
+  /** User ID (document ID) */
+  uid: string;
+  /** AES-256-GCM encrypted OAuth token (base64) */
+  encryptedToken: string;
+  /** Initialization vector for AES-GCM (base64, unique per token) */
+  iv: string;
+  /** Authentication tag for GCM integrity check (base64) */
+  authTag: string;
+  /** GitHub numeric user ID (from OAuth) */
+  githubUserId: number;
+  /** GitHub username (from OAuth) */
+  githubUsername: string;
+  /** OAuth scopes granted by user */
+  scopes: string[];
+  /** When token was first stored */
+  createdAt: FirebaseFirestore.Timestamp | { _seconds: number; _nanoseconds: number };
+  /** Last time token was used for API request */
+  lastUsedAt: FirebaseFirestore.Timestamp | { _seconds: number; _nanoseconds: number };
+  /** If user disconnected GitHub, timestamp of revocation */
+  revokedAt: FirebaseFirestore.Timestamp | { _seconds: number; _nanoseconds: number } | null;
+}
+
 /**
  * Evidencia de UN repositorio: `github_evidence/{uid}/repos/{repoId}` (server-only, Admin SDK).
  * Es la unidad de caché: si `pushedAt` y `lastCommitSHA` no cambian, no se vuelve a analizar.

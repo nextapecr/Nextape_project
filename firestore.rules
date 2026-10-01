@@ -104,6 +104,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Tokens OAuth de GitHub cifrados (github_tokens/{uid}). SERVER-ONLY.
+    // Almacena tokens de acceso de GitHub cifrados con AES-256-GCM para análisis por usuario.
+    // El cliente nunca lee ni escribe: solo el Admin SDK (route handlers).
+    match /github_tokens/{userId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
     // Contadores de límite de peticiones por usuario (src/lib/server/rate-limit.ts). SERVER-ONLY:
     // si el cliente pudiera escribirlos, reiniciaría su propio límite.
     match /api_rate_limits/{limitId} {

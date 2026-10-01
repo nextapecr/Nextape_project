@@ -4,7 +4,7 @@
  * Extrae datos del perfil del usuario, estadísticas de repositorios y señales estructurales.
  */
 
-import type { GithubRepo, RepoSignals } from '../types/github.types';
+import type { GithubRepo, RepoSignals, GithubToken } from '../types/github.types';
 import { EXTENSION_MAP } from './github-engine/parsers/universal-parser';
 
 const GITHUB_API_BASE = 'https://api.github.com';
@@ -380,3 +380,70 @@ export const GithubSignalsService = {
     return files.filter((f): f is { filename: string; content: string } => f !== null);
   },
 };
+
+/**
+ * Retrieve and decrypt a user's GitHub OAuth token (server-only).
+ * 
+ * Returns the decrypted token if:
+ * - Token document exists in github_tokens/{uid}
+ * - Token is not revoked
+ * - Decryption succeeds
+ * 
+ * Returns null if:
+ * - No token stored for user
+ * - Token is revoked
+ * - Decryption fails (corrupted data, wrong key)
+ * 
+ * The caller decides fallback strategy (e.g., use shared PAT).
+ * 
+ * @param uid - User ID
+ * @returns Decrypted OAuth token or null
+ * 
+ * @example
+ * const token = await getGithubToken(uid);
+ * const githubToken = token ?? process.env.GITHUB_TOKEN; // Fallback to shared PAT
+ */
+export async function getGithubToken(uid: string): Promise<string | null> {
+  // Only import Admin SDK when running in server context
+  // This function should only be called from route handlers
+  try {
+    const { adminDb } = await import('@/lib/firebase/admin');
+    const { decryptToken } = await import('@/lib/server/token-encryption');
+    
+    const tokenDoc = await adminDb().collection('github_tokens').doc(uid).get();
+    
+    if (!tokenDoc.exists) {
+      return null;
+    }
+    
+    const tokenData = tokenDoc.data() as GithubToken;
+    
+    // Check if token is revoked
+    if (tokenData.revokedAt) {
+      console.warn(`[github-signals] Token for user ${uid} is revoked`);
+      return null;
+    }
+    
+    // Decrypt token
+    try {
+      const decrypted = decryptToken(
+        tokenData.encryptedToken,
+        tokenData.iv,
+        tokenData.authTag
+      );
+      return decrypted;
+    } catch (err) {
+      console.error(
+        `[github-signals] Failed to decrypt token for user ${uid}:`,
+        err instanceof Error ? err.message : err
+      );
+      return null;
+    }
+  } catch (err) {
+    console.error(
+      `[github-signals] Error retrieving token for user ${uid}:`,
+      err instanceof Error ? err.message : err
+    );
+    return null;
+  }
+}
