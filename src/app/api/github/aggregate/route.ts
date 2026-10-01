@@ -87,7 +87,12 @@ export async function POST(req: NextRequest) {
     if (!limit.allowed) return rateLimitedResponse(limit);
 
     const profileRef = adminDb().collection("github_evidence").doc(uid);
-    const [snap, previousSnap] = await Promise.all([profileRef.collection("repos").get(), profileRef.get()]);
+    // Defensa en profundidad: limita a 100 repos aunque /api/github/repos ya poda a ese máximo.
+    // Protege contra race conditions o fallos en la poda upstream.
+    const [snap, previousSnap] = await Promise.all([
+      profileRef.collection("repos").limit(100).get(),
+      profileRef.get(),
+    ]);
     const repos = snap.docs
       .map((doc) => doc.data() as GithubRepoEvidence)
       .filter(
