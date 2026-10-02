@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
     const userToken = await getGithubToken(uid);
 
     const [{ signals, tree, pushedAt, isPrivate }] = await Promise.all([
-      GithubSignalsService.getRepoSnapshot(owner, repo),
+      GithubSignalsService.getRepoSnapshot(owner, repo, userToken || undefined),
     ]);
 
     // Phase 3: Obtener commits del usuario en este repo
@@ -139,6 +139,7 @@ export async function POST(req: NextRequest) {
       signals.lastCommitSHA,
       tree,
       Array.from(userTouchedFiles), // Phase 3: Priorizar archivos del usuario
+      userToken || undefined, // Pass OAuth token
     );
     const { ir, metrics, skillScores } = analyzeRepositorySources(files, signals);
 

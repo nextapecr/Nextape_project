@@ -17,7 +17,7 @@ const DELETE_BATCH_SIZE = 400;
 
 /**
  * POST /api/github/repos
- * Lista los repositorios analizables de una cuenta (sin forks, archivados ni vacíos) —los
+ * Lista los repositorios analizables del usuario autenticado con OAuth (sin forks, archivados ni vacíos) —los
  * `MAX_REPOS_PER_ANALYSIS` con push más reciente— y marca cuáles ya están analizados y sin cambios,
  * para que el cliente solo reanalice lo necesario.
  *
@@ -28,7 +28,9 @@ const DELETE_BATCH_SIZE = 400;
  * renombrados o fuera del tope). Sin esto, un repo analizado y después borrado seguía sumando en el
  * perfil agregado para siempre, y uno renombrado contaba dos veces.
  *
- * Body: { githubUsername: string }
+ * Requiere OAuth: El usuario debe haber conectado su cuenta de GitHub (Phase 2).
+ * 
+ * Body: { githubUsername: string } (usado solo para respuesta, el análisis usa OAuth token)
  */
 export async function POST(req: NextRequest) {
   const uid = await verifyRequestUid(req.headers.get("authorization"));
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Listar pagina hasta 10 veces con el GITHUB_TOKEN compartido.
+    // Phase 2: OAuth es obligatorio para analizar repositorios
     const limit = await consumeRateLimit(adminDb(), "github_repos", uid, GITHUB_RATE_LIMITS.repos);
     if (!limit.allowed) return rateLimitedResponse(limit);
 
@@ -50,20 +52,22 @@ export async function POST(req: NextRequest) {
     // Phase 3: Usar OAuth token del usuario para obtener repos colaborativos también
     const userToken = await getGithubToken(uid);
     
-    // Phase 4: Obtener allowlist de repos privados
-    let privateReposAllowlist: string[] = [];
-    if (userToken) {
-      const tokenDoc = await adminDb().collection("github_tokens").doc(uid).get();
-      const tokenData = tokenDoc.data();
-      privateReposAllowlist = Array.isArray(tokenData?.privateReposAllowlist)
-        ? tokenData.privateReposAllowlist
-        : [];
+    if (!userToken) {
+      return NextResponse.json(
+        { error: "no_github_token", message: "Connect GitHub first to analyze repositories" },
+        { status: 401 }
+      );
     }
     
+    // Phase 4: Obtener allowlist de repos privados
+    const tokenDoc = await adminDb().collection("github_tokens").doc(uid).get();
+    const tokenData = tokenDoc.data();
+    const privateReposAllowlist = Array.isArray(tokenData?.privateReposAllowlist)
+      ? tokenData.privateReposAllowlist
+      : [];
+    
     const [allRepos, existing] = await Promise.all([
-      userToken
-        ? GithubSignalsService.getCollaborativeRepos(userToken) // Phase 3: Incluye colaborativos
-        : GithubSignalsService.getUserRepos(githubUsername),    // Fallback: Solo propios
+      GithubSignalsService.getCollaborativeRepos(userToken), // Phase 3: OAuth obligatorio
       reposRef.get(),
     ]);
 

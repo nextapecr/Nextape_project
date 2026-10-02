@@ -9,17 +9,6 @@ import { EXTENSION_MAP } from './github-engine/parsers/universal-parser';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
-function getHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    Accept: 'application/vnd.github.v3+json',
-    'User-Agent': 'NEXTAPE-GitHub-Engine',
-  };
-  if (process.env.GITHUB_TOKEN) {
-    headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
-  }
-  return headers;
-}
-
 /** Archivos por repositorio que se descargan para el motor. */
 export const MAX_FILES_PER_REPO = 12;
 /** Páginas de 100 repositorios que se recorren como máximo (1 000 repos). */
@@ -127,46 +116,6 @@ export function selectRepresentativeFiles(
 
 export const GithubSignalsService = {
   /**
-   * TODOS los repositorios propios de un usuario (paginado), sin forks, archivados ni vacíos.
-   * Antes se pedía una sola página de 30: quien tuviera más repositorios perdía los antiguos.
-   * 
-   * @deprecated Use getCollaborativeRepos with OAuth token for full access (Phase 3)
-   */
-  async getUserRepos(username: string): Promise<GithubRepo[]> {
-    const headers = getHeaders();
-    const raw: Array<Record<string, unknown>> = [];
-
-    for (let page = 1; page <= MAX_REPO_PAGES; page++) {
-      const res = await fetch(
-        `${GITHUB_API_BASE}/users/${encodeURIComponent(username)}/repos?type=owner&sort=pushed&per_page=100&page=${page}`,
-        { headers },
-      );
-      if (!res.ok) {
-        if (res.status === 404) throw new Error(`Usuario de GitHub '${username}' no encontrado.`);
-        throw new Error(`Error en GitHub API (${res.status}): ${res.statusText}`);
-      }
-      const data: Array<Record<string, unknown>> = await res.json();
-      raw.push(...data);
-      if (data.length < 100) break;
-    }
-
-    return raw
-      .filter((repo) => !repo.fork && !repo.archived && Number(repo.size ?? 0) > 0)
-      .map((repo) => ({
-        name: String(repo.name),
-        fullName: String(repo.full_name),
-        owner: String((repo.owner as Record<string, unknown>)?.login ?? username),
-        isForked: false,
-        archived: false,
-        pushedAt: repo.pushed_at ? String(repo.pushed_at) : null,
-        stargazersCount: Number(repo.stargazers_count ?? 0),
-        sizeKB: Number(repo.size ?? 0),
-        language: repo.language ? String(repo.language) : null,
-        isPrivate: Boolean(repo.private), // Phase 4: Include private repos
-      }));
-  },
-
-  /**
    * Todos los repositorios accesibles con el token OAuth del usuario (Phase 3).
    * 
    * Incluye repos propios, colaborativos y de organizaciones usando
@@ -239,8 +188,6 @@ export const GithubSignalsService = {
     };
     if (token) {
       headers.Authorization = `Bearer ${token}`;
-    } else if (process.env.GITHUB_TOKEN) {
-      headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
     }
 
     const commits: Array<{ sha: string; files: string[] }> = [];
@@ -292,7 +239,10 @@ export const GithubSignalsService = {
   /** Id numérico de una cuenta de GitHub (para verificar el vínculo con el login por OAuth). */
   async getUserId(username: string): Promise<number | null> {
     const res = await fetch(`${GITHUB_API_BASE}/users/${encodeURIComponent(username)}`, {
-      headers: getHeaders(),
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'NEXTAPE-GitHub-Engine',
+      },
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -302,7 +252,12 @@ export const GithubSignalsService = {
   /** Usuario actual de una cuenta a partir de su id numérico (el que guarda Firebase al vincular GitHub). */
   async getLoginById(id: string): Promise<string | null> {
     if (!/^\d{1,20}$/.test(id)) return null;
-    const res = await fetch(`${GITHUB_API_BASE}/user/${id}`, { headers: getHeaders() });
+    const res = await fetch(`${GITHUB_API_BASE}/user/${id}`, {
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'NEXTAPE-GitHub-Engine',
+      },
+    });
     if (!res.ok) return null;
     const data = await res.json();
     return typeof data.login === "string" ? data.login : null;
@@ -317,7 +272,7 @@ export const GithubSignalsService = {
    * 
    * @param owner - Dueño del repositorio
    * @param repo - Nombre del repositorio
-   * @param token - Token OAuth opcional (usa shared PAT si no se proporciona)
+   * @param token - Token OAuth (requerido para acceso autenticado)
    * @returns SHA del último commit o null si hay error
    */
   async getLatestCommitSHA(owner: string, repo: string, token?: string): Promise<string | null> {
@@ -327,8 +282,6 @@ export const GithubSignalsService = {
     };
     if (token) {
       headers.Authorization = `Bearer ${token}`;
-    } else if (process.env.GITHUB_TOKEN) {
-      headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
     }
 
     try {
@@ -361,12 +314,24 @@ export const GithubSignalsService = {
    * Las tres consultas independientes van en paralelo, y el árbol se devuelve para reutilizarlo al
    * elegir archivos: antes se pedía dos veces. Mantiene cada análisis dentro del tiempo de una
    * Netlify Function.
+   * 
+   * @param owner - Dueño del repositorio
+   * @param repo - Nombre del repositorio
+   * @param token - OAuth token opcional (recomendado para evitar rate limiting)
    */
   async getRepoSnapshot(
     owner: string,
     repo: string,
+    token?: string,
   ): Promise<{ signals: RepoSignals; tree: RepoTreeEntry[]; pushedAt: string | null; isPrivate: boolean }> {
-    const headers = getHeaders();
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'NEXTAPE-GitHub-Engine',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    
     const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
     const [repoRes, langRes, commitsRes] = await Promise.all([
@@ -482,8 +447,8 @@ export const GithubSignalsService = {
   },
 
   /** Compatibilidad con los scripts existentes: solo las señales. */
-  async getRepoSignals(owner: string, repo: string): Promise<RepoSignals> {
-    return (await GithubSignalsService.getRepoSnapshot(owner, repo)).signals;
+  async getRepoSignals(owner: string, repo: string, token?: string): Promise<RepoSignals> {
+    return (await GithubSignalsService.getRepoSnapshot(owner, repo, token)).signals;
   },
 
   /**
@@ -495,6 +460,8 @@ export const GithubSignalsService = {
    * 
    * Phase 3: Si se proporciona userTouchedFiles, prioriza archivos que el usuario modificó en sus
    * propios commits (cruza contra la selección de "archivos centrales" existente).
+   * 
+   * @param token - OAuth token opcional (recomendado para evitar rate limiting)
    */
   async fetchCentralSourceFiles(
     owner: string,
@@ -502,8 +469,16 @@ export const GithubSignalsService = {
     commitSHA: string,
     tree?: RepoTreeEntry[],
     userTouchedFiles?: string[],
+    token?: string,
   ): Promise<Array<{ filename: string; content: string }>> {
-    const headers = getHeaders();
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'NEXTAPE-GitHub-Engine',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    
     const ref = commitSHA || "HEAD";
     let entries = tree;
 
@@ -589,14 +564,18 @@ export const GithubSignalsService = {
  * - Token is revoked
  * - Decryption fails (corrupted data, wrong key)
  * 
- * The caller decides fallback strategy (e.g., use shared PAT).
+ * OAuth is now mandatory for GitHub analysis (Phase 2). If this returns null,
+ * the user must connect their GitHub account via OAuth first.
  * 
  * @param uid - User ID
  * @returns Decrypted OAuth token or null
  * 
  * @example
  * const token = await getGithubToken(uid);
- * const githubToken = token ?? process.env.GITHUB_TOKEN; // Fallback to shared PAT
+ * if (!token) {
+ *   return NextResponse.json({ error: "no_github_token" }, { status: 401 });
+ * }
+ * const repos = await GithubSignalsService.getCollaborativeRepos(token);
  */
 export async function getGithubToken(uid: string): Promise<string | null> {
   // Only import Admin SDK when running in server context
