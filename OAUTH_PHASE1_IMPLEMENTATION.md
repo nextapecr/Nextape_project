@@ -151,13 +151,14 @@ This is **backend infrastructure only**. The following are intentionally deferre
 
 ```bash
 # Generate with: openssl rand -hex 32
-TOKEN_ENCRYPTION_KEY=743a73f3ca6c9010b61a51e3255eebc9607d1ef48e3c3a1b0af8ddda15bab93b
+TOKEN_ENCRYPTION_KEY=<64-hex-characters-generated-key>
 ```
 
 **Netlify** (production):
 
 Add as environment variable in Netlify dashboard:
 - Name: `TOKEN_ENCRYPTION_KEY`
+- Value: (use the key from your `.env.local` file)
 - Value: (64 hex characters, same as `.env.local`)
 - Scope: `Functions` (not just Builds)
 - Context: `Production`

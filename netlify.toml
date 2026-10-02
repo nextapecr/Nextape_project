@@ -7,6 +7,9 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  # Omit documentation files from secrets scanning
+  # These files may contain example keys or audit reports
+  SECRETS_SCAN_OMIT_PATHS = "OAUTH_PHASE1_IMPLEMENTATION.md,GITHUB_*.md,docs/*.md"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
