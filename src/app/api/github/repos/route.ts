@@ -50,6 +50,16 @@ export async function POST(req: NextRequest) {
     // Phase 3: Usar OAuth token del usuario para obtener repos colaborativos también
     const userToken = await getGithubToken(uid);
     
+    // Phase 4: Obtener allowlist de repos privados
+    let privateReposAllowlist: string[] = [];
+    if (userToken) {
+      const tokenDoc = await adminDb().collection("github_tokens").doc(uid).get();
+      const tokenData = tokenDoc.data();
+      privateReposAllowlist = Array.isArray(tokenData?.privateReposAllowlist)
+        ? tokenData.privateReposAllowlist
+        : [];
+    }
+    
     const [allRepos, existing] = await Promise.all([
       userToken
         ? GithubSignalsService.getCollaborativeRepos(userToken) // Phase 3: Incluye colaborativos
@@ -61,8 +71,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "no_repos_found" }, { status: 404 });
     }
 
+    // Phase 4: Filtrar repos privados que NO están en la allowlist
+    // Repos públicos: siempre incluidos
+    // Repos privados: solo si están en privateReposAllowlist
+    const allowlistSet = new Set(privateReposAllowlist);
+    const filteredRepos = allRepos.filter((repo) => {
+      if (!repo.isPrivate) return true; // Repos públicos siempre incluidos
+      return allowlistSet.has(repo.fullName); // Privados: solo si están en allowlist
+    });
+
     // La API ya ordena por push; se reordena igualmente para que el tope conserve los más recientes.
-    const repos = [...allRepos]
+    const repos = [...filteredRepos]
       .sort((a, b) => String(b.pushedAt ?? "").localeCompare(String(a.pushedAt ?? "")))
       .slice(0, MAX_REPOS_PER_ANALYSIS);
     const current = new Set(repos.map((repo) => repoDocId(repo.fullName)));

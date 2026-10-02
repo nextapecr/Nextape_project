@@ -18,6 +18,7 @@ import { apiPost } from "@/lib/api";
 import { connectGithubOAuth } from "@/lib/firebase/auth";
 import { useGithubOAuthStatus } from "@/hooks/use-github-oauth-status";
 import { GithubEvidenceService } from "@/services/github-evidence.service";
+import { PrivateRepoSelector } from "@/components/github/PrivateRepoSelector";
 import type {
   GithubAggregateResponse,
   GithubAIFeedback,
@@ -369,35 +370,40 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
 
       {/* OAuth Connected - Show Disconnect Button */}
       {hasOAuth && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-brand-green/5 p-5 border border-brand-green/20">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-brand-green" />
-            <div>
-              <p className="text-sm font-bold text-black">
-                Conectado como {oauthStatus?.githubUsername ? `@${oauthStatus.githubUsername}` : 'GitHub'}
-              </p>
-              <p className="text-xs font-medium text-gray-600">
-                Listo para analizar tus repositorios
-              </p>
+        <>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-brand-green/5 p-5 border border-brand-green/20">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-brand-green" />
+              <div>
+                <p className="text-sm font-bold text-black">
+                  Conectado como {oauthStatus?.githubUsername ? `@${oauthStatus.githubUsername}` : 'GitHub'}
+                </p>
+                <p className="text-xs font-medium text-gray-600">
+                  Listo para analizar tus repositorios
+                </p>
+              </div>
             </div>
+            <Button
+              type="button"
+              onClick={handleDisconnectOAuth}
+              disabled={disconnecting || running}
+              variant="outline"
+              className="shrink-0 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest disabled:opacity-40"
+            >
+              {disconnecting ? (
+                <>
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  Desconectando...
+                </>
+              ) : (
+                "Desconectar GitHub"
+              )}
+            </Button>
           </div>
-          <Button
-            type="button"
-            onClick={handleDisconnectOAuth}
-            disabled={disconnecting || running}
-            variant="outline"
-            className="shrink-0 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest disabled:opacity-40"
-          >
-            {disconnecting ? (
-              <>
-                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                Desconectando...
-              </>
-            ) : (
-              "Desconectar GitHub"
-            )}
-          </Button>
-        </div>
+
+          {/* Private Repo Selector - Only shown when OAuth connected */}
+          <PrivateRepoSelector uid={uid} onSelectionUpdated={() => setNotice("Selección actualizada. Vuelve a analizar para aplicar los cambios.")} />
+        </>
       )}
 
       {error && (

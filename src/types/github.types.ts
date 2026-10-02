@@ -184,6 +184,13 @@ export interface GithubToken {
   lastUsedAt: FirebaseFirestore.Timestamp | { _seconds: number; _nanoseconds: number };
   /** If user disconnected GitHub, timestamp of revocation */
   revokedAt: FirebaseFirestore.Timestamp | { _seconds: number; _nanoseconds: number } | null;
+  /** 
+   * Allowlist of private repos user explicitly selected for analysis.
+   * Format: ["owner/repo1", "owner/repo2"]
+   * Public repos don't need opt-in (always analyzed).
+   * Empty array = no private repos selected.
+   */
+  privateReposAllowlist?: string[];
 }
 
 /**
