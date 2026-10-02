@@ -12,8 +12,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { apiPost } from "@/lib/api";
 import { connectGithubOAuth } from "@/lib/firebase/auth";
@@ -147,7 +145,6 @@ const ERROR_MESSAGES: Record<string, (user: string) => string> = {
 };
 
 export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?: string }) {
-  const [username, setUsername] = useState("");
   const [profile, setProfile] = useState<ProfileView | null>(null);
   const [loading, setLoading] = useState(true);
   const [run, setRun] = useState<RunState | null>(null);
@@ -158,6 +155,9 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
   
   // Check OAuth status
   const oauthStatus = useGithubOAuthStatus(uid);
+  
+  // Username comes from OAuth, no manual input
+  const username = oauthStatus?.githubUsername || "";
 
   // Solo lectura del último perfil. No analiza.
   useEffect(() => {
@@ -166,7 +166,6 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
       .then((stored) => {
         if (cancelled || !stored) return;
         setProfile(fromEvidence(stored));
-        setUsername((prev) => prev || stored.githubUsername || "");
       })
       .catch((err) => console.error("[GithubEvidenceCard] no se pudo leer la evidencia previa:", err))
       .finally(() => {
@@ -177,10 +176,6 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
     };
   }, [uid]);
 
-  useEffect(() => {
-    setUsername((prev) => prev || parseGithubUsername(githubUrl));
-  }, [githubUrl]);
-
   /**
    * Connect GitHub with OAuth (Phase 2).
    * Opens OAuth popup, captures token, stores on server.
@@ -189,9 +184,8 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
     setConnecting(true);
     setError(null);
     try {
-      const githubUsername = await connectGithubOAuth();
-      setUsername(githubUsername);
-      setNotice(`Conectado exitosamente como @${githubUsername}`);
+      await connectGithubOAuth();
+      setNotice(`Conectado exitosamente con GitHub`);
       // Trigger re-check of OAuth status
       window.location.reload();
     } catch (err) {
@@ -242,10 +236,10 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
     }
   };
 
-  const analyzeAll = async (override?: string) => {
-    const user = (override ?? username).trim();
+  const analyzeAll = async () => {
+    const user = username.trim();
     if (!user) {
-      setError("Escribe tu usuario de GitHub.");
+      setError("No se pudo obtener tu usuario de GitHub. Intenta desconectar y volver a conectar.");
       return;
     }
     setError(null);
@@ -307,14 +301,10 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
   };
 
   /**
-   * Vincula GitHub a la cuenta y recalcula la identidad. Los repositorios ya analizados no se repiten
-   * y, si los scores no cambian, tampoco la llamada a Mistral.
-   * 
-   * DEPRECATED: This function is kept for backwards compatibility with existing linked accounts.
+   * DEPRECATED: Legacy function kept for backwards compatibility.
    * New users should use handleConnectOAuth instead.
    */
   const verifyWithGithub = async () => {
-    // This is now a no-op, redirects to OAuth connection
     await handleConnectOAuth();
   };
 
@@ -409,22 +399,6 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
         </div>
       )}
 
-      {/* Username Input - Only shown if OAuth connected */}
-      {hasOAuth && (
-        <div className="space-y-2">
-          <Label className="text-[10px] font-black uppercase tracking-widest text-gray-300 ml-1">
-            Usuario de GitHub
-          </Label>
-          <Input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder={oauthStatus?.githubUsername || "tu-usuario"}
-            disabled={running}
-            className="h-12 bg-gray-50 border-none rounded-xl px-5 font-bold"
-          />
-        </div>
-      )}
-
       {error && (
         <div className="flex items-start gap-3 bg-brand-red/5 text-brand-red rounded-2xl p-4 text-xs font-bold">
           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" /> <span>{error}</span>
@@ -482,10 +456,6 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
           profile={profile}
           busy={running || connecting}
           onVerify={verifyWithGithub}
-          onAnalyzeLinked={(login) => {
-            setUsername(login);
-            void analyzeAll(login);
-          }}
         />
       ) : (
         <p className="text-xs text-gray-400 text-center font-medium">Aún no has analizado tu GitHub.</p>
@@ -498,12 +468,10 @@ function ProfileResult({
   profile,
   busy,
   onVerify,
-  onAnalyzeLinked,
 }: {
   profile: ProfileView;
   busy: boolean;
   onVerify: () => void;
-  onAnalyzeLinked: (login: string) => void;
 }) {
   const s = profile.skillScores;
   const totalBytes = Object.values(profile.languagesBytes).reduce((n, v) => n + v, 0);
@@ -546,10 +514,6 @@ function ProfileResult({
           </Badge>
         )}
       </div>
-
-      {profile.identity && !profile.identity.verified && (
-        <IdentityCallout profile={profile} busy={busy} onVerify={onVerify} onAnalyzeLinked={onAnalyzeLinked} />
-      )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <ScoreTile label="Global" value={s.overall} highlight />
@@ -628,60 +592,6 @@ function ProfileResult({
           La lectura escrita del evaluador no está disponible ahora; los scores son el resultado del
           análisis de tu código.
         </p>
-      )}
-    </div>
-  );
-}
-
-/**
- * Por qué la cuenta no está verificada y qué hacer. Tres casos: la sesión no tiene GitHub vinculado
- * (se ofrece vincularlo), está vinculada a OTRA cuenta conocida (se ofrece analizar esa) o a otra que
- * no se pudo identificar.
- */
-function IdentityCallout({
-  profile,
-  busy,
-  onVerify,
-  onAnalyzeLinked,
-}: {
-  profile: ProfileView;
-  busy: boolean;
-  onVerify: () => void;
-  onAnalyzeLinked: (login: string) => void;
-}) {
-  const identity = profile.identity;
-  if (!identity) return null;
-  const linkedLogin = identity.method === "github_oauth" ? (identity.linkedLogin ?? null) : null;
-  const notLinked = identity.method === null;
-
-  return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-brand-blue/5 p-5">
-      <p className="text-xs font-medium leading-relaxed text-gray-600">
-        {notLinked ? (
-          <>
-            Vincula tu GitHub para confirmar que esta cuenta es tuya. Con la cuenta verificada, The LINE te hace{" "}
-            <span className="font-bold text-black">10 preguntas en vez de 20</span>.
-          </>
-        ) : linkedLogin ? (
-          <>
-            Tu sesión está vinculada a <span className="font-bold text-black">@{linkedLogin}</span>, no a{" "}
-            <span className="font-bold text-black">@{profile.githubUsername}</span>. Solo tu propia cuenta reduce
-            The LINE a 10 preguntas.
-          </>
-        ) : (
-          <>La cuenta analizada no es la que vinculaste a tu sesión. Analiza tu propia cuenta de GitHub.</>
-        )}
-      </p>
-      {(notLinked || linkedLogin) && (
-        <Button
-          type="button"
-          onClick={notLinked ? onVerify : () => onAnalyzeLinked(linkedLogin!)}
-          disabled={busy}
-          className="shrink-0 h-10 rounded-xl bg-black text-white text-[10px] font-bold uppercase tracking-widest disabled:opacity-40"
-        >
-          {busy ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-2 h-3.5 w-3.5" />}
-          {notLinked ? "Verificar con GitHub" : `Analizar @${linkedLogin}`}
-        </Button>
       )}
     </div>
   );
