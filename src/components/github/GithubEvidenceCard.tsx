@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Github,
   Loader2,
+  Lock,
   RefreshCw,
   ShieldCheck,
   ShieldQuestion,
@@ -550,8 +551,15 @@ function ProfileResult({
           <ul className="divide-y divide-gray-50">
             {profile.repos.slice(0, MAX_REPOS_SHOWN).map((repo) => (
               <li key={repo.fullName} className="flex items-center justify-between gap-4 py-2.5 text-xs">
-                <div className="min-w-0">
-                  <p className="font-bold truncate">{repo.fullName}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold truncate">{repo.fullName}</p>
+                    {repo.isPrivate && (
+                      <span title="Repositorio privado">
+                        <Lock className="h-3 w-3 text-gray-400 shrink-0" />
+                      </span>
+                    )}
+                  </div>
                   <p className="text-gray-400">
                     {repo.mainLanguage ?? "Lenguaje desconocido"} · {repo.filesAnalyzed} archivos
                   </p>

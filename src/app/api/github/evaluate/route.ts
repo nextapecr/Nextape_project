@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
     // Phase 3: Obtener token OAuth del usuario para filtrar commits
     const userToken = await getGithubToken(uid);
 
-    const [{ signals, tree, pushedAt }] = await Promise.all([
+    const [{ signals, tree, pushedAt, isPrivate }] = await Promise.all([
       GithubSignalsService.getRepoSnapshot(owner, repo),
     ]);
 
@@ -160,6 +160,7 @@ export async function POST(req: NextRequest) {
       parsedLanguages,
       analyzedAt: FieldValue.serverTimestamp() as unknown as FirebaseFirestore.Timestamp,
       engineVersion: GITHUB_ENGINE_VERSION,
+      isPrivate, // Phase 4: Save private flag
     };
     await docRef.set(evidence);
 

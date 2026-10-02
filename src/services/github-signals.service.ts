@@ -162,6 +162,7 @@ export const GithubSignalsService = {
         stargazersCount: Number(repo.stargazers_count ?? 0),
         sizeKB: Number(repo.size ?? 0),
         language: repo.language ? String(repo.language) : null,
+        isPrivate: Boolean(repo.private), // Phase 4: Include private repos
       }));
   },
 
@@ -210,6 +211,7 @@ export const GithubSignalsService = {
         stargazersCount: Number(repo.stargazers_count ?? 0),
         sizeKB: Number(repo.size ?? 0),
         language: repo.language ? String(repo.language) : null,
+        isPrivate: Boolean(repo.private), // Phase 4: Include private repos
       }));
   },
 
@@ -363,7 +365,7 @@ export const GithubSignalsService = {
   async getRepoSnapshot(
     owner: string,
     repo: string,
-  ): Promise<{ signals: RepoSignals; tree: RepoTreeEntry[]; pushedAt: string | null }> {
+  ): Promise<{ signals: RepoSignals; tree: RepoTreeEntry[]; pushedAt: string | null; isPrivate: boolean }> {
     const headers = getHeaders();
     const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -475,6 +477,7 @@ export const GithubSignalsService = {
       tree,
       // Clave de caché del listado de repos: si no cambia, no hace falta reanalizar.
       pushedAt: repoData.pushed_at ? String(repoData.pushed_at) : null,
+      isPrivate: Boolean(repoData.private), // Phase 4: Include private flag
     };
   },
 

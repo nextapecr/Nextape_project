@@ -150,6 +150,7 @@ export async function POST(req: NextRequest) {
         hasASTData: r.skillScores.hasASTData,
         filesAnalyzed: r.filesAnalyzed ?? 0,
         mainLanguage: topKey(r.repoSignals?.languages),
+        isPrivate: r.isPrivate, // Phase 4: Include private flag
       }))
       .sort((a, b) => b.filesAnalyzed - a.filesAnalyzed);
 

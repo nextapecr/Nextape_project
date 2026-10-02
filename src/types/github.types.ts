@@ -20,6 +20,8 @@ export interface GithubRepo {
   language: string | null;
   /** Repositorio archivado: se excluye del análisis. */
   archived?: boolean;
+  /** Repositorio privado (Phase 4): requiere OAuth con scope 'repo' */
+  isPrivate?: boolean;
 }
 
 /** Señales brutas extraídas de la GitHub API para un repositorio concreto */
@@ -133,6 +135,8 @@ export interface GithubRepoSummary {
   hasASTData: boolean;
   filesAnalyzed: number;
   mainLanguage: string | null;
+  /** Repositorio privado (Phase 4) */
+  isPrivate?: boolean;
 }
 
 /**
@@ -199,6 +203,8 @@ export interface GithubRepoEvidence {
   parsedLanguages: Record<string, number>;
   analyzedAt: FirebaseFirestore.Timestamp | { _seconds: number; _nanoseconds: number };
   engineVersion: string;
+  /** Repositorio privado (Phase 4) */
+  isPrivate?: boolean;
 }
 
 /** Elemento del listado de POST /api/github/repos. */
@@ -211,6 +217,8 @@ export interface GithubRepoListItem {
   stargazersCount: number;
   /** Ya analizado y sin cambios desde entonces. */
   analyzed: boolean;
+  /** Repositorio privado (Phase 4) */
+  isPrivate?: boolean;
 }
 
 /** Respuesta de POST /api/github/repos. */

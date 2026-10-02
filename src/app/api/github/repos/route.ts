@@ -92,6 +92,7 @@ export async function POST(req: NextRequest) {
         analyzed: Boolean(
           prev && prev.engineVersion === GITHUB_ENGINE_VERSION && prev.pushedAt === repo.pushedAt,
         ),
+        isPrivate: repo.isPrivate, // Phase 4: Include private flag
       };
     });
 
