@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb, verifyRequestUid } from "@/lib/firebase/admin";
-import { GithubSignalsService } from "@/services/github-signals.service";
+import { GithubSignalsService, getGithubToken } from "@/services/github-signals.service";
 import { analyzeRepositorySources } from "@/services/github-engine";
 import {
   GITHUB_ENGINE_VERSION,
@@ -46,13 +46,10 @@ export async function POST(req: NextRequest) {
     ? repoName.split("/", 2)
     : [githubUsername, repoName];
 
-  // Solo repositorios de la propia cuenta analizada. Sin esto se podría meter en el perfil de una
-  // cuenta el código de cualquier repositorio público ajeno.
+  // Phase 3: Ya no validamos que el repo sea del usuario autenticado — puede ser colaborativo.
+  // El análisis se filtra por commits del usuario, sin importar quién es el owner del repo.
   if (repoName.split("/").length > 2 || !GITHUB_REPO_NAME_PATTERN.test(namePart ?? "")) {
     return NextResponse.json({ error: "invalid_repo_name" }, { status: 400 });
-  }
-  if (ownerPart.toLowerCase() !== githubUsername.toLowerCase()) {
-    return NextResponse.json({ error: "repo_not_owned" }, { status: 400 });
   }
 
   const owner = ownerPart;
@@ -63,6 +60,9 @@ export async function POST(req: NextRequest) {
     // Cada análisis gasta ~5 peticiones del GITHUB_TOKEN compartido por toda la plataforma.
     const limit = await consumeRateLimit(adminDb(), "github_evaluate", uid, GITHUB_RATE_LIMITS.evaluate);
     if (!limit.allowed) return rateLimitedResponse(limit);
+
+    // Phase 3: Obtener token OAuth del usuario para filtrar commits
+    const userToken = await getGithubToken(uid);
 
     const docRef = adminDb()
       .collection("github_evidence")
@@ -94,11 +94,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(cached);
     }
 
+    // Phase 3: Obtener commits del usuario en este repo
+    const userCommits = await GithubSignalsService.getUserCommitsInRepo(
+      owner,
+      repo,
+      githubUsername,
+      userToken || undefined,
+    );
+    
+    // Extraer lista de archivos tocados por el usuario
+    const userTouchedFiles = new Set<string>();
+    for (const commit of userCommits) {
+      for (const file of commit.files) {
+        userTouchedFiles.add(file);
+      }
+    }
+
     const files = await GithubSignalsService.fetchCentralSourceFiles(
       owner,
       repo,
       signals.lastCommitSHA,
       tree,
+      Array.from(userTouchedFiles), // Phase 3: Priorizar archivos del usuario
     );
     const { ir, metrics, skillScores } = analyzeRepositorySources(files, signals);
 

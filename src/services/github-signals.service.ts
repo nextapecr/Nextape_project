@@ -129,6 +129,8 @@ export const GithubSignalsService = {
   /**
    * TODOS los repositorios propios de un usuario (paginado), sin forks, archivados ni vacíos.
    * Antes se pedía una sola página de 30: quien tuviera más repositorios perdía los antiguos.
+   * 
+   * @deprecated Use getCollaborativeRepos with OAuth token for full access (Phase 3)
    */
   async getUserRepos(username: string): Promise<GithubRepo[]> {
     const headers = getHeaders();
@@ -161,6 +163,128 @@ export const GithubSignalsService = {
         sizeKB: Number(repo.size ?? 0),
         language: repo.language ? String(repo.language) : null,
       }));
+  },
+
+  /**
+   * Todos los repositorios accesibles con el token OAuth del usuario (Phase 3).
+   * 
+   * Incluye repos propios, colaborativos y de organizaciones usando
+   * affiliation=collaborator,organization_member,owner.
+   * 
+   * El filtro por autoría se aplicará después sobre los commits individuales,
+   * no aquí — este método simplemente lista TODO lo que el usuario puede ver.
+   * 
+   * @param token - OAuth token del usuario
+   * @returns Todos los repos accesibles (sin forks ni archivados)
+   */
+  async getCollaborativeRepos(token: string): Promise<GithubRepo[]> {
+    const headers = {
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'NEXTAPE-GitHub-Engine',
+      Authorization: `Bearer ${token}`,
+    };
+    const raw: Array<Record<string, unknown>> = [];
+
+    for (let page = 1; page <= MAX_REPO_PAGES; page++) {
+      const res = await fetch(
+        `${GITHUB_API_BASE}/user/repos?affiliation=collaborator,organization_member,owner&sort=pushed&per_page=100&page=${page}`,
+        { headers },
+      );
+      if (!res.ok) {
+        throw new Error(`Error en GitHub API (${res.status}): ${res.statusText}`);
+      }
+      const data: Array<Record<string, unknown>> = await res.json();
+      raw.push(...data);
+      if (data.length < 100) break;
+    }
+
+    return raw
+      .filter((repo) => !repo.fork && !repo.archived && Number(repo.size ?? 0) > 0)
+      .map((repo) => ({
+        name: String(repo.name),
+        fullName: String(repo.full_name),
+        owner: String((repo.owner as Record<string, unknown>)?.login ?? ''),
+        isForked: false,
+        archived: false,
+        pushedAt: repo.pushed_at ? String(repo.pushed_at) : null,
+        stargazersCount: Number(repo.stargazers_count ?? 0),
+        sizeKB: Number(repo.size ?? 0),
+        language: repo.language ? String(repo.language) : null,
+      }));
+  },
+
+  /**
+   * Obtiene commits de un usuario específico en un repositorio (Phase 3).
+   * 
+   * Filtra el historial por autoría usando author={username}, lo que da la señal
+   * real de "qué escribió esta persona" en ese repo, sin importar si es dueño o colaborador.
+   * 
+   * @param owner - Dueño del repositorio
+   * @param repo - Nombre del repositorio
+   * @param username - GitHub username para filtrar commits
+   * @param token - OAuth token (opcional, usa shared PAT si no se proporciona)
+   * @returns Lista de commits del usuario con archivos modificados
+   */
+  async getUserCommitsInRepo(
+    owner: string,
+    repo: string,
+    username: string,
+    token?: string,
+  ): Promise<Array<{ sha: string; files: string[] }>> {
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'NEXTAPE-GitHub-Engine',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    } else if (process.env.GITHUB_TOKEN) {
+      headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+    }
+
+    const commits: Array<{ sha: string; files: string[] }> = [];
+    
+    // Últimos 90 días de commits del usuario
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    
+    try {
+      const res = await fetch(
+        `${GITHUB_API_BASE}/repos/${owner}/${repo}/commits?author=${encodeURIComponent(username)}&since=${since}&per_page=100`,
+        { headers },
+      );
+      
+      if (!res.ok) {
+        console.warn(`[github-signals] No se pudieron obtener commits de ${username} en ${owner}/${repo} (status ${res.status})`);
+        return [];
+      }
+      
+      const data = await res.json();
+      if (!Array.isArray(data)) return [];
+      
+      for (const commit of data) {
+        // Obtener detalles del commit para ver qué archivos tocó
+        const detailRes = await fetch(
+          `${GITHUB_API_BASE}/repos/${owner}/${repo}/commits/${commit.sha}`,
+          { headers },
+        );
+        
+        if (detailRes.ok) {
+          const detail = await detailRes.json();
+          const files = Array.isArray(detail.files) 
+            ? detail.files.map((f: { filename?: string }) => f.filename || '').filter(Boolean)
+            : [];
+          
+          commits.push({ sha: commit.sha, files });
+        }
+      }
+      
+      return commits;
+    } catch (err) {
+      console.error(
+        `[github-signals] Error obteniendo commits de ${username} en ${owner}/${repo}:`,
+        err instanceof Error ? err.message : err
+      );
+      return [];
+    }
   },
 
   /** Id numérico de una cuenta de GitHub (para verificar el vínculo con el login por OAuth). */
@@ -318,12 +442,16 @@ export const GithubSignalsService = {
    * Se leen de raw.githubusercontent.com —no consume cuota de la API ni requiere decodificar base64—
    * y en paralelo; si raw falla se intenta la API de contenidos. Si se pasa el árbol ya descargado
    * (de `getRepoSnapshot`), no se vuelve a pedir.
+   * 
+   * Phase 3: Si se proporciona userTouchedFiles, prioriza archivos que el usuario modificó en sus
+   * propios commits (cruza contra la selección de "archivos centrales" existente).
    */
   async fetchCentralSourceFiles(
     owner: string,
     repo: string,
     commitSHA: string,
     tree?: RepoTreeEntry[],
+    userTouchedFiles?: string[],
   ): Promise<Array<{ filename: string; content: string }>> {
     const headers = getHeaders();
     const ref = commitSHA || "HEAD";
@@ -348,7 +476,24 @@ export const GithubSignalsService = {
       return [];
     }
 
-    const files = await mapWithConcurrency(selected, FILE_FETCH_CONCURRENCY, async (file) => {
+    // Phase 3: Priorizar archivos que el usuario modificó en sus commits
+    let prioritized = selected;
+    if (userTouchedFiles && userTouchedFiles.length > 0) {
+      const userTouchedSet = new Set(userTouchedFiles.map(f => f.toLowerCase()));
+      const userFiles = selected.filter(f => userTouchedSet.has(f.path.toLowerCase()));
+      const otherFiles = selected.filter(f => !userTouchedSet.has(f.path.toLowerCase()));
+      
+      // Priorizar archivos del usuario, luego rellenar con otros hasta MAX_FILES_PER_REPO
+      prioritized = [...userFiles, ...otherFiles].slice(0, MAX_FILES_PER_REPO);
+      
+      if (userFiles.length > 0) {
+        console.log(
+          `[github-signals] Priorizando ${userFiles.length} archivos modificados por el usuario en ${owner}/${repo}`
+        );
+      }
+    }
+
+    const files = await mapWithConcurrency(prioritized, FILE_FETCH_CONCURRENCY, async (file) => {
       const encodedPath = file.path.split("/").map(encodeURIComponent).join("/");
       try {
         const rawRes = await fetch(

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, verifyRequestUid } from "@/lib/firebase/admin";
-import { GithubSignalsService } from "@/services/github-signals.service";
+import { GithubSignalsService, getGithubToken } from "@/services/github-signals.service";
 import {
   GITHUB_ENGINE_VERSION,
   GITHUB_USERNAME_PATTERN,
@@ -46,8 +46,14 @@ export async function POST(req: NextRequest) {
     if (!limit.allowed) return rateLimitedResponse(limit);
 
     const reposRef = adminDb().collection("github_evidence").doc(uid).collection("repos");
+    
+    // Phase 3: Usar OAuth token del usuario para obtener repos colaborativos también
+    const userToken = await getGithubToken(uid);
+    
     const [allRepos, existing] = await Promise.all([
-      GithubSignalsService.getUserRepos(githubUsername),
+      userToken
+        ? GithubSignalsService.getCollaborativeRepos(userToken) // Phase 3: Incluye colaborativos
+        : GithubSignalsService.getUserRepos(githubUsername),    // Fallback: Solo propios
       reposRef.get(),
     ]);
 
