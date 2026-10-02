@@ -307,6 +307,53 @@ export const GithubSignalsService = {
   },
 
   /**
+   * Obtiene SOLO el SHA del último commit de un repo (Phase 5).
+   * 
+   * Llamada ligera (1 commit) para verificar si el cache está actualizado
+   * antes de hacer el análisis completo. Evita ~5 llamadas innecesarias a GitHub API
+   * y ejecución del motor si no hay commits nuevos.
+   * 
+   * @param owner - Dueño del repositorio
+   * @param repo - Nombre del repositorio
+   * @param token - Token OAuth opcional (usa shared PAT si no se proporciona)
+   * @returns SHA del último commit o null si hay error
+   */
+  async getLatestCommitSHA(owner: string, repo: string, token?: string): Promise<string | null> {
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'NEXTAPE-GitHub-Engine',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    } else if (process.env.GITHUB_TOKEN) {
+      headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+    }
+
+    try {
+      const res = await fetch(
+        `${GITHUB_API_BASE}/repos/${owner}/${repo}/commits?per_page=1`,
+        { headers },
+      );
+      
+      if (!res.ok) {
+        console.warn(`[github-signals] No se pudo obtener último commit de ${owner}/${repo} (status ${res.status})`);
+        return null;
+      }
+      
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) return null;
+      
+      return data[0]?.sha || null;
+    } catch (err) {
+      console.error(
+        `[github-signals] Error obteniendo último commit SHA de ${owner}/${repo}:`,
+        err instanceof Error ? err.message : err
+      );
+      return null;
+    }
+  },
+
+  /**
    * Señales y árbol de un repositorio en una sola pasada.
    *
    * Las tres consultas independientes van en paralelo, y el árbol se devuelve para reutilizarlo al

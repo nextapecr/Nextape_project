@@ -57,6 +57,55 @@ export async function POST(req: NextRequest) {
   const fullName = `${owner}/${repo}`;
 
   try {
+    // Phase 5: Verificar cache ANTES de consumir rate limit o hacer llamadas pesadas a GitHub
+    const docRef = adminDb()
+      .collection("github_evidence")
+      .doc(uid)
+      .collection("repos")
+      .doc(repoDocId(fullName));
+
+    const existingSnap = await docRef.get();
+    const existing = existingSnap.data() as GithubRepoEvidence | undefined;
+
+    // Si existe análisis previo con la versión actual del motor, verificar si el SHA cambió
+    if (existing && existing.engineVersion === GITHUB_ENGINE_VERSION && existing.lastCommitSHA) {
+      // Phase 5: Obtener SHA actual con llamada ligera (1 commit)
+      const userToken = await getGithubToken(uid);
+      const currentSHA = await GithubSignalsService.getLatestCommitSHA(owner, repo, userToken || undefined);
+      
+      if (currentSHA && currentSHA === existing.lastCommitSHA) {
+        // SHA no cambió: devolver cache sin consumir rate limit ni llamar a GitHub API
+        console.log(`
+╔════════════════════════════════════════════════════════════════
+║ 🎯 CACHE HIT (Phase 5)
+║ Repo: ${fullName}
+║ SHA: ${currentSHA.slice(0, 7)} (sin cambios)
+║ ✅ NO se ejecuta motor
+║ ✅ NO se llama a GitHub API completa
+║ ✅ NO se consume rate limit
+╚════════════════════════════════════════════════════════════════
+        `);
+        const cached: GithubRepoEvaluateResponse = {
+          cached: true,
+          fullName,
+          skillScores: existing.skillScores,
+          filesAnalyzed: existing.filesAnalyzed ?? 0,
+          parsedLanguages: existing.parsedLanguages ?? {},
+        };
+        return NextResponse.json(cached);
+      }
+      
+      console.log(`
+╔════════════════════════════════════════════════════════════════
+║ 🔄 CACHE MISS (Phase 5)
+║ Repo: ${fullName}
+║ SHA anterior: ${existing.lastCommitSHA.slice(0, 7)}
+║ SHA actual: ${currentSHA?.slice(0, 7) || 'unknown'}
+║ ⚙️  Ejecutando análisis completo...
+╚════════════════════════════════════════════════════════════════
+      `);
+    }
+
     // Cada análisis gasta ~5 peticiones del GITHUB_TOKEN compartido por toda la plataforma.
     const limit = await consumeRateLimit(adminDb(), "github_evaluate", uid, GITHUB_RATE_LIMITS.evaluate);
     if (!limit.allowed) return rateLimitedResponse(limit);
@@ -64,35 +113,9 @@ export async function POST(req: NextRequest) {
     // Phase 3: Obtener token OAuth del usuario para filtrar commits
     const userToken = await getGithubToken(uid);
 
-    const docRef = adminDb()
-      .collection("github_evidence")
-      .doc(uid)
-      .collection("repos")
-      .doc(repoDocId(fullName));
-
-    const [{ signals, tree, pushedAt }, existingSnap] = await Promise.all([
+    const [{ signals, tree, pushedAt }] = await Promise.all([
       GithubSignalsService.getRepoSnapshot(owner, repo),
-      docRef.get(),
     ]);
-
-    const existing = existingSnap.data() as GithubRepoEvidence | undefined;
-    if (
-      existing &&
-      existing.engineVersion === GITHUB_ENGINE_VERSION &&
-      signals.lastCommitSHA !== "" &&
-      existing.lastCommitSHA === signals.lastCommitSHA
-    ) {
-      // Mantiene alineada la clave con la que el listado decide qué falta por analizar.
-      if (existing.pushedAt !== pushedAt) await docRef.update({ pushedAt });
-      const cached: GithubRepoEvaluateResponse = {
-        cached: true,
-        fullName,
-        skillScores: existing.skillScores,
-        filesAnalyzed: existing.filesAnalyzed ?? 0,
-        parsedLanguages: existing.parsedLanguages ?? {},
-      };
-      return NextResponse.json(cached);
-    }
 
     // Phase 3: Obtener commits del usuario en este repo
     const userCommits = await GithubSignalsService.getUserCommitsInRepo(
