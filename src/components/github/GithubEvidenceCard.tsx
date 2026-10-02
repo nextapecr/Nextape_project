@@ -16,7 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { apiPost } from "@/lib/api";
-import { linkGithubAccount } from "@/lib/firebase/auth";
+import { connectGithubOAuth } from "@/lib/firebase/auth";
+import { useGithubOAuthStatus } from "@/hooks/use-github-oauth-status";
 import { GithubEvidenceService } from "@/services/github-evidence.service";
 import type {
   GithubAggregateResponse,
@@ -152,7 +153,11 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
   const [run, setRun] = useState<RunState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [verifying, setVerifying] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  
+  // Check OAuth status
+  const oauthStatus = useGithubOAuthStatus(uid);
 
   // Solo lectura del último perfil. No analiza.
   useEffect(() => {
@@ -175,6 +180,67 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
   useEffect(() => {
     setUsername((prev) => prev || parseGithubUsername(githubUrl));
   }, [githubUrl]);
+
+  /**
+   * Connect GitHub with OAuth (Phase 2).
+   * Opens OAuth popup, captures token, stores on server.
+   */
+  const handleConnectOAuth = async () => {
+    setConnecting(true);
+    setError(null);
+    try {
+      const githubUsername = await connectGithubOAuth();
+      setUsername(githubUsername);
+      setNotice(`Conectado exitosamente como @${githubUsername}`);
+      // Trigger re-check of OAuth status
+      window.location.reload();
+    } catch (err) {
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? String((err as { code: unknown }).code)
+          : err instanceof Error
+            ? err.message
+            : "";
+      
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+        // User closed popup, no error needed
+        return;
+      }
+      
+      if (code === "no_access_token") {
+        setError("No se pudo obtener el token de acceso de GitHub. Inténtalo de nuevo.");
+      } else if (code === "incomplete_profile") {
+        setError("No se pudo obtener tu información de GitHub. Inténtalo de nuevo.");
+      } else {
+        setError("No se pudo conectar con GitHub. Inténtalo de nuevo.");
+      }
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  /**
+   * Disconnect GitHub OAuth.
+   * Revokes token on server and locally.
+   */
+  const handleDisconnectOAuth = async () => {
+    if (!confirm("¿Seguro que quieres desconectar tu cuenta de GitHub? Tendrás que volver a conectarla para analizar tus repositorios.")) {
+      return;
+    }
+    
+    setDisconnecting(true);
+    setError(null);
+    try {
+      await apiPost("/api/github/oauth/revoke", {});
+      setNotice("Cuenta de GitHub desconectada exitosamente.");
+      // Trigger re-check of OAuth status
+      window.location.reload();
+    } catch (err) {
+      setError("No se pudo desconectar la cuenta de GitHub. Inténtalo de nuevo.");
+    } finally {
+      setDisconnecting(false);
+    }
+  };
 
   const analyzeAll = async (override?: string) => {
     const user = (override ?? username).trim();
@@ -243,43 +309,18 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
   /**
    * Vincula GitHub a la cuenta y recalcula la identidad. Los repositorios ya analizados no se repiten
    * y, si los scores no cambian, tampoco la llamada a Mistral.
+   * 
+   * DEPRECATED: This function is kept for backwards compatibility with existing linked accounts.
+   * New users should use handleConnectOAuth instead.
    */
   const verifyWithGithub = async () => {
-    if (!profile) return;
-    setVerifying(true);
-    setError(null);
-    try {
-      const { username: linked } = await linkGithubAccount();
-      // Firebase informa del usuario vinculado: si no es el analizado, se analiza el propio.
-      if (linked && linked.toLowerCase() !== profile.githubUsername.toLowerCase()) {
-        setUsername(linked);
-        await analyzeAll(linked);
-        return;
-      }
-      const aggregate = await apiPost<GithubAggregateResponse>("/api/github/aggregate", {
-        githubUsername: profile.githubUsername,
-      });
-      setProfile(fromAggregate(aggregate, profile.githubUsername));
-    } catch (err) {
-      const code =
-        err && typeof err === "object" && "code" in err
-          ? String((err as { code: unknown }).code)
-          : err instanceof Error
-            ? err.message
-            : "";
-      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return;
-      setError(
-        code === "auth/credential-already-in-use"
-          ? "Ese GitHub ya está vinculado a otra cuenta de NEXTAPE."
-          : ERROR_MESSAGES[code]?.(profile.githubUsername) ??
-              "No se pudo verificar tu cuenta de GitHub. Inténtalo de nuevo."
-      );
-    } finally {
-      setVerifying(false);
-    }
+    // This is now a no-op, redirects to OAuth connection
+    await handleConnectOAuth();
   };
 
   const running = run !== null;
+  const hasOAuth = oauthStatus?.hasToken ?? false;
+  const canAnalyze = hasOAuth;
 
   return (
     <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-apple border border-gray-50 space-y-8">
@@ -303,18 +344,86 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
         )}
       </header>
 
-      <div className="space-y-2">
-        <Label className="text-[10px] font-black uppercase tracking-widest text-gray-300 ml-1">
-          Usuario de GitHub
-        </Label>
-        <Input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="tu-usuario"
-          disabled={running}
-          className="h-12 bg-gray-50 border-none rounded-xl px-5 font-bold"
-        />
-      </div>
+      {/* OAuth Connection Status */}
+      {oauthStatus && !hasOAuth && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-brand-blue/5 p-5 border-2 border-brand-blue/20">
+          <div className="space-y-1">
+            <p className="text-sm font-bold text-black">
+              Conecta tu cuenta de GitHub para analizar tus repositorios
+            </p>
+            <p className="text-xs font-medium text-gray-600 leading-relaxed">
+              Necesitamos acceso a tus repos para analizarlos. Tu código nunca se guarda, solo se analizan las métricas de calidad.
+            </p>
+          </div>
+          <Button
+            type="button"
+            onClick={handleConnectOAuth}
+            disabled={connecting}
+            className="shrink-0 h-12 rounded-xl bg-black text-white text-[11px] font-bold uppercase tracking-widest disabled:opacity-40"
+          >
+            {connecting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Conectando...
+              </>
+            ) : (
+              <>
+                <Github className="mr-2 h-4 w-4" />
+                Conectar con GitHub
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* OAuth Connected - Show Disconnect Button */}
+      {hasOAuth && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-brand-green/5 p-5 border border-brand-green/20">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-brand-green" />
+            <div>
+              <p className="text-sm font-bold text-black">
+                Conectado como {oauthStatus?.githubUsername ? `@${oauthStatus.githubUsername}` : 'GitHub'}
+              </p>
+              <p className="text-xs font-medium text-gray-600">
+                Listo para analizar tus repositorios
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            onClick={handleDisconnectOAuth}
+            disabled={disconnecting || running}
+            variant="outline"
+            className="shrink-0 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest disabled:opacity-40"
+          >
+            {disconnecting ? (
+              <>
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                Desconectando...
+              </>
+            ) : (
+              "Desconectar GitHub"
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* Username Input - Only shown if OAuth connected */}
+      {hasOAuth && (
+        <div className="space-y-2">
+          <Label className="text-[10px] font-black uppercase tracking-widest text-gray-300 ml-1">
+            Usuario de GitHub
+          </Label>
+          <Input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder={oauthStatus?.githubUsername || "tu-usuario"}
+            disabled={running}
+            className="h-12 bg-gray-50 border-none rounded-xl px-5 font-bold"
+          />
+        </div>
+      )}
 
       {error && (
         <div className="flex items-start gap-3 bg-brand-red/5 text-brand-red rounded-2xl p-4 text-xs font-bold">
@@ -343,12 +452,18 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
 
       <Button
         onClick={() => analyzeAll()}
-        disabled={running || loading || verifying}
-        className="w-full h-14 bg-black text-white rounded-2xl font-bold uppercase tracking-widest text-[11px] shadow-apple disabled:opacity-40"
+        disabled={!canAnalyze || running || loading || connecting || disconnecting}
+        className="w-full h-14 bg-black text-white rounded-2xl font-bold uppercase tracking-widest text-[11px] shadow-apple disabled:opacity-40 disabled:cursor-not-allowed"
+        title={!hasOAuth ? "Conecta tu cuenta de GitHub primero" : undefined}
       >
         {running ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analizando repositorios
+          </>
+        ) : !hasOAuth ? (
+          <>
+            <ShieldQuestion className="mr-2 h-4 w-4" />
+            Conecta GitHub para analizar
           </>
         ) : (
           <>
@@ -365,7 +480,7 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
       ) : profile ? (
         <ProfileResult
           profile={profile}
-          busy={running || verifying}
+          busy={running || connecting}
           onVerify={verifyWithGithub}
           onAnalyzeLinked={(login) => {
             setUsername(login);
