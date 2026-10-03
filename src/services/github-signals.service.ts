@@ -7,6 +7,22 @@
 import type { GithubRepo, RepoSignals, GithubToken } from '../types/github.types';
 import { EXTENSION_MAP } from './github-engine/parsers/universal-parser';
 
+/**
+ * Enhanced error class for GitHub API calls.
+ * Preserves HTTP status, stage, and endpoint for precise diagnosis.
+ */
+export class GithubApiError extends Error {
+  constructor(
+    message: string,
+    public httpStatus: number,
+    public endpoint: string,
+    public stage: string
+  ) {
+    super(message);
+    this.name = 'GithubApiError';
+  }
+}
+
 const GITHUB_API_BASE = 'https://api.github.com';
 
 /** Archivos por repositorio que se descargan para el motor. */
@@ -79,6 +95,8 @@ export function selectRepresentativeFiles(
   tree: RepoTreeEntry[],
   max = MAX_FILES_PER_REPO,
 ): RepoTreeEntry[] {
+  console.log(`[github-signals] 🔍 DIAGNOSTIC: selectRepresentativeFiles() with ${tree.length} total files`);
+  
   const groups = new Map<string, RepoTreeEntry[]>();
   for (const item of tree) {
     if (item.type !== "blob") continue;
@@ -89,6 +107,11 @@ export function selectRepresentativeFiles(
     const language = languageForPath(item.path);
     if (!language) continue;
     groups.set(language, [...(groups.get(language) ?? []), item]);
+  }
+
+  console.log(`[github-signals] 📊 DIAGNOSTIC: Grouped into ${groups.size} languages:`, Array.from(groups.keys()));
+  for (const [lang, items] of groups.entries()) {
+    console.log(`[github-signals]   - ${lang}: ${items.length} files`);
   }
 
   const ordered = [...groups.values()]
@@ -111,6 +134,13 @@ export function selectRepresentativeFiles(
     }
     if (!tookAny) break;
   }
+  
+  console.log(`[github-signals] ✅ DIAGNOSTIC: Selected ${picked.length} files for analysis`);
+  picked.forEach((f, idx) => {
+    const lang = languageForPath(f.path);
+    console.log(`[github-signals]   ${idx + 1}. ${f.path} (${lang}, ${f.size} bytes)`);
+  });
+  
   return picked;
 }
 
@@ -202,7 +232,13 @@ export const GithubSignalsService = {
       );
       
       if (!res.ok) {
-        console.warn(`[github-signals] No se pudieron obtener commits de ${username} en ${owner}/${repo} (status ${res.status})`);
+        const status = res.status;
+        console.warn(`[github-signals] No se pudieron obtener commits de ${username} en ${owner}/${repo} (status ${status})`);
+        
+        // Don't throw - return empty array, but log the HTTP status for diagnosis
+        if (status === 403 || status === 401) {
+          console.error(`[github-signals] PERMISSION ERROR getting commits for ${owner}/${repo}: HTTP ${status}`);
+        }
         return [];
       }
       
@@ -291,7 +327,13 @@ export const GithubSignalsService = {
       );
       
       if (!res.ok) {
-        console.warn(`[github-signals] No se pudo obtener último commit de ${owner}/${repo} (status ${res.status})`);
+        const status = res.status;
+        console.warn(`[github-signals] No se pudo obtener último commit de ${owner}/${repo} (status ${status})`);
+        
+        // Log permission errors for diagnosis
+        if (status === 403 || status === 401) {
+          console.error(`[github-signals] PERMISSION ERROR getting latest commit for ${owner}/${repo}: HTTP ${status}`);
+        }
         return null;
       }
       
@@ -341,8 +383,17 @@ export const GithubSignalsService = {
     ]);
 
     if (!repoRes.ok) {
-      console.warn(`[github-signals] Error al obtener ${owner}/${repo} (status ${repoRes.status})`);
-      throw new Error(`No se pudo obtener información del repositorio ${owner}/${repo}`);
+      const status = repoRes.status;
+      const endpoint = `/repos/${owner}/${repo}`;
+      console.warn(`[github-signals] Error al obtener ${owner}/${repo} (status ${status})`);
+      
+      // Preserve HTTP status and stage for classification
+      throw new GithubApiError(
+        `No se pudo obtener información del repositorio ${owner}/${repo} (HTTP ${status})`,
+        status,
+        endpoint,
+        'get_repo_info'
+      );
     }
     const repoData = await repoRes.json();
 
@@ -488,7 +539,18 @@ export const GithubSignalsService = {
         { headers },
       );
       if (!treeRes.ok) {
-        console.warn(`[github-signals] No se pudo leer el árbol de ${owner}/${repo} (status ${treeRes.status})`);
+        const status = treeRes.status;
+        console.warn(`[github-signals] No se pudo leer el árbol de ${owner}/${repo} (status ${status})`);
+        
+        // If permission error, throw to propagate for diagnosis
+        if (status === 403 || status === 401) {
+          throw new GithubApiError(
+            `No se pudo acceder al árbol del repositorio ${owner}/${repo} (HTTP ${status})`,
+            status,
+            `/repos/${owner}/${repo}/git/trees/${ref}`,
+            'get_tree'
+          );
+        }
         return [];
       }
       const data = await treeRes.json();

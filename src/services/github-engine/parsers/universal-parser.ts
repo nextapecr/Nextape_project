@@ -144,20 +144,30 @@ class UniversalParserImpl implements LanguageParser {
     try {
       // ÚNICO mecanismo de carga: resolución unificada de gramáticas
       const langPack = require('@kreuzberg/tree-sitter-language-pack') as LanguagePackModule;
+      
+      console.log(`[universal-parser] DIAGNOSTIC: Loading grammar for "${langKey}"`);
+      console.log(`[universal-parser] DIAGNOSTIC: langPack.getLanguage type:`, typeof langPack.getLanguage);
+      
       this.ensureCacheConfigured(langPack);
+      
       const grammar = typeof langPack.getLanguage === 'function'
         ? langPack.getLanguage(langKey)
         : null;
 
       if (grammar) {
+        console.log(`[universal-parser] ✅ SUCCESS: Grammar loaded for "${langKey}"`);
         this.grammarCache.set(langKey, grammar);
+      } else {
+        console.error(`[universal-parser] ❌ FAILED: Grammar is null/undefined for "${langKey}"`);
+        console.error(`[universal-parser] DIAGNOSTIC: langPack.getLanguage returned:`, grammar);
       }
       return grammar;
     } catch (err) {
       console.error(
-        `[universal-parser] Falló cargar gramática para "${langKey}":`,
+        `[universal-parser] ❌ EXCEPTION: Failed to load grammar for "${langKey}":`,
         err instanceof Error ? err.message : err,
       );
+      console.error(`[universal-parser] DIAGNOSTIC: Full error:`, err);
       return null;
     }
   }
@@ -179,9 +189,14 @@ class UniversalParserImpl implements LanguageParser {
   canParse(filename: string): boolean {
     const lower = filename.toLowerCase();
     const ext = Object.keys(EXTENSION_MAP).find((e) => lower.endsWith(e));
-    if (!ext) return false;
+    if (!ext) {
+      console.log(`[universal-parser] DIAGNOSTIC: No extension match for "${filename}"`);
+      return false;
+    }
     const langKey = EXTENSION_MAP[ext];
-    return this.loadLanguageGrammar(langKey) !== null;
+    const canParse = this.loadLanguageGrammar(langKey) !== null;
+    console.log(`[universal-parser] DIAGNOSTIC: canParse("${filename}") = ${canParse} (lang: ${langKey})`);
+    return canParse;
   }
 
   parse(source: string, filename: string): ParsedAST {
