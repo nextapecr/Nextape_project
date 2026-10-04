@@ -49,7 +49,7 @@ async function checkLastAnalysis() {
     console.log('📊 Recent GitHub Analyses (Aggregated Profiles):\n');
     console.log('═'.repeat(80));
     
-    evidenceSnapshot.forEach((doc, idx) => {
+    evidenceSnapshot.docs.forEach((doc, idx) => {
       const data = doc.data();
       const timestamp = data.analyzedAt?._seconds 
         ? new Date(data.analyzedAt._seconds * 1000) 
@@ -84,7 +84,7 @@ async function checkLastAnalysis() {
     console.log('📦 Recent Repository Analyses:\n');
     console.log('═'.repeat(80));
     
-    repoAnalyses.forEach((doc, idx) => {
+    repoAnalyses.docs.forEach((doc, idx) => {
       const data = doc.data();
       const timestamp = data.analyzedAt?._seconds 
         ? new Date(data.analyzedAt._seconds * 1000) 
