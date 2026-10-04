@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { apiPost } from "@/lib/api";
+import { apiPost, ApiError } from "@/lib/api";
 import { connectGithubOAuth } from "@/lib/firebase/auth";
 import { useGithubOAuthStatus } from "@/hooks/use-github-oauth-status";
 import { GithubEvidenceService } from "@/services/github-evidence.service";
@@ -68,7 +68,17 @@ interface RunState {
   total: number;
   done: number;
   current: string | null;
-  failed: string[];
+  failed: FailedRepoInfo[];
+}
+
+/** Failed repository with detailed error information for diagnosis */
+interface FailedRepoInfo {
+  fullName: string;
+  errorCode: string;
+  message: string;
+  httpStatus?: number;
+  stage?: string;
+  retryable: boolean;
 }
 
 /** Extrae el usuario de una URL de GitHub (`https://github.com/foo` → `foo`). */
@@ -254,7 +264,7 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
       });
 
       const pending = repos.filter((r) => !r.analyzed);
-      const failed: string[] = [];
+      const failed: FailedRepoInfo[] = [];
       let done = repos.length - pending.length;
       // Con el límite por usuario agotado, cada llamada restante fallaría igual: se para.
       let rateLimited = false;
@@ -266,8 +276,29 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
         try {
           await apiPost("/api/github/evaluate", { githubUsername: user, repoName: repo.fullName });
         } catch (err) {
-          if (err instanceof Error && err.message === "rate_limited") rateLimited = true;
-          failed.push(repo.fullName);
+          // Capture detailed error information
+          if (err instanceof ApiError) {
+            if (err.code === "GITHUB_RATE_LIMITED" || err.message === "rate_limited") {
+              rateLimited = true;
+            }
+            
+            failed.push({
+              fullName: repo.fullName,
+              errorCode: err.code,
+              message: err.message || err.code,
+              httpStatus: err.httpStatus,
+              stage: err.stage,
+              retryable: err.retryable ?? false,
+            });
+          } else {
+            // Fallback for non-ApiError
+            failed.push({
+              fullName: repo.fullName,
+              errorCode: 'UNKNOWN_ERROR',
+              message: err instanceof Error ? err.message : String(err),
+              retryable: false,
+            });
+          }
         }
         done += 1;
         setRun((prev) => (prev ? { ...prev, done, failed: [...failed] } : prev));
@@ -286,11 +317,35 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
         setNotice(`Se analizaron tus ${repos.length} repositorios con actividad más reciente (de ${totalRepos}).`);
       }
       if (failed.length > 0) {
-        const shown = failed.slice(0, 4).join(", ");
+        // Count retryable vs permanent failures
+        const retryableCount = failed.filter(f => f.retryable).length;
+        const permanentCount = failed.length - retryableCount;
+        
+        const shown = failed.slice(0, 3).map(f => {
+          const icon = f.retryable ? '🔄' : '❌';
+          return `${icon} ${f.fullName}`;
+        }).join(", ");
+        
+        const moreText = failed.length > 3 ? ` +${failed.length - 3} más` : '';
+        const retryText = retryableCount > 0 ? ` (${retryableCount} reintentables)` : '';
+        
         setError(
-          `No se pudieron analizar ${failed.length} repositorios (${shown}${failed.length > 4 ? "…" : ""}). ` +
+          `No se pudieron analizar ${failed.length} repositorios${retryText}: ${shown}${moreText}. ` +
             "El perfil se calculó con el resto."
         );
+        
+        // Log detailed error info to console for diagnosis
+        console.group('[GithubEvidenceCard] Failed repositories diagnosis:');
+        failed.forEach(f => {
+          console.log(`❌ ${f.fullName}:`, {
+            errorCode: f.errorCode,
+            httpStatus: f.httpStatus,
+            stage: f.stage,
+            retryable: f.retryable,
+            message: f.message,
+          });
+        });
+        console.groupEnd();
       }
     } catch (err) {
       const code = err instanceof Error ? err.message : "";
@@ -407,9 +462,48 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
       )}
 
       {error && (
-        <div className="flex items-start gap-3 bg-brand-red/5 text-brand-red rounded-2xl p-4 text-xs font-bold">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" /> <span>{error}</span>
-        </div>
+        <>
+          <div className="flex items-start gap-3 bg-brand-red/5 text-brand-red rounded-2xl p-4 text-xs font-bold">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" /> <span>{error}</span>
+          </div>
+          
+          {/* Diagnostic details for failed repos */}
+          {run && run.failed.length > 0 && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-gray-500 hover:text-gray-700 font-medium mb-2">
+                🔍 Ver diagnóstico técnico ({run.failed.length} {run.failed.length === 1 ? 'repositorio' : 'repositorios'})
+              </summary>
+              <div className="space-y-2 pl-4 border-l-2 border-gray-200">
+                {run.failed.map((f, idx) => (
+                  <div key={idx} className="bg-gray-50 rounded-lg p-3 space-y-1">
+                    <div className="font-bold text-gray-900 flex items-center gap-2">
+                      {f.retryable ? '🔄' : '❌'} {f.fullName}
+                      {f.httpStatus && (
+                        <span className="text-[10px] font-mono bg-gray-200 text-gray-700 px-2 py-0.5 rounded">
+                          HTTP {f.httpStatus}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-gray-600 text-[11px]">
+                      <span className="font-semibold">Error:</span> {f.errorCode}
+                    </div>
+                    {f.stage && (
+                      <div className="text-gray-600 text-[11px]">
+                        <span className="font-semibold">Etapa:</span> {f.stage}
+                      </div>
+                    )}
+                    <div className="text-gray-500 text-[10px] italic">
+                      {f.message}
+                    </div>
+                    <div className={`text-[10px] font-semibold ${f.retryable ? 'text-blue-600' : 'text-red-600'}`}>
+                      {f.retryable ? '✓ Reintentable (error transitorio)' : '✗ No reintentable (error permanente)'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </>
       )}
 
       {notice && <p className="text-[11px] text-gray-400 font-medium">{notice}</p>}

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb, verifyRequestUid } from "@/lib/firebase/admin";
-import { GithubSignalsService, getGithubToken } from "@/services/github-signals.service";
+import { GithubSignalsService, GithubApiError, getGithubToken } from "@/services/github-signals.service";
 import { analyzeRepositorySources } from "@/services/github-engine";
 import {
   GITHUB_ENGINE_VERSION,
@@ -10,6 +10,12 @@ import {
   repoDocId,
 } from "@/services/github-engine/evidence-keys";
 import { consumeRateLimit, GITHUB_RATE_LIMITS, rateLimitedResponse } from "@/lib/server/rate-limit";
+import {
+  classifyGithubError,
+  logGithubError,
+  createErrorResponse,
+  generateAnalysisId,
+} from "@/services/github-error-classifier";
 import type { GithubRepoEvaluateResponse, GithubRepoEvidence } from "@/types/github.types";
 
 export const runtime = "nodejs";
@@ -55,6 +61,9 @@ export async function POST(req: NextRequest) {
   const owner = ownerPart;
   const repo = namePart;
   const fullName = `${owner}/${repo}`;
+  
+  // Generate unique analysis ID for error correlation
+  const analysisId = generateAnalysisId(uid);
 
   try {
     // Phase 5: Verificar cache ANTES de consumir rate limit o hacer llamadas pesadas a GitHub
@@ -174,11 +183,46 @@ export async function POST(req: NextRequest) {
     };
     return NextResponse.json(response);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message.includes("No se pudo obtener información del repositorio")) {
-      return NextResponse.json({ error: "repo_not_found" }, { status: 404 });
+    // Classify and log error for diagnosis
+    let stage: 'get_repo_info' | 'get_tree' | 'get_user_commits' | 'fetch_file' | 'parse_files' | 'save_evidence' | 'unknown' = 'unknown';
+    
+    // Determine stage from error type
+    if (err instanceof GithubApiError) {
+      stage = err.stage as any;
+    } else if (err instanceof Error) {
+      const msg = err.message.toLowerCase();
+      if (msg.includes('firestore') || msg.includes('firebase')) {
+        stage = 'save_evidence';
+      } else if (msg.includes('parse') || msg.includes('syntax')) {
+        stage = 'parse_files';
+      }
     }
-    console.error("[github/evaluate] error:", err);
-    return NextResponse.json({ error: "server_error" }, { status: 500 });
+    
+    // Log error to Firestore for diagnosis
+    await logGithubError(
+      adminDb(),
+      analysisId,
+      uid,
+      githubUsername,
+      fullName,
+      `Analyzing repository ${fullName}`,
+      err,
+      stage
+    );
+    
+    // Create classified error response
+    const { response, httpStatus } = createErrorResponse(err, stage);
+    
+    console.error("[github/evaluate] CLASSIFIED ERROR:", {
+      analysisId,
+      repoFullName: fullName,
+      errorCode: response.error,
+      httpStatus: response.httpStatus,
+      stage: response.stage,
+      retryable: response.retryable,
+      message: response.message?.slice(0, 100),
+    });
+    
+    return NextResponse.json(response, { status: httpStatus });
   }
 }

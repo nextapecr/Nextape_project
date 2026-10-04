@@ -95,8 +95,6 @@ export function selectRepresentativeFiles(
   tree: RepoTreeEntry[],
   max = MAX_FILES_PER_REPO,
 ): RepoTreeEntry[] {
-  console.log(`[github-signals] 🔍 DIAGNOSTIC: selectRepresentativeFiles() with ${tree.length} total files`);
-  
   const groups = new Map<string, RepoTreeEntry[]>();
   for (const item of tree) {
     if (item.type !== "blob") continue;
@@ -107,11 +105,6 @@ export function selectRepresentativeFiles(
     const language = languageForPath(item.path);
     if (!language) continue;
     groups.set(language, [...(groups.get(language) ?? []), item]);
-  }
-
-  console.log(`[github-signals] 📊 DIAGNOSTIC: Grouped into ${groups.size} languages:`, Array.from(groups.keys()));
-  for (const [lang, items] of groups.entries()) {
-    console.log(`[github-signals]   - ${lang}: ${items.length} files`);
   }
 
   const ordered = [...groups.values()]
@@ -134,12 +127,6 @@ export function selectRepresentativeFiles(
     }
     if (!tookAny) break;
   }
-  
-  console.log(`[github-signals] ✅ DIAGNOSTIC: Selected ${picked.length} files for analysis`);
-  picked.forEach((f, idx) => {
-    const lang = languageForPath(f.path);
-    console.log(`[github-signals]   ${idx + 1}. ${f.path} (${lang}, ${f.size} bytes)`);
-  });
   
   return picked;
 }

@@ -1,10 +1,15 @@
 /**
- * @fileOverview Universal Language Parser usando Tree-sitter y @kreuzberg/tree-sitter-language-pack.
+ * @fileOverview Universal Language Parser con estrategia dual:
+ * - TypeScript/JavaScript/TSX: @typescript-eslint/typescript-estree (JavaScript puro)
+ * - Otros lenguajes: Tree-sitter con @kreuzberg/tree-sitter-language-pack (binarios nativos)
  *
- * ⚠️ RUNTIME RESTRICTION & ENVIRONMENT NOTE:
- * Este módulo depende del binding nativo de @kreuzberg/tree-sitter-language-pack, que
- * requiere Linux x64. La validación de ejecución real debe hacerse en Firebase Functions
- * (producción) o WSL/Docker (desarrollo), nunca en Windows nativo.
+ * STRATEGY CHANGE (Oct 3, 2026):
+ * Después de 3 intentos fallidos para instalar tree-sitter Linux native bindings en Netlify,
+ * cambiamos TS/JS/TSX a typescript-estree (JavaScript puro, sin dependencias nativas).
+ * Ver: TYPESCRIPT_PARSER_FAILURE_COMPLETE_REPORT.md
+ *
+ * Tree-sitter se mantiene para TODOS los demás lenguajes (Python, Go, Java, Rust, etc.)
+ * sin cambios. Este es un cambio quirúrgico solo para los 3 lenguajes que fallaban.
  *
  * Mapea extensiones de archivo a las 20 gramáticas universales soportadas.
  */
@@ -13,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type Parser from 'tree-sitter';
 import type { LanguageParser, ParsedAST, ASTNode } from './language-parser.interface';
+import { typescriptESTreeParser } from './typescript-estree-parser';
 
 /** Superficie del paquete nativo que este parser usa. */
 interface LanguagePackModule {
@@ -142,11 +148,7 @@ class UniversalParserImpl implements LanguageParser {
     }
 
     try {
-      // ÚNICO mecanismo de carga: resolución unificada de gramáticas
       const langPack = require('@kreuzberg/tree-sitter-language-pack') as LanguagePackModule;
-      
-      console.log(`[universal-parser] DIAGNOSTIC: Loading grammar for "${langKey}"`);
-      console.log(`[universal-parser] DIAGNOSTIC: langPack.getLanguage type:`, typeof langPack.getLanguage);
       
       this.ensureCacheConfigured(langPack);
       
@@ -155,19 +157,14 @@ class UniversalParserImpl implements LanguageParser {
         : null;
 
       if (grammar) {
-        console.log(`[universal-parser] ✅ SUCCESS: Grammar loaded for "${langKey}"`);
         this.grammarCache.set(langKey, grammar);
-      } else {
-        console.error(`[universal-parser] ❌ FAILED: Grammar is null/undefined for "${langKey}"`);
-        console.error(`[universal-parser] DIAGNOSTIC: langPack.getLanguage returned:`, grammar);
       }
       return grammar;
     } catch (err) {
       console.error(
-        `[universal-parser] ❌ EXCEPTION: Failed to load grammar for "${langKey}":`,
+        `[universal-parser] Failed to load grammar for "${langKey}":`,
         err instanceof Error ? err.message : err,
       );
-      console.error(`[universal-parser] DIAGNOSTIC: Full error:`, err);
       return null;
     }
   }
@@ -188,18 +185,28 @@ class UniversalParserImpl implements LanguageParser {
 
   canParse(filename: string): boolean {
     const lower = filename.toLowerCase();
+    
+    // STRATEGY: Route TS/JS/TSX to typescript-estree parser (no native bindings)
+    if (typescriptESTreeParser.canParse(filename)) {
+      return true;
+    }
+    
+    // All other languages: use tree-sitter as before
     const ext = Object.keys(EXTENSION_MAP).find((e) => lower.endsWith(e));
     if (!ext) {
-      console.log(`[universal-parser] DIAGNOSTIC: No extension match for "${filename}"`);
       return false;
     }
     const langKey = EXTENSION_MAP[ext];
-    const canParse = this.loadLanguageGrammar(langKey) !== null;
-    console.log(`[universal-parser] DIAGNOSTIC: canParse("${filename}") = ${canParse} (lang: ${langKey})`);
-    return canParse;
+    return this.loadLanguageGrammar(langKey) !== null;
   }
 
   parse(source: string, filename: string): ParsedAST {
+    // STRATEGY: Route TS/JS/TSX to typescript-estree parser (no native bindings)
+    if (typescriptESTreeParser.canParse(filename)) {
+      return typescriptESTreeParser.parse(source, filename);
+    }
+    
+    // All other languages: use tree-sitter as before
     const lower = filename.toLowerCase();
     const ext = Object.keys(EXTENSION_MAP).find((e) => lower.endsWith(e));
     const langKey = ext ? EXTENSION_MAP[ext] : 'typescript';

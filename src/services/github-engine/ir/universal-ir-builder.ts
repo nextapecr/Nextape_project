@@ -1,8 +1,13 @@
 /**
  * @fileOverview Universal IR Builder para todos los lenguajes soportados.
  *
- * Transforma el AST de Tree-sitter de CUALQUIER lenguaje soportado en la
+ * Transforma el AST de Tree-sitter O ESTree de CUALQUIER lenguaje soportado en la
  * representación intermedia universal (EngineeringIR).
+ *
+ * DUAL FORMAT SUPPORT (Oct 3, 2026):
+ * - Tree-sitter format: snake_case node types (function_declaration, class_declaration)
+ * - ESTree format: PascalCase node types (FunctionDeclaration, ClassDeclaration)
+ *   usado por @typescript-eslint/typescript-estree para TS/JS/TSX
  *
  * PASO 4 — DOCUMENTACIÓN DE CONCEPTOS AUSENTES POR LENGUAJE:
  * - Go y C: NO poseen el concepto de clases orientadas a objetos. El builder
@@ -17,7 +22,9 @@ import type { ASTNode } from '../parsers/language-parser.interface';
 import type { FileIR, IRFunction, IRClass, IRImport, IRExport } from './types';
 
 // Nodos que indican funciones o métodos en diversos lenguajes
+// Tree-sitter format (snake_case) + ESTree format (PascalCase)
 const UNIVERSAL_FUNCTION_NODES = new Set([
+  // Tree-sitter
   'function_declaration',
   'function_definition',
   'function_expression',
@@ -29,20 +36,35 @@ const UNIVERSAL_FUNCTION_NODES = new Set([
   'singleton_method',       // Ruby
   'generator_function_declaration',
   'generator_function',
+  // ESTree (TypeScript/JavaScript)
+  'FunctionDeclaration',
+  'FunctionExpression',
+  'ArrowFunctionExpression',
+  'MethodDefinition',
 ]);
 
 // Nodos que indican clases, estructuras o contratos en diversos lenguajes
+// Tree-sitter format (snake_case) + ESTree format (PascalCase)
 const UNIVERSAL_CLASS_NODES = new Set([
+  // Tree-sitter
   'class_declaration',
   'class_definition',
   'struct_specifier',       // C/C++
   'contract_declaration',   // Solidity
   'interface_declaration',
   'enum_declaration',
+  // ESTree (TypeScript/JavaScript)
+  'ClassDeclaration',
+  'ClassExpression',
+  'TSInterfaceDeclaration',
+  'TSEnumDeclaration',
+  'TSTypeAliasDeclaration',
 ]);
 
 // Nodos que indican imports o includes
+// Tree-sitter format (snake_case) + ESTree format (PascalCase)
 const UNIVERSAL_IMPORT_NODES = new Set([
+  // Tree-sitter
   'import_statement',
   'import_declaration',
   'import_from_statement',  // Python
@@ -50,10 +72,15 @@ const UNIVERSAL_IMPORT_NODES = new Set([
   'using_directive',        // C#
   'use_declaration',        // Rust
   'namespace_use_declaration', // PHP
+  // ESTree (TypeScript/JavaScript)
+  'ImportDeclaration',
+  'TSImportEqualsDeclaration',
 ]);
 
 // Nodos de decisión para complejidad ciclomática universal
+// Tree-sitter format (snake_case) + ESTree format (PascalCase)
 const UNIVERSAL_COMPLEXITY_NODES = new Set([
+  // Tree-sitter
   'if_statement',
   'if_expression',
   'else_clause',
@@ -68,6 +95,16 @@ const UNIVERSAL_COMPLEXITY_NODES = new Set([
   'switch_case',
   'catch_clause',
   'conditional_expression',
+  // ESTree (TypeScript/JavaScript)
+  'IfStatement',
+  'ForStatement',
+  'ForInStatement',
+  'ForOfStatement',
+  'WhileStatement',
+  'DoWhileStatement',
+  'SwitchCase',
+  'CatchClause',
+  'ConditionalExpression',
 ]);
 
 function findAll(node: ASTNode, types: Set<string>): ASTNode[] {
@@ -82,13 +119,16 @@ function findAll(node: ASTNode, types: Set<string>): ASTNode[] {
 }
 
 function extractName(node: ASTNode): string {
+  // ESTree nodes have 'id' property with the identifier
+  // Tree-sitter nodes have 'identifier' child nodes
   const nameNode = node.children.find(
     (c) =>
       c.type === 'identifier' ||
       c.type === 'property_identifier' ||
       c.type === 'field_identifier' ||
       c.type === 'type_identifier' ||
-      c.type === 'name',
+      c.type === 'name' ||
+      c.type === 'Identifier', // ESTree
   );
   return nameNode ? nameNode.text : '(anonymous)';
 }
@@ -164,7 +204,14 @@ function extractImports(root: ASTNode): IRImport[] {
 }
 
 function extractExports(root: ASTNode): IRExport[] {
-  const exportNodes = findAll(root, new Set(['export_statement', 'export_directive']));
+  const exportNodes = findAll(root, new Set([
+    'export_statement',
+    'export_directive',
+    // ESTree
+    'ExportNamedDeclaration',
+    'ExportDefaultDeclaration',
+    'ExportAllDeclaration',
+  ]));
   return exportNodes.map((exp) => ({
     name: extractName(exp),
     kind: 'unknown',

@@ -260,3 +260,115 @@ export interface GithubAggregateResponse {
   analyzedAt: string;
 }
 
+
+// ─────────────────────────────────────────────────────────
+// Error Classification and Instrumentation (Phase: Error Diagnosis)
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Classified error codes for GitHub analysis failures.
+ * These preserve the root cause instead of generic "server_error".
+ */
+export type GithubErrorCode =
+  // GitHub API HTTP errors
+  | 'GITHUB_UNAUTHORIZED'      // 401: Token expired, revoked, or invalid
+  | 'GITHUB_FORBIDDEN'          // 403: Insufficient permissions (OAuth scope, private repo)
+  | 'GITHUB_NOT_FOUND'          // 404: Repository deleted, renamed, or inaccessible
+  | 'GITHUB_RATE_LIMITED'       // 429: GitHub API rate limit exceeded
+  | 'GITHUB_SERVER_ERROR'       // 5xx: GitHub internal server error
+  | 'GITHUB_TIMEOUT'            // Request timeout (network or function timeout)
+  // Internal analysis errors
+  | 'ANALYSIS_ERROR'            // Parser, engine, or internal logic error
+  | 'FIRESTORE_ERROR'           // Firestore save/read failure
+  | 'UNKNOWN_ERROR';            // Unclassified error
+
+/**
+ * Analysis stage where error occurred.
+ * Used for precise error diagnosis and logging.
+ */
+export type GithubAnalysisStage =
+  | 'list_repos'         // GET /repos (listing user repositories)
+  | 'get_repo_info'      // GET /repos/{owner}/{repo} (fetching repo metadata)
+  | 'get_languages'      // GET /repos/{owner}/{repo}/languages
+  | 'get_commits'        // GET /repos/{owner}/{repo}/commits
+  | 'get_tree'           // GET /repos/{owner}/{repo}/git/trees/{sha}
+  | 'get_user_commits'   // GET /repos/{owner}/{repo}/commits?author={user}
+  | 'fetch_file'         // GET raw.githubusercontent.com or /contents/{path}
+  | 'parse_files'        // AST parsing of source files
+  | 'calculate_metrics'  // Engine metrics calculation
+  | 'save_evidence'      // Firestore document write
+  | 'aggregate'          // Multi-repo aggregation
+  | 'unknown';           // Unclassified stage
+
+/**
+ * Error log document stored in `github_analysis_errors` collection.
+ * Used for diagnosis and telemetry.
+ * 
+ * Security:
+ * - NO tokens or secrets
+ * - NO private file contents
+ * - NO personal data beyond public GitHub username
+ * - Firestore rules: write:false for clients, read:false for non-admins
+ */
+export interface GithubAnalysisError {
+  /** Unique analysis ID (for correlating multiple errors in same analysis run) */
+  analysisId: string;
+  /** User ID */
+  uid: string;
+  /** GitHub username being analyzed */
+  githubUsername: string;
+  /** Repository full name (owner/repo) */
+  repoFullName: string;
+  /** Stage where error occurred */
+  stage: GithubAnalysisStage;
+  /** Operation description (e.g., "fetch /repos/{owner}/{repo}") */
+  operation: string;
+  /** Classified error code */
+  errorCode: GithubErrorCode;
+  /** Technical error message (safe to log, no secrets) */
+  errorMessage: string;
+  /** HTTP status code (if applicable) */
+  httpStatus?: number;
+  /** Whether error is retryable (transient vs permanent) */
+  retryable: boolean;
+  /** Engine version for debugging regressions */
+  engineVersion: string;
+  /** When error occurred */
+  timestamp: FirebaseFirestore.Timestamp | { _seconds: number; _nanoseconds: number };
+}
+
+/**
+ * Enhanced error response from backend.
+ * Preserves classification and details for frontend diagnosis.
+ */
+export interface GithubErrorResponse {
+  /** Classified error code */
+  error: GithubErrorCode | string; // Allow legacy error codes for backwards compat
+  /** Human-readable message (safe for UI) */
+  message?: string;
+  /** HTTP status code */
+  httpStatus?: number;
+  /** Stage where error occurred */
+  stage?: GithubAnalysisStage;
+  /** Whether error is retryable */
+  retryable?: boolean;
+}
+
+/**
+ * Failed repository with detailed error information.
+ * Used by frontend to display diagnostics.
+ */
+export interface FailedRepo {
+  /** Repository full name */
+  fullName: string;
+  /** Classified error code */
+  errorCode: GithubErrorCode;
+  /** Error message (safe for display) */
+  message: string;
+  /** Stage where error occurred */
+  stage?: GithubAnalysisStage;
+  /** HTTP status (if applicable) */
+  httpStatus?: number;
+  /** Whether error is retryable */
+  retryable: boolean;
+}
