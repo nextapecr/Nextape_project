@@ -398,44 +398,58 @@ if (!parsed.success) {
 825 llamadas × 600 tokens input = 495,000 tokens
 ```
 
+**Con fallback Groq → NVIDIA** (arquitectura actual):
+```
+Groq (llama-3.3-70b): 200k TPD → cubre ~200 llamadas (40%)
+NVIDIA (llama-3.1-8b): Cubre ~625 llamadas restantes (60%)
+
+Distribución:
+- Groq: 200 llamadas × 600 tokens = 120,000 tokens (24%)
+- NVIDIA: 625 llamadas × 600 tokens = 375,000 tokens (76%)
+```
+
 **Con caching de Groq** (automático):
+
+⚠️ **IMPORTANTE**: El caching de Groq **NO aplica a NVIDIA**. Solo reduce el consumo de las llamadas que caen en Groq.
 
 El caching funciona por **prefijo común**. En tu caso:
 
-1. **Primera llamada** de cada tipo: 600 tokens (full price)
-2. **Llamadas subsiguientes** del mismo tipo: ~470 tokens cacheados (50% off) + ~130 tokens nuevos
+1. **Primera llamada** de cada tipo en Groq: 600 tokens (full price)
+2. **Llamadas subsiguientes** del mismo tipo en Groq: ~470 tokens cacheados (50% off) + ~130 tokens nuevos
 
 ```
-MÚLTIPLE CHOICE (165 llamadas):
-- Primera: 600 tokens full price
-- Siguientes 164: (470 × 0.5) + 130 = 235 + 130 = 365 tokens equivalentes
+DISTRIBUCIÓN CON CACHING:
 
-Total: 600 + (164 × 365) = 60,460 tokens equivalentes
-Sin cache: 165 × 600 = 99,000 tokens
-Ahorro: 38,540 tokens (39%)
-
-APLICADO A TODOS LOS TIPOS:
+GROQ (primeras 200 llamadas, ~40 por tipo):
 - 5 tipos × primera llamada: 5 × 600 = 3,000 tokens
-- 5 tipos × 164 subsiguientes: 5 × 164 × 365 = 299,300 tokens equivalentes
+- 5 tipos × 35 subsiguientes: 5 × 35 × 365 = 63,875 tokens equivalentes
+- Total Groq con cache: 66,875 tokens equivalentes
+- Total Groq sin cache: 120,000 tokens
+- Ahorro Groq: 53,125 tokens (44% del consumo de Groq)
 
-Total con cache: 302,300 tokens equivalentes
-Total sin cache: 495,000 tokens
-Ahorro: 192,700 tokens (39%)
+NVIDIA (restantes 625 llamadas, sin caching):
+- 625 llamadas × 600 tokens = 375,000 tokens (SIN descuento)
+- NVIDIA NIM API pública NO soporta prompt caching
+
+TOTAL SISTEMA:
+- Sin cache: 495,000 tokens (120k Groq + 375k NVIDIA)
+- Con cache: 441,875 tokens (66.875k Groq + 375k NVIDIA)
+- Ahorro real: 53,125 tokens (11% del total)
 ```
 
 **Ahorro considerando output** (no cacheable):
 ```
-ANTES:
-- Input: 495,000 tokens
+ANTES (sin caching):
+- Input: 495,000 tokens (120k Groq + 375k NVIDIA)
 - Output: 330,000 tokens (825 × 400)
 - Total: 825,000 tokens
 
-CON CACHING:
-- Input: 302,300 tokens equivalentes (-39%)
+CON CACHING (solo en Groq):
+- Input: 441,875 tokens (66.875k Groq + 375k NVIDIA)
 - Output: 330,000 tokens (igual)
-- Total: 632,300 tokens equivalentes
+- Total: 771,875 tokens equivalentes
 
-Ahorro real: 192,700 tokens (-23% del total)
+Ahorro real: 53,125 tokens (-6.4% del total)
 ```
 
 ---
@@ -450,20 +464,21 @@ Ahorro real: 192,700 tokens (-23% del total)
 
 **Impacto en rate limits**:
 ```
-SIN CACHING:
-- Groq consume: 495k tokens input
-- Excede límite diario: 495k > 200k TPD
-- Requiere NVIDIA fallback: Sí
+SIN CACHING (arquitectura actual con fallback):
+- Groq consume: 120k tokens (límite 200k TPD)
+- Groq requests: 200 (límite 1k RPD)
+- NVIDIA consume: 375k tokens restantes
+- NVIDIA requests: 625
 
-CON CACHING:
-- Groq consume: 302k tokens equivalentes
-- Excede límite: 302k > 200k TPD (todavía sí, pero menos)
-- Tokens que NO cuentan para rate limit: 192k tokens cacheados
-- Consumo efectivo para rate limit: 302k - 192k = 110k tokens
-- ✅ CABE EN GROQ sin fallback a NVIDIA
+CON CACHING (solo mejora la parte de Groq):
+- Groq consume: 66.875k tokens equivalentes
+- Tokens que NO cuentan para rate limit: 53k tokens cacheados
+- Consumo efectivo para rate limit: 66.875k - 53k = ~13.9k tokens
+- ✅ Groq muy por debajo del límite (13.9k vs 200k TPD)
+- NVIDIA sigue consumiendo: 375k tokens (sin cambio)
 ```
 
-**¡ESTO ES ENORME!**: Con caching, el seeding completo **cabe en Groq free tier** sin necesitar NVIDIA.
+**Conclusión realista**: El caching mejora la eficiencia de Groq, pero **NVIDIA sigue procesando 76% del seeding** porque Groq no puede con todo el volumen incluso con caching.
 
 ---
 
@@ -700,10 +715,12 @@ Meses siguientes: 1.32M tokens/mes (solo seeding)
 
 | Técnica | Ahorro neto | Esfuerzo | ROI |
 |---------|-------------|----------|-----|
-| **Caching (Groq)** | -192k tokens | 0 días | ∞ (gratis) |
+| **Caching (Groq)** | -53k tokens | 0 días | ∞ (gratis, pero solo 6.4%) |
 | **Consolidar llamadas** | -363k tokens | 3-5 días | Excelente |
 
-**Total ahorro combinando ambas**: -555k tokens (**-67% del consumo actual**)
+**Total ahorro combinando ambas**: -416k tokens (**-50% del consumo actual**)
+
+⚠️ **Corrección importante**: El caching de Groq solo aplica al 24% del seeding que procesa Groq (120k tokens). El 76% restante (375k tokens) va a NVIDIA sin caching disponible.
 
 ---
 
@@ -721,45 +738,72 @@ Meses siguientes: 1.32M tokens/mes (solo seeding)
 **Implementar Técnicas 1 + 2 + 3**:
 
 ```
-Estado actual:
-- Seeding: 825k tokens
-- Llamadas: 825
+Estado actual (con fallback Groq → NVIDIA):
+- Seeding total: 825k tokens
+  - Groq: 120k tokens (24%)
+  - NVIDIA: 375k tokens (76%)
+  - Output: 330k tokens
+- Llamadas: 825 (200 Groq + 625 NVIDIA)
 
 CON 3 TÉCNICAS COMBINADAS:
 
-1. Caching (ya activo): -192k
-2. Consolidar 5→1: -363k tokens, -660 requests
+1. Caching (ya activo en Groq): -53k tokens (solo afecta parte de Groq)
+2. Consolidar 5→1: -363k tokens, -660 requests (afecta ambos proveedores)
 3. Few-shot (+2 ejemplos): +80k tokens (menos porque ahora es 1 llamada, no 5)
 
-Balance final:
-- Input tokens: 825k - 192k - 363k + 80k = 350k tokens
-- Output tokens: 330k → 165k (menos llamadas)
-- Total: 515k tokens vs. 825k actual
+DISTRIBUCIÓN DESPUÉS DE OPTIMIZAR:
 
-AHORRO NETO: -310k tokens (-37.5%)
+Consolidar 5→1 reduce input 40%:
+- Input actual: 495k → 297k tokens
+- Groq procesaría: ~72k tokens (24% de 297k)
+- NVIDIA procesaría: ~225k tokens (76% de 297k)
+
+Caching en Groq reduce otros ~44%:
+- Groq: 72k → ~40k tokens equivalentes
+- NVIDIA: 225k (sin cambio, no tiene caching)
+
+Few-shot añade contexto:
+- +80k tokens distribuidos proporcional (24% Groq, 76% NVIDIA)
+- Groq: +19k tokens
+- NVIDIA: +61k tokens
+
+BALANCE FINAL:
+- Groq: 40k + 19k = 59k tokens
+- NVIDIA: 225k + 61k = 286k tokens
+- Output: 165k tokens (menos llamadas)
+- Total: 510k tokens vs. 825k actual
+
+AHORRO NETO: -315k tokens (-38%)
 Requests: 825 → 165 (-80%)
+  - Groq: 200 → 40 (-80%)
+  - NVIDIA: 625 → 125 (-80%)
 Calidad: Mejorada (few-shot)
 Esfuerzo: 4-7 días desarrollo
 ```
 
 **Resultado**:
-- ✅ **Ahorro real**: 310k tokens/seeding
-- ✅ **Menos requests**: 80% reducción (mejor para rate limits)
+- ✅ **Ahorro real**: 315k tokens/seeding (-38%)
+- ✅ **Menos requests**: 80% reducción en ambos proveedores
+  - Groq: 200 → 40 (-80%)
+  - NVIDIA: 625 → 125 (-80%)
 - ✅ **Mejor calidad**: Few-shot mejora consistencia
 - ✅ **ROI excelente**: Ahorro permanente por 1 semana de trabajo
+- ⚠️ **NVIDIA sigue siendo mayoritario**: Procesa 56% del seeding optimizado (286k de 510k)
 
 ---
 
 ## 🎯 RECOMENDACIONES FINALES
 
-### ✅ IMPLEMENTAR INMEDIATAMENTE (esta semana):
+### ✅ YA ACTIVO (documentar):
 
-**1. Prompt caching (Groq)** ⭐⭐⭐⭐⭐
+**1. Prompt caching (Groq)** ⭐⭐
 - ✅ Ya funciona (automático)
-- ✅ Ahorro: -192k tokens (-23%)
+- ⚠️ Ahorro: -53k tokens (-6.4% del total, NO -23%)
+- ⚠️ Solo optimiza el 24% que procesa Groq (120k → 67k)
+- ⚠️ NVIDIA (76% del seeding) no tiene caching disponible
 - ✅ Esfuerzo: 0 días
 - ✅ Riesgo: Cero
-- **Acción**: Documentar en `.env.example` que Groq caching está activo
+- **Acción**: Documentar en `.env.example` con expectativa realista (6.4%, no 23%)
 
 ---
 
@@ -806,12 +850,22 @@ Esfuerzo: 4-7 días desarrollo
 
 ### Resultado esperado (fin semana 2):
 ```
-Tokens consumidos: 515k (vs. 825k actual)
-Ahorro neto: -310k tokens (-37.5%)
-Requests: 165 (vs. 825)
+Tokens consumidos: 510k (vs. 825k actual)
+  - Groq: 59k (12%)
+  - NVIDIA: 286k (56%)
+  - Output: 165k (32%)
+Ahorro neto: -315k tokens (-38%)
+Requests totales: 165 (vs. 825)
+  - Groq: 40 (vs. 200)
+  - NVIDIA: 125 (vs. 625)
 Calidad: Mejorada (few-shot)
 Costo desarrollo: 1 semana
 ```
+
+**Nota importante**: NVIDIA seguirá procesando la mayoría del seeding (56%) porque:
+1. Groq tiene límite de 200k TPD
+2. Incluso optimizado, el seeding consume más de eso
+3. NVIDIA NIM API pública no soporta prompt caching
 
 ---
 
@@ -883,17 +937,21 @@ if (!result.success) {
 
 | Métrica | Antes | Después | Mejora |
 |---------|-------|---------|--------|
-| **Tokens/seeding** | 825k | 515k | **-37.5%** |
-| **Requests** | 825 | 165 | **-80%** |
+| **Tokens/seeding** | 825k | 510k | **-38%** |
+| **Groq tokens** | 120k | 59k | **-51%** |
+| **NVIDIA tokens** | 375k | 286k | **-24%** |
+| **Requests totales** | 825 | 165 | **-80%** |
+| **Groq requests** | 200 | 40 | **-80%** |
+| **NVIDIA requests** | 625 | 125 | **-80%** |
 | **Calidad** | Baseline | Few-shot mejorada | **+15-30%** |
 | **Esfuerzo** | - | 1 semana | Excelente ROI |
 | **Costo recurrente** | $0 (free tier) | $0 (free tier) | Sin cambio |
 
-### La mejor optimización es la que ya tienes:
+### La realidad del prompt caching:
 
-**Prompt caching de Groq** ya te está ahorrando -192k tokens **sin hacer nada**.
+**Prompt caching de Groq** ya te está ahorrando -53k tokens **sin hacer nada**, pero solo optimiza el 24% del seeding que procesa Groq. El 76% restante (NVIDIA) no tiene caching disponible.
 
-### La segunda mejor optimización:
+### La MEJOR optimización real:
 
 **Consolidar 5 llamadas en 1** ahorra -363k tokens por 3-5 días de trabajo.
 
