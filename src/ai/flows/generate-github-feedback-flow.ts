@@ -1,13 +1,17 @@
 /**
- * @fileOverview Flow de Interpretación Humana con Mistral AI.
+ * @fileOverview Flow de Interpretación Humana con Groq AI (fallback NVIDIA NIM).
  *
  * REGLA DE ORO DE ARQUITECTURA: La IA NUNCA recibe código fuente ni AST.
  * Solo interpreta métricas numéricas ya calculadas por el motor determinístico (Capa 2).
  * Presupuesto de output: menos de 1000 tokens.
+ *
+ * MIGRACIÓN: 2026-08-21
+ * Antes: Mistral AI (bloqueado por rate limit 0 req/min)
+ * Ahora: Groq llama-3.3-70b-versatile → NVIDIA NIM (fallback automático ante 429)
  */
 
 import { z } from 'zod';
-import { aiMistral, MISTRAL_MODEL } from '@/ai/mistral';
+import { generateJsonWithFallback } from '@/ai/generate';
 
 export const GenerateGithubFeedbackInputSchema = z.object({
   architecture: z.number().nullable(),
@@ -61,27 +65,20 @@ REGLAS STRICTAS:
 - Sin fences de markdown extra si es posible, responde solo con el JSON.`;
 
   try {
-    const mistral = aiMistral();
-    const response = await mistral.generate({
-      model: `mistral/${MISTRAL_MODEL}`,
+    const { data, provider } = await generateJsonWithFallback(
       prompt,
-    });
+      GenerateGithubFeedbackOutputSchema,
+    );
 
-    const text = response.text;
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return GenerateGithubFeedbackOutputSchema.parse(parsed);
-    }
-
-    throw new Error('No se pudo extraer JSON de la respuesta de Mistral.');
+    console.log(`[generateGithubFeedback] ✅ Generado con proveedor: ${provider.toUpperCase()}`);
+    return data;
   } catch (err) {
     // Sin lectura de IA se devuelve null. Antes se devolvía un texto fijo ("Destacan áreas de
     // oportunidad en testing...") que la UI mostraba como si fuera la interpretación del
-    // evaluador: un dato inventado presentado como análisis. Mistral con la cuota agotada (429)
-    // bastaba para que TODO perfil recibiera ese mismo texto.
-    console.warn(
-      '[generateGithubFeedback] Mistral no disponible, se omite la lectura:',
+    // evaluador: un dato inventado presentado como análisis. Groq/NVIDIA con cuota agotada (429)
+    // o error de configuración bastaba para que TODO perfil recibiera ese mismo texto.
+    console.error(
+      '[generateGithubFeedback] ❌ Ambos proveedores (Groq + NVIDIA) fallaron, se omite la lectura:',
       err instanceof Error ? err.message : err,
     );
     return null;
