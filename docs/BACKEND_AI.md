@@ -28,27 +28,52 @@ NEXTAPE tiene una **capa de confianza en servidor** sobre Firebase:
 Todos verifican el ID token con `verifyRequestUid` (Admin). Nunca confían en un `uid` del body.
 `src/lib/server/assessment.ts` contiene la lógica pura (`gradeAnswers`, `stripAnswerKey`, `SPECIALTY_STACKS`).
 
-## 2. Capa de IA — Genkit + Groq
+## 2. Capa de IA — Genkit + Groq (Fallback Interno 120B → 20B)
 
 ### Configuración — `src/ai/genkit.ts`
 ```ts
 import groq from 'genkitx-groq';
-export const GROQ_MODEL = process.env.GROQ_MODEL ?? 'groq/llama-3.3-70b-versatile';
+export const GROQ_MODEL = process.env.GROQ_MODEL ?? 'openai/gpt-oss-120b';
 export const ai = genkit({
   plugins: [groq({ apiKey: process.env.GROQ_API_KEY })],
   model: GROQ_MODEL,
 });
 ```
-- Proveedor **Groq** (plugin de comunidad `genkitx-groq`). Modelo por defecto `llama-3.3-70b-versatile`,
-  sobreescribible con `GROQ_MODEL`. Se eligió por **coste** (Groq es mucho más barato/gratuito que Gemini).
+- **Proveedor único:** Groq (plugin de comunidad `genkitx-groq`). Modelo por defecto `openai/gpt-oss-120b`,
+  sobreescribible con `GROQ_MODEL`. Se eligió por **coste** (Groq free tier con límites renovables diariamente).
 - API key en **`GROQ_API_KEY`** (secreto de servidor). En Netlify va como variable de entorno.
-- **Generación de JSON:** en vez del structured output nativo (poco fiable con Llama), se usa el helper
+- **Cambio de modelos (agosto 2026):** Los modelos Llama 3.3 70B y Llama 3.1 8B fueron movidos a tier Enterprise
+  (requieren contactar ventas). El sistema migró a GPT-OSS (modelos open-source): 120B (primario) y 20B (fallback).
+- **Generación de JSON:** en vez del structured output nativo (poco fiable con LLMs grandes), se usa el helper
   `src/ai/generate.ts` → `generateJson(prompt, zodSchema)`: llama al modelo, limpia fences de markdown,
   `JSON.parse` y **valida con Zod** (con un reintento). Los flows usan un esquema *lenient* para tolerar
   variaciones del modelo y luego normalizan a los tipos estrictos.
-- **Fallback de proveedor:** si Groq está limitado (429) **o no disponible** (401/403/404/410: clave inválida,
-  modelo retirado), `generateJson` pasa a NVIDIA; los errores no transitorios no se reintentan. Ningún
-  endpoint de The LINE depende de la IA en tiempo de petición: la IA solo precarga el banco.
+- **Fallback interno de modelo (120B → 20B):** `generateJsonWithFallback` en `src/ai/generate.ts` implementa
+  fallback automático dentro de Groq:
+  - **Primario:** `openai/gpt-oss-120b` (250K TPM, mejor calidad)
+  - **Fallback:** `openai/gpt-oss-20b` (250K TPM, 2x más rápido)
+  - Los límites de Groq son **por modelo**, no compartidos: llegar al límite de 120B no afecta la cuota de 20B.
+  - Capacidad combinada: **500K tokens/minuto** (250K + 250K).
+  - Los errores no transitorios (401/403/404/410: clave inválida, modelo retirado) no se reintentan.
+
+### ¿Por qué se eliminó NVIDIA?
+- **Créditos no renovables:** NVIDIA free tier ofrece 5,000 créditos totales (no diarios). Un seeding completo
+  (825 requests, 495k tokens) consumiría toda la cuota en 6-10 ejecuciones.
+- **No apto para fallback continuo:** Después de agotar los créditos, el proveedor quedaría inutilizable
+  permanentemente en el free tier, a diferencia de Groq que renueva límites por minuto.
+- **Simplificación:** Un solo proveedor (Groq) con fallback interno entre sus modelos (120B→20B) reduce
+  complejidad de configuración, manejo de errores y monitoreo de cuotas.
+
+### Límites de Groq (Free Tier, por modelo)
+
+| Modelo | Velocidad | Precio (por 1M tokens) | TPM | RPM | Uso |
+|--------|-----------|------------------------|-----|-----|-----|
+| `openai/gpt-oss-120b` | 500 T/sec | $0.15 input / $0.60 output | 250,000 | 1,000 | Primario (mejor calidad) |
+| `openai/gpt-oss-20b` | 1000 T/sec | $0.075 input / $0.30 output | 250,000 | 1,000 | Fallback (2x más rápido) |
+
+- **TPM (tokens por minuto):** 250K por modelo = 500K combinados. Más que suficiente para seeding y producción.
+- **RPM (requests por minuto):** 1,000 RPM (33x más que Llama anterior). Seeding de 825 requests tarda <1 minuto.
+- **Renovación:** Límites por minuto (no diarios), mucho más flexible que los modelos Llama anteriores.
 
 ### Dev server — `src/ai/dev.ts`
 - Scripts: `genkit:dev` / `genkit:watch` (`genkit start -- tsx src/ai/dev.ts`).

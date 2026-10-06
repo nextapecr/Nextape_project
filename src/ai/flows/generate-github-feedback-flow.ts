@@ -65,20 +65,20 @@ REGLAS STRICTAS:
 - Sin fences de markdown extra si es posible, responde solo con el JSON.`;
 
   try {
-    const { data, provider } = await generateJsonWithFallback(
+    const { data, model } = await generateJsonWithFallback(
       prompt,
       GenerateGithubFeedbackOutputSchema,
     );
 
-    console.log(`[generateGithubFeedback] ✅ Generado con proveedor: ${provider.toUpperCase()}`);
+    console.log(`[generateGithubFeedback] ✅ Generado con modelo: Groq ${model.toUpperCase()}`);
     return data;
   } catch (err) {
     // Sin lectura de IA se devuelve null. Antes se devolvía un texto fijo ("Destacan áreas de
     // oportunidad en testing...") que la UI mostraba como si fuera la interpretación del
-    // evaluador: un dato inventado presentado como análisis. Groq/NVIDIA con cuota agotada (429)
+    // evaluador: un dato inventado presentado como análisis. Groq con cuota agotada (429)
     // o error de configuración bastaba para que TODO perfil recibiera ese mismo texto.
     console.error(
-      '[generateGithubFeedback] ❌ Ambos proveedores (Groq + NVIDIA) fallaron, se omite la lectura:',
+      '[generateGithubFeedback] ❌ Ambos modelos (Groq 70B + 8B) fallaron, se omite la lectura:',
       err instanceof Error ? err.message : err,
     );
     return null;

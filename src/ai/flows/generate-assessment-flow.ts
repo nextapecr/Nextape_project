@@ -260,9 +260,9 @@ Responde solo con el JSON.`;
 
     const LenientOutput = z.object({ questions: z.array(LENIENT_BY_TYPE[type]) });
     console.log(`   ⏳ Generando tipo '${type}' (${count} preguntas)...`);
-    const { data: parsed, provider } = await generateJsonWithFallback(prompt, LenientOutput);
+    const { data: parsed, model } = await generateJsonWithFallback(prompt, LenientOutput);
     console.log(
-      `   ✅ Completado tipo '${type}': ${parsed.questions.length} preguntas (proveedor: ${provider.toUpperCase()})`
+      `   ✅ Completado tipo '${type}': ${parsed.questions.length} preguntas (modelo: Groq ${model.toUpperCase()})`
     );
 
     // Solo se conserva `source` si es una URL que estaba en la lista: el modelo a veces inventa

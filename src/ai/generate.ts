@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { ai, GROQ_MODEL } from './genkit';
-import { aiBackup, NVIDIA_MODEL } from './genkit-nvidia';
 
 /**
  * Genera contenido con el modelo (Groq) y devuelve un objeto JSON **validado con Zod**.
@@ -28,11 +27,11 @@ export async function generateJson<T>(prompt: string, schema: z.ZodType<T>): Pro
     : new Error('La IA devolvió un JSON que no cumple el esquema esperado.');
 }
 
-/* ─────────────────── Fallback: Groq → NVIDIA NIM ─────────────────── */
+/* ─────────────────── Fallback: Groq 120B → Groq 20B ─────────────────── */
 
 /**
  * Detecta si un error es un rate limit (HTTP 429 o mensaje con "rate limit" / "RateLimitError").
- * Se usa para decidir si reintentar con el proveedor de backup.
+ * Se usa para decidir si reintentar con el modelo de backup.
  */
 export function isRateLimitError(err: unknown): boolean {
   if (!(err instanceof Error)) {
@@ -63,11 +62,11 @@ export function isRateLimitError(err: unknown): boolean {
   return false;
 }
 
-let isGroqUnavailable = false;
+let isGroq120bUnavailable = false;
 
 /**
  * Errores que no se arreglan reintentando: clave inválida/revocada (401/403) o modelo inexistente
- * o retirado (404/410). Ante ellos tiene sentido pasar al proveedor de respaldo, igual que ante un
+ * o retirado (404/410). Ante ellos tiene sentido pasar al modelo de respaldo, igual que ante un
  * rate limit, y no tiene sentido repetir la misma llamada.
  */
 export function isProviderUnavailableError(err: unknown): boolean {
@@ -87,45 +86,50 @@ export function isProviderUnavailableError(err: unknown): boolean {
 }
 
 /**
- * Genera JSON con Groq (primario) y, si falla con rate limit, reintenta con NVIDIA NIM (backup).
+ * Genera JSON con Groq 120B (primario) y, si falla con rate limit, reintenta con Groq 20B (backup).
  *
  * Una vez detectado el rate limit en la corrida actual, las llamadas subsiguientes
- * cambian automáticamente a NVIDIA NIM sin perder tiempo re-intentando Groq.
+ * cambian automáticamente a Groq 20B sin perder tiempo re-intentando 120B.
  *
- * Devuelve `{ data, provider }` para que el llamador pueda loguear qué proveedor se usó.
+ * Devuelve `{ data, model }` para que el llamador pueda loguear qué modelo se usó.
  */
 export async function generateJsonWithFallback<T>(
   prompt: string,
   schema: z.ZodType<T>,
-): Promise<{ data: T; provider: 'groq' | 'nvidia' }> {
-  if (isGroqUnavailable) {
-    const data = await generateJsonNvidia(prompt, schema);
-    return { data, provider: 'nvidia' };
+): Promise<{ data: T; model: '120b' | '20b' }> {
+  // Modelos GPT-OSS (free tier, agosto 2026+)
+  const MODEL_120B = 'groq/openai/gpt-oss-120b';
+  const MODEL_20B = 'groq/openai/gpt-oss-20b';
+
+  // Si ya sabemos que 120B no está disponible, usar 20B directamente
+  if (isGroq120bUnavailable) {
+    const data = await generateJsonWithModel(prompt, schema, MODEL_20B);
+    return { data, model: '20b' };
   }
 
   try {
-    const data = await generateJson(prompt, schema);
-    return { data, provider: 'groq' };
+    const data = await generateJsonWithModel(prompt, schema, MODEL_120B);
+    return { data, model: '120b' };
   } catch (err) {
     const rateLimited = isRateLimitError(err);
     if (!rateLimited && !isProviderUnavailableError(err)) throw err;
 
-    isGroqUnavailable = true;
+    isGroq120bUnavailable = true;
     console.warn(
       rateLimited
-        ? '[ai/generate] ⚠️ Groq rate limit alcanzado — cambiando a NVIDIA NIM para esta sesión...'
-        : `[ai/generate] ⚠️ Groq no disponible (${err instanceof Error ? err.message.slice(0, 120) : err}) — cambiando a NVIDIA NIM para esta sesión...`,
+        ? '[ai/generate] ⚠️ Groq 120B rate limit alcanzado — cambiando a 20B para esta sesión...'
+        : `[ai/generate] ⚠️ Groq 120B no disponible (${err instanceof Error ? err.message.slice(0, 120) : err}) — cambiando a 20B para esta sesión...`,
     );
 
-    const data = await generateJsonNvidia(prompt, schema);
-    return { data, provider: 'nvidia' };
+    const data = await generateJsonWithModel(prompt, schema, MODEL_20B);
+    return { data, model: '20b' };
   }
 }
 
 /**
  * Extrae el primer bloque JSON `{…}` de una respuesta de texto libre.
  *
- * NVIDIA NIM (Llama) suele acompañar el JSON con texto narrativo:
+ * Los modelos Llama suelen acompañar el JSON con texto narrativo:
  *   - "Here is the JSON:\n```json\n{…}\n```\nI hope this helps!"
  *   - Trailing commas, comentarios de línea (`//`), etc.
  *
@@ -143,7 +147,7 @@ function extractJson(raw: string): string {
   const start = body.indexOf('{');
   const end = body.lastIndexOf('}');
   if (start === -1 || end === -1 || end <= start) {
-    throw new Error('No se encontró un objeto JSON en la respuesta de NVIDIA NIM.');
+    throw new Error('No se encontró un objeto JSON en la respuesta del modelo.');
   }
 
   let json = body.slice(start, end + 1);
@@ -159,34 +163,34 @@ function extractJson(raw: string): string {
 }
 
 /**
- * Genera JSON con NVIDIA NIM (backup). Versión robusta que tolera texto
+ * Genera JSON con un modelo específico de Groq. Versión robusta que tolera texto
  * narrativo, fences, trailing commas y comentarios que el modelo añade.
  */
-async function generateJsonNvidia<T>(prompt: string, schema: z.ZodType<T>): Promise<T> {
+async function generateJsonWithModel<T>(prompt: string, schema: z.ZodType<T>, model: string): Promise<T> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       if (attempt > 0) {
-        console.warn(`[ai/generate] ⏳ Pausa de reintento (${attempt}/2) para NVIDIA NIM...`);
+        console.warn(`[ai/generate] ⏳ Pausa de reintento (${attempt}/2) para ${model}...`);
         await new Promise((r) => setTimeout(r, 3000));
       }
 
-      const response = await aiBackup().generate({
-        model: `nvidia/${NVIDIA_MODEL}`,
+      const response = await ai.generate({
+        model,
         prompt,
       });
       const text = response.text;
 
       if (!text) {
-        throw new Error('El modelo NVIDIA NIM no devolvió texto.');
+        throw new Error(`El modelo ${model} no devolvió texto.`);
       }
 
       const cleaned = extractJson(text);
       return schema.parse(JSON.parse(cleaned));
     } catch (err) {
       console.warn(
-        `[ai/generate] ⚠️ Intento ${attempt + 1} con NVIDIA NIM falló:`,
+        `[ai/generate] ⚠️ Intento ${attempt + 1} con ${model} falló:`,
         err instanceof Error ? err.message : err,
       );
       lastError = err;
@@ -196,5 +200,5 @@ async function generateJsonNvidia<T>(prompt: string, schema: z.ZodType<T>): Prom
 
   throw lastError instanceof Error
     ? lastError
-    : new Error('NVIDIA NIM (backup) devolvió un error o JSON no válido tras 3 intentos.');
+    : new Error(`${model} (backup) devolvió un error o JSON no válido tras 3 intentos.`);
 }

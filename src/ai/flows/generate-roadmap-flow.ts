@@ -121,8 +121,8 @@ REGLAS:
 
 Responde solo con el JSON.`;
 
-    const { data: parsed, provider } = await generateJsonWithFallback(prompt, LenientRoadmap);
-    console.log(`[generateRoadmapFlow] Generado con proveedor: ${provider}`);
+    const { data: parsed, model } = await generateJsonWithFallback(prompt, LenientRoadmap);
+    console.log(`[generateRoadmapFlow] Generado con modelo: Groq ${model.toUpperCase()}`);
 
     const steps = parsed.steps.map((s) => ({
       title: s.title,
