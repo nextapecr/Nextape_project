@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "sonar": "sonar-scanner",
     "inventory:pools": "tsx scripts/inventory-question-pools.ts",
     "seed:questions": "tsx scripts/seed-question-bank.ts",
     "seed:catalog": "tsx scripts/seed-skill-catalog.ts",
