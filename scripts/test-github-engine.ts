@@ -76,7 +76,7 @@ console.log('Maintainability:', result.skillScores.maintainability);
 console.log('Documentation:', result.skillScores.documentation);
 console.log('Top Weaknesses:', result.skillScores.topWeaknesses);
 
-console.log('\n=== Test 3: Flow de Interpretación IA (Mistral Fallback) ===');
+console.log('\n=== Test 3: Flow de Interpretación IA (Groq GPT-OSS Fallback) ===');
 
 async function testAIFlow() {
   const feedback = await generateGithubFeedback({

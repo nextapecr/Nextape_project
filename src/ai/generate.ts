@@ -91,25 +91,28 @@ export function isProviderUnavailableError(err: unknown): boolean {
  * Una vez detectado el rate limit en la corrida actual, las llamadas subsiguientes
  * cambian automáticamente a Groq 20B sin perder tiempo re-intentando 120B.
  *
- * Devuelve `{ data, model }` para que el llamador pueda loguear qué modelo se usó.
+ * Devuelve `{ data, model, usage }` para logging y medición de costos.
+ * 
+ * @param options - Opciones de generación (maxTokens, reasoningEffort, etc.)
  */
 export async function generateJsonWithFallback<T>(
   prompt: string,
   schema: z.ZodType<T>,
-): Promise<{ data: T; model: '120b' | '20b' }> {
+  options: GenerateJsonOptions = {},
+): Promise<{ data: T; model: '120b' | '20b'; usage?: TokenUsage }> {
   // Modelos GPT-OSS (free tier, agosto 2026+)
   const MODEL_120B = 'groq/openai/gpt-oss-120b';
   const MODEL_20B = 'groq/openai/gpt-oss-20b';
 
   // Si ya sabemos que 120B no está disponible, usar 20B directamente
   if (isGroq120bUnavailable) {
-    const data = await generateJsonWithModel(prompt, schema, MODEL_20B);
-    return { data, model: '20b' };
+    const result = await generateJsonWithModel(prompt, schema, MODEL_20B, options);
+    return { ...result, model: '20b' };
   }
 
   try {
-    const data = await generateJsonWithModel(prompt, schema, MODEL_120B);
-    return { data, model: '120b' };
+    const result = await generateJsonWithModel(prompt, schema, MODEL_120B, options);
+    return { ...result, model: '120b' };
   } catch (err) {
     const rateLimited = isRateLimitError(err);
     if (!rateLimited && !isProviderUnavailableError(err)) throw err;
@@ -121,8 +124,8 @@ export async function generateJsonWithFallback<T>(
         : `[ai/generate] ⚠️ Groq 120B no disponible (${err instanceof Error ? err.message.slice(0, 120) : err}) — cambiando a 20B para esta sesión...`,
     );
 
-    const data = await generateJsonWithModel(prompt, schema, MODEL_20B);
-    return { data, model: '20b' };
+    const result = await generateJsonWithModel(prompt, schema, MODEL_20B, options);
+    return { ...result, model: '20b' };
   }
 }
 
@@ -157,16 +160,55 @@ function extractJson(raw: string): string {
   json = json.replace(/^\s*\/\/.*$/gm, '');
 
   // 4. Quitar trailing commas: `,` seguida de `}` o `]` (con espacios/saltos de línea opcionales).
-  json = json.replace(/,\s*([}\]])/g, '$1');
+  // Nota: Los modelos grandes generan JSON largo con múltiples trailing commas - necesitamos
+  // hacer múltiples pasadas para capturarlas todas.
+  let prevJson = '';
+  while (prevJson !== json) {
+    prevJson = json;
+    json = json.replace(/,(\s*[}\]])/g, '$1');
+  }
 
   return json.trim();
 }
 
 /**
+ * Opciones adicionales para la generación de JSON.
+ */
+export interface GenerateJsonOptions {
+  maxTokens?: number;
+  reasoningEffort?: 'low' | 'medium' | 'high';
+  includeReasoning?: boolean;
+}
+
+/**
+ * Métricas de uso de tokens reportadas por la API de Groq.
+ * Fuente: https://console.groq.com/docs/api-reference
+ */
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  reasoningTokens?: number; // Tokens usados en razonamiento (solo GPT-OSS con reasoning_effort)
+  cachedTokens?: number; // Tokens que vinieron del cache (prompt caching)
+}
+
+/**
  * Genera JSON con un modelo específico de Groq. Versión robusta que tolera texto
  * narrativo, fences, trailing commas y comentarios que el modelo añade.
+ * 
+ * @param options.maxTokens - Límite de tokens de salida (control de costo)
+ * @param options.reasoningEffort - Nivel de razonamiento para GPT-OSS (low/medium/high)
+ *   Fuente: https://console.groq.com/docs/reasoning
+ * @param options.includeReasoning - Si incluir tokens de razonamiento en la respuesta (default: false)
+ * 
+ * @returns Objeto con los datos parseados y métricas de uso
  */
-async function generateJsonWithModel<T>(prompt: string, schema: z.ZodType<T>, model: string): Promise<T> {
+async function generateJsonWithModel<T>(
+  prompt: string,
+  schema: z.ZodType<T>,
+  model: string,
+  options: GenerateJsonOptions = {},
+): Promise<{ data: T; usage?: TokenUsage }> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -179,6 +221,13 @@ async function generateJsonWithModel<T>(prompt: string, schema: z.ZodType<T>, mo
       const response = await ai.generate({
         model,
         prompt,
+        config: {
+          maxOutputTokens: options.maxTokens,
+          // Los parámetros específicos de Groq se pasan directamente en el nivel superior
+          // ya que el plugin openAICompatible los mapea correctamente
+          ...(options.reasoningEffort && { reasoning_effort: options.reasoningEffort }),
+          ...(options.includeReasoning !== undefined && { include_reasoning: options.includeReasoning }),
+        },
       });
       const text = response.text;
 
@@ -186,8 +235,21 @@ async function generateJsonWithModel<T>(prompt: string, schema: z.ZodType<T>, mo
         throw new Error(`El modelo ${model} no devolvió texto.`);
       }
 
+      // Capturar métricas de uso de la API
+      // Nota: Genkit puede exponer usage en diferentes lugares dependiendo del plugin
+      const rawResponse = (response as any).raw || (response as any);
+      const usage: TokenUsage | undefined = rawResponse?.usage || rawResponse?.response?.usage
+        ? {
+            promptTokens: rawResponse.usage?.prompt_tokens || rawResponse.response?.usage?.prompt_tokens || 0,
+            completionTokens: rawResponse.usage?.completion_tokens || rawResponse.response?.usage?.completion_tokens || 0,
+            totalTokens: rawResponse.usage?.total_tokens || rawResponse.response?.usage?.total_tokens || 0,
+            reasoningTokens: rawResponse.usage?.reasoning_tokens || rawResponse.response?.usage?.reasoning_tokens,
+            cachedTokens: rawResponse.usage?.cached_tokens || rawResponse.response?.usage?.cached_tokens,
+          }
+        : undefined;
+
       const cleaned = extractJson(text);
-      return schema.parse(JSON.parse(cleaned));
+      return { data: schema.parse(JSON.parse(cleaned)), usage };
     } catch (err) {
       console.warn(
         `[ai/generate] ⚠️ Intento ${attempt + 1} con ${model} falló:`,

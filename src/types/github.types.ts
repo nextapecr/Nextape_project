@@ -80,14 +80,15 @@ export interface GithubSkillScores {
 }
 
 // ─────────────────────────────────────────────────────────
-// CAPA 3 — Feedback de Mistral
+// CAPA 3 — Feedback de IA (Groq GPT-OSS)
 // ─────────────────────────────────────────────────────────
 
-/** Feedback generado por Mistral a partir de GithubSkillScores (nunca código fuente) */
+/** Feedback generado por IA (Groq GPT-OSS) a partir de GithubSkillScores (nunca código fuente) */
 export interface GithubAIFeedback {
   feedback: string;
   strengths: string[];
   improvements: string[];
+  source: 'ai' | 'deterministic'; // 'ai' = generado por modelo, 'deterministic' = fallback cuando IA falla
 }
 
 // ─────────────────────────────────────────────────────────

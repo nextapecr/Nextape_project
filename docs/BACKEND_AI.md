@@ -23,7 +23,7 @@ NEXTAPE tiene una **capa de confianza en servidor** sobre Firebase:
 | `GET /api/line/catalog` | Qué tecnología × nivel tienen banco, y el tamaño de examen del usuario (`examSize`, `hasGithub`). Nunca devuelve preguntas. |
 | `POST /api/github/repos` | Lista los repos propios de una cuenta (paginado) y marca los ya analizados con la versión actual del motor. |
 | `POST /api/github/evaluate` | Analiza UN repositorio con el motor determinístico (sin IA) → `github_evidence/{uid}/repos/{owner__repo}`. Caché por commit. |
-| `POST /api/github/aggregate` | Combina todos los repos analizados → `github_evidence/{uid}` + lectura de Mistral (nullable) + identidad verificada. |
+| `POST /api/github/aggregate` | Combina todos los repos analizados → `github_evidence/{uid}` + lectura de Groq GPT-OSS (con fallback determinístico) + identidad verificada. |
 
 Todos verifican el ID token con `verifyRequestUid` (Admin). Nunca confían en un `uid` del body.
 `src/lib/server/assessment.ts` contiene la lógica pura (`gradeAnswers`, `stripAnswerKey`, `SPECIALTY_STACKS`).

@@ -24,8 +24,8 @@
    pregunta es una atribución suya, no una cita verificada. Por eso nunca se envía al cliente.
 3. **La IA ya NO corre en tiempo de petición.** Las preguntas se **precargan** con un script y en runtime
    solo se sortean. Ver §3.1.
-4. **Hay tres proveedores de IA**, no uno: Groq (principal), NVIDIA NIM (fallback ante 429) y Mistral
-   (feedback del análisis de GitHub). Ver §6.
+4. **Hay dos proveedores de IA**, no uno: Groq GPT-OSS (principal, 120B→20B fallback) para generación
+   de preguntas y feedback de GitHub. Ver §6.
 5. **El experimento de Cloudflare se abandonó.** El despliegue real es **Netlify**. Queda configuración
    muerta en el repo (§7).
 
@@ -63,7 +63,7 @@ UX, no de seguridad.
 | UI | **shadcn/ui** (Radix + CVA) + **Tailwind CSS 3** · recharts |
 | Auth/DB/Storage | **Firebase** Web SDK v11 (cliente) + **firebase-admin** (servidor) |
 | Análisis de código | **tree-sitter** + `@kreuzberg/tree-sitter-language-pack` (21 gramáticas) |
-| IA | **Genkit 1.28** — Groq · NVIDIA NIM · Mistral (§6) |
+| IA | **Genkit 1.28** — Groq GPT-OSS (120B/20B fallback) (§6) |
 | Hosting | **Netlify** (`netlify.toml`, `@netlify/plugin-nextjs`, Node 22) |
 
 ### Patrón: monolito modular + capa de confianza en servidor
@@ -81,7 +81,7 @@ Browser (React 19)
   ├─ lectura directa de Firestore ───────────► firestore.rules
   └─ apiPost/apiGet + Bearer ID token ───────► /api/* (Node) ── Admin SDK ─► Firestore
                                                    ├─ tree-sitter (motor de GitHub)
-                                                   └─ Genkit → Groq / NVIDIA / Mistral
+                                                   └─ Genkit → Groq GPT-OSS
 ```
 
 **Excepción consciente:** el **motor de roadmap corre en el CLIENTE** (`src/lib/roadmap-engine.ts`).
@@ -149,7 +149,7 @@ tiempo de una Netlify Function, así que el bucle por repositorio vive en el nav
    están analizados (`engineVersion` + `pushedAt`).
 2. **`POST /api/github/evaluate`** — un repo: señales + árbol, caché por SHA, descarga de archivos y
    **parseo AST → IR → analyzers → skill mapper**. Sin IA.
-3. **`POST /api/github/aggregate`** — combina la subcolección, hace **una** llamada a Mistral (sobre los
+3. **`POST /api/github/aggregate`** — combina la subcolección, hace **una** llamada a Groq GPT-OSS (sobre los
    números, nunca sobre el código), resuelve la identidad OAuth y escribe el agregado.
 
 **Descubrimiento:** `GET /users/{u}/repos?type=owner` → **solo repos propios**, sin forks, archivados ni
@@ -166,7 +166,7 @@ no está implementado**), `testing`, `documentation`. El **skill mapper** produc
 > **Regla de diseño transversal: cuando no se puede medir, se devuelve `null`, no un número.**
 > Se respeta en los analyzers, el mapper y la agregación. Cualquier cambio debe mantenerla.
 
-**Caché en 3 niveles:** por repo+SHA, por `pushedAt` en el listado, y reuso del feedback de Mistral si los
+**Caché en 3 niveles:** por repo+SHA, por `pushedAt` en el listado, y reuso del feedback de IA si los
 scores no cambiaron. `GITHUB_ENGINE_VERSION` (hoy `2.0.0`) invalida todo al subirlo.
 
 **Identidad:** el username se escribe a mano, así que cualquiera puede analizar el GitHub de otro. La prueba
@@ -230,7 +230,7 @@ marcado `@deprecated` y **solo lo importa el Dev UI de Genkit**: es código muer
 | `POST /api/jobs/assessment` | Compone el repertorio de una vacante | ID token + dueño del job | ❌ |
 | `POST /api/github/repos` | Lista repos + poda evidencia | ID token | ✅ 12/h |
 | `POST /api/github/evaluate` | Analiza 1 repo (AST) | ID token + owner == username | ✅ 150/h |
-| `POST /api/github/aggregate` | Agrega + 1 llamada a Mistral | ID token | ✅ 20/h |
+| `POST /api/github/aggregate` | Agrega + 1 llamada a Groq GPT-OSS | ID token | ✅ 20/h |
 
 ---
 
@@ -238,9 +238,7 @@ marcado `@deprecated` y **solo lo importa el Dev UI de Genkit**: es código muer
 
 | Proveedor | Para qué | Variables |
 |---|---|---|
-| **Groq** (principal) | Generación del banco de preguntas (`llama-3.3-70b-versatile`) | `GROQ_API_KEY`, `GROQ_MODEL` |
-| **NVIDIA NIM** (fallback) | Se usa cuando Groq responde 429 | `NVIDIA_API_KEY`, `NVIDIA_MODEL` |
-| **Mistral** | Feedback textual del análisis de GitHub (solo números, nunca código) | `MISTRAL_API_KEY`, `MISTRAL_MODEL` |
+| **Groq GPT-OSS** (único proveedor) | Generación del banco de preguntas + feedback de GitHub | `GROQ_API_KEY`, `GROQ_MODEL` |
 
 Generación de JSON: esquema **tolerante** por tipo → normalización → esquema **estricto**. Las preguntas de
 `ordering` se **desordenan en servidor**, guardando la permutación como `correctOrder`.
@@ -289,9 +287,9 @@ bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.j
   no hay "siguiente paso", el progreso sale 0, y el gate "The LINE obligatorio" se pasa sin que ninguna
   medición real alimente el plan. `docs/TECH_DEBT.md` (A10) registra una versión **más estrecha** del
   problema (resolución de alias); el desajuste real es **taxonómico** y no está documentado en ningún sitio.
-- **H2 — `.env.example` está incompleto.** Faltan `GITHUB_TOKEN`, `MISTRAL_API_KEY` y `NVIDIA_API_KEY`
-  (+ sus `_MODEL`). Un despliegue que siga la plantilla al pie de la letra deja `/api/github/*` roto
-  (Mistral lanza → 500) y el motor cae a 60 req/h anónimas **para toda la plataforma**.
+- **H2 — `.env.example` está incompleto.** Falta `GITHUB_TOKEN` (y su correspondiente `GROQ_API_KEY`/`GROQ_MODEL`).
+  Un despliegue que siga la plantilla al pie de la letra deja `/api/github/*` roto
+  (IA lanza → 500, pero fallback determinístico mantiene funcionalidad básica) y el motor cae a 60 req/h anónimas **para toda la plataforma**.
 
 ### 🟠 Medias
 

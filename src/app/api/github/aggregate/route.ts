@@ -67,7 +67,7 @@ function topKey(counts: Record<string, number> | undefined): string | null {
 /**
  * POST /api/github/aggregate
  * Combina la evidencia de todos los repositorios ya analizados de una cuenta en un único perfil,
- * pide UNA lectura a Mistral (a partir de números, nunca de código) y lo guarda en
+ * pide UNA lectura a Groq GPT-OSS (a partir de números, nunca de código) y lo guarda en
  * `github_evidence/{uid}`, el documento que consumen el roadmap y el tamaño de The LINE.
  *
  * Body: { githubUsername: string }

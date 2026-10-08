@@ -72,7 +72,7 @@ function mergeCounts(target: Record<string, number>, source: Record<string, numb
 }
 
 /**
- * ¿Mismos scores? Si el agregado no cambió, la lectura de Mistral anterior sigue siendo válida y no
+ * ¿Mismos scores? Si el agregado no cambió, la lectura de IA anterior sigue siendo válida y no
  * hace falta pagar otra llamada. `topWeaknesses` se deriva de los números, así que no se compara.
  */
 export function sameSkillScores(a: GithubSkillScores | null | undefined, b: GithubSkillScores): boolean {

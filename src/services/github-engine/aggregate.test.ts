@@ -90,7 +90,7 @@ describe("aggregateRepoEvidence", () => {
     expect(result.parsedLanguages).toEqual({ typescript: 3, python: 2 });
   });
 
-  it("sameSkillScores detecta si el agregado cambió (para reutilizar la lectura de Mistral)", () => {
+  it("sameSkillScores detecta si el agregado cambió (para reutilizar la lectura de IA)", () => {
     const base = scores({ architecture: null });
     expect(sameSkillScores(base, { ...base, topWeaknesses: ["otra redacción"] })).toBe(true);
     expect(sameSkillScores(base, { ...base, overall: base.overall + 1 })).toBe(false);

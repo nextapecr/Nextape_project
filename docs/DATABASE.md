@@ -180,7 +180,7 @@ Tipo: [`GithubEvidence`](../src/types/github.types.ts). `uid = request.auth.uid`
 | `repoSignals` | `RepoSignals` | Agregado: lenguajes sumados, `repo: "*"` |
 | `metrics` | `EngineMetrics` | Complejidad y acoplamiento ponderados por archivos; `deadCodeScore: null` |
 | `skillScores` | `GithubSkillScores` | Agregado (ver abajo) |
-| `aiFeedback` | `GithubAIFeedback \| null` | Lectura de Mistral sobre los scores agregados (nunca código fuente). `null` si el proveedor falla: no se inventa texto |
+| `aiFeedback` | `GithubAIFeedback \| null` | Lectura de IA (Groq GPT-OSS) sobre los scores agregados (nunca código fuente). Incluye campo `source: 'ai'|'deterministic'` para distinguir feedback generado por modelo vs fallback |
 | `analyzedAt` | Timestamp | Timestamp de servidor |
 | `engineVersion` | string | `"2.0.0"` |
 
@@ -190,7 +190,7 @@ Campos: `uid, githubUsername, fullName, pushedAt, lastCommitSHA, repoSignals, me
 parsedLanguages, analyzedAt, engineVersion`.
 
 - **Escritores (Admin SDK):** `POST /api/github/evaluate` analiza UN repo y escribe la subcolección (sin IA);
-  `POST /api/github/aggregate` combina la subcolección en el doc raíz (1 llamada a Mistral). El cliente orquesta
+  `POST /api/github/aggregate` combina la subcolección en el doc raíz (1 llamada a Groq GPT-OSS). El cliente orquesta
   `/api/github/repos` → `evaluate` por repo (3 a la vez) → `aggregate`: así cada petición cabe en el tiempo de
   una Netlify Function aunque el usuario tenga decenas de repositorios.
 - **Lector:** solo el dueño, del doc y de la subcolección (dos reglas: la de un documento no cubre sus
@@ -207,7 +207,7 @@ parsedLanguages, analyzedAt, engineVersion`.
   compensa: cualquiera puede escribir el usuario de GitHub de otra persona.
 - **Límites:** `repos` 12/h, `evaluate` 150/h y `aggregate` 20/h por usuario (`api_rate_limits`), y como mucho los
   100 repos con push más reciente. `repos` borra de la subcolección los que ya no están en esa lista (borrados,
-  renombrados o fuera del tope), y `aggregate` reutiliza la lectura de Mistral si los scores no cambiaron.
+  renombrados o fuera del tope), y `aggregate` reutiliza la lectura de IA si los scores no cambiaron.
 - **Fórmula de `overall` (Skill Scores):**
   $$\text{overall} = (\text{architecture} \times 0.25) + (\text{testing} \times 0.25) + (\text{security} \times 0.15) + (\text{maintainability} \times 0.20) + (\text{documentation} \times 0.15)$$
   *Si el repositorio no tiene archivos parseables AST (0 archivos), `architecture`, `security` y `maintainability` son `null`, y `overall` se recalcula proporcionalmente sobre métricas disponibles (`testing` 62.5% + `documentation` 37.5%).*
@@ -215,7 +215,7 @@ parsedLanguages, analyzedAt, engineVersion`.
 ### `api_rate_limits/{scope}:{uid}` — 🔒 Límites de peticiones por usuario
 `{ uid, scope, windowStart (ms), count, updatedAt }`. Ventana fija de 1 h por endpoint
 ([`rate-limit.ts`](../src/lib/server/rate-limit.ts)). Protege el `GITHUB_TOKEN` compartido (5000 req/h para toda la
-plataforma) y el coste de Mistral.
+plataforma) y el coste de IA (Groq GPT-OSS).
 - **Escritor:** los endpoints de GitHub (Admin SDK, en transacción). **Cliente:** `read, write: if false`.
 
 ### `core/{uid}`  — ⚠️ Colección fantasma

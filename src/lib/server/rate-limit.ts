@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
  * Límite de peticiones por usuario, en ventana fija, persistido en `api_rate_limits` (server-only).
  *
  * Existe por el análisis de GitHub: todas las peticiones usan el MISMO `GITHUB_TOKEN` del servidor
- * (5000 req/h para toda la plataforma) y `aggregate` llama a Mistral. Sin límite, un solo usuario
+ * (5000 req/h para toda la plataforma) y `aggregate` llama a Groq GPT-OSS. Sin límite, un solo usuario
  * con un script agotaba la cuota horaria de todos. La memoria del proceso no sirve en Netlify
  * (cada invocación puede caer en una instancia distinta), por eso el contador vive en Firestore.
  *

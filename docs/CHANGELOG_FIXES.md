@@ -198,11 +198,12 @@ Registro de las correcciones aplicadas al sanear el sistema. Cada fase referenci
   por repo → `/api/github/aggregate`, con la subcolección `github_evidence/{uid}/repos` y su regla.
 - Selección de archivos repartida entre lenguajes (≤ 12 por repo), listado paginado sin forks ni archivados,
   detección de tests y CI ampliada a más ecosistemas e identidad verificada vía OAuth de GitHub.
-- La lectura de Mistral devuelve `null` si falla (antes devolvía un texto genérico inventado).
+- La lectura de IA devuelve feedback con `source: 'ai'` cuando se genera exitosamente, o `source: 'deterministic'` 
+  cuando todos los modelos fallan (fallback estructurado desde scores).
 - Validación de usuario y nombre de repo antes de llamar a la API con el token del servidor.
 - Tras la auditoría de seguridad: el examen de 10 preguntas solo aplica con la cuenta **verificada** (antes bastaba
   con analizar el GitHub de otra persona); límites por usuario en `repos`/`evaluate`/`aggregate`
-  (`api_rate_limits`), tope de 100 repos, limpieza de repos borrados o renombrados, y Mistral solo se vuelve a
+  (`api_rate_limits`), tope de 100 repos, limpieza de repos borrados o renombrados, y IA solo se vuelve a
   llamar si cambian los scores.
 - Reglas: el dueño de una vacante ya no puede escribir `assessmentReady`, `assessmentPoolSize`,
   `assessmentMissingSkills` ni `applicantsCount`.

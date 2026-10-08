@@ -27,7 +27,7 @@ export const runtime = "nodejs";
  * Antes este endpoint analizaba un único repositorio —el más reciente— y ese resultado era todo el
  * perfil. Ahora es una pieza del análisis completo: el cliente lo llama una vez por repositorio
  * (cada llamada cabe en el tiempo de una Netlify Function) y al final `/api/github/aggregate`
- * combina todos. No llama a Mistral: la lectura de IA se hace una sola vez sobre el agregado.
+ * combina todos. No llama a IA: la lectura de IA se hace una sola vez sobre el agregado.
  *
  * Caché: si el último commit no cambió desde el último análisis con esta versión del motor, se
  * devuelve lo guardado sin descargar ni parsear de nuevo.
