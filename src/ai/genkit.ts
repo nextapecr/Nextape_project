@@ -10,6 +10,10 @@ import { openAICompatible } from '@genkit-ai/compat-oai';
  * NOTA: Los modelos Llama 3.3 70B y Llama 3.1 8B fueron movidos a tier Enterprise (agosto 2026).
  * Free tier ahora usa GPT-OSS (modelos open-source): 120B (primario) y 20B (fallback rápido).
  * 
+ * Evaluados y descartados:
+ * - Qwen3.8-27B: Mejor en JSON estructurado PERO límite de 1000 OTPM (vs 250K TPM de GPT-OSS)
+ *   impide generar respuestas largas necesarias para consolidación de preguntas.
+ * 
  * Cambiamos de `genkitx-groq` a `@genkit-ai/compat-oai` porque el plugin comunitario no tiene
  * los modelos GPT-OSS registrados y la API de Groq es compatible con OpenAI.
  */
