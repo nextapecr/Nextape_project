@@ -97,9 +97,6 @@ interface TestResult {
 
 async function runTests() {
   const results: TestResult[] = [];
-  let totalTokens = 0;
-  let totalPromptTokens = 0;
-  let totalCompletionTokens = 0;
   let successCount = 0;
 
   console.log(`📊 Ejecutando ${testCases.length} casos de prueba...\n`);
