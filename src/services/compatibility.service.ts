@@ -63,13 +63,22 @@ export const CompatibilityService = {
    * @param jobId - ID de la vacante
    * @param options - Opciones de paginación (pageSize max 50, cursor opaco)
    * @returns Resultado paginado con matches, nextCursor y hasMore
-   * @throws Error si el cursor es inválido
+   * @throws Error si el cursor es inválido, o si la vacante no existe o no pertenece al reclutador
    */
   getMatchesForJob: async (
     recruiterId: string,
     jobId: string,
     options: PaginationOptions = {}
   ): Promise<PaginatedMatches> => {
+    // Validar pertenencia del jobId ANTES de hacer la query de matches
+    const jobRef = doc(db, "jobs", jobId);
+    const jobSnap = await getDoc(jobRef);
+    
+    // Error genérico para no revelar si el jobId existe
+    if (!jobSnap.exists() || jobSnap.data()?.createdBy !== recruiterId) {
+      throw new Error("Job not found or access denied");
+    }
+    
     const pageSize = Math.min(options.pageSize || 20, 50);
     
     // Decodificar cursor si existe
