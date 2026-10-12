@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb, verifyRequestUid } from "@/lib/firebase/admin";
-import { getGithubToken } from "@/services/github-signals.service";
 
 export const runtime = "nodejs";
 
@@ -30,9 +29,16 @@ export const runtime = "nodejs";
  * Source: https://docs.github.com/en/rest/apps/oauth-applications#check-a-token
  * 
  * Response:
- * { success: true, githubRevoked: boolean } | { error: string }
+ * { success: true, githubRevoked: boolean, reason: "other_app" | "temporary" | null } | { error: string }
  */
+
 export async function POST(req: NextRequest) {
+  /**
+   * GitHub OAuth token revocation endpoints.
+   * Can be changed to /grant to revoke all tokens for this authorization.
+   */
+  const GITHUB_REVOKE_ENDPOINT = 'token'; // 'token' = single token, 'grant' = all tokens
+  
   const uid = await verifyRequestUid(req.headers.get("authorization"));
   if (!uid) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -46,18 +52,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "no_token_found" }, { status: 404 });
     }
 
+    const tokenData = tokenDoc.data();
+    if (!tokenData) {
+      return NextResponse.json({ error: "invalid_token_data" }, { status: 500 });
+    }
+    
+    // Decrypt token directly (don't use getGithubToken which checks revokedAt)
+    // This allows retries after marking as revoked
+    let token: string | null = null;
+    try {
+      const { decryptToken } = await import('@/lib/server/token-encryption');
+      token = decryptToken(
+        tokenData.encryptedToken,
+        tokenData.iv,
+        tokenData.authTag
+      );
+    } catch {
+      console.error('[github/oauth/revoke] Failed to decrypt token:', {
+        status: 'decryption_error',
+        uid,
+      });
+    }
+
     // Attempt to revoke on GitHub (best-effort, but we track success)
     let githubRevoked = false;
+    let reason: 'other_app' | 'temporary' | null = null;
+    
     try {
-      const token = await getGithubToken(uid);
       if (token && process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
         const basicAuth = Buffer.from(
           `${process.env.GITHUB_CLIENT_ID}:${process.env.GITHUB_CLIENT_SECRET}`
         ).toString('base64');
         
-        // First, check if token belongs to our app (POST /applications/{client_id}/token)
+        // First, check if token belongs to our app (POST /applications/{client_id}/{endpoint})
         // This distinguishes "already revoked by us" (404) from "token from another app" (404)
-        const checkResponse = await fetch(`https://api.github.com/applications/${process.env.GITHUB_CLIENT_ID}/token`, {
+        const checkResponse = await fetch(`https://api.github.com/applications/${process.env.GITHUB_CLIENT_ID}/${GITHUB_REVOKE_ENDPOINT}`, {
           method: 'POST',
           headers: {
             'Authorization': `Basic ${basicAuth}`,
@@ -70,13 +99,14 @@ export async function POST(req: NextRequest) {
         if (checkResponse.status === 404) {
           // Token doesn't belong to our app (different app or already revoked)
           // Cannot confirm it's safe to delete encrypted data
+          reason = 'other_app';
           console.warn('[github/oauth/revoke] Token check returned 404 (not our app or already revoked):', {
             status: 404,
             uid,
           });
         } else if (checkResponse.ok) {
           // Token belongs to our app and is valid, proceed with revocation
-          const deleteResponse = await fetch(`https://api.github.com/applications/${process.env.GITHUB_CLIENT_ID}/token`, {
+          const deleteResponse = await fetch(`https://api.github.com/applications/${process.env.GITHUB_CLIENT_ID}/${GITHUB_REVOKE_ENDPOINT}`, {
             method: 'DELETE',
             headers: {
               'Authorization': `Basic ${basicAuth}`,
@@ -93,12 +123,14 @@ export async function POST(req: NextRequest) {
               uid,
             });
           } else {
+            reason = 'temporary';
             console.warn('[github/oauth/revoke] GitHub revocation failed:', {
               status: deleteResponse.status,
               uid,
             });
           }
         } else {
+          reason = 'temporary';
           console.warn('[github/oauth/revoke] Token check failed:', {
             status: checkResponse.status,
             uid,
@@ -107,6 +139,7 @@ export async function POST(req: NextRequest) {
       }
     } catch {
       // Network or fetch error
+      reason = 'temporary';
       console.warn('[github/oauth/revoke] GitHub revocation error:', {
         status: 'network_error',
         uid,
@@ -127,7 +160,7 @@ export async function POST(req: NextRequest) {
 
     await tokenRef.update(updates);
 
-    return NextResponse.json({ success: true, githubRevoked });
+    return NextResponse.json({ success: true, githubRevoked, reason });
   } catch {
     console.error("[github/oauth/revoke] error:", {
       status: 'server_error',

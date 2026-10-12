@@ -237,16 +237,22 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
     setDisconnecting(true);
     setError(null);
     try {
-      const response = await apiPost<{ success: boolean; githubRevoked: boolean }>("/api/github/oauth/revoke", {});
+      const response = await apiPost<{ success: boolean; githubRevoked: boolean; reason?: 'other_app' | 'temporary' | null }>("/api/github/oauth/revoke", {});
       const githubRevoked = response?.githubRevoked === true;
+      const reason = response?.reason;
       
       if (githubRevoked) {
         setNotice("Cuenta de GitHub desconectada exitosamente.");
-      } else {
+      } else if (reason === 'other_app') {
         setNotice(
-          "Tu cuenta fue desconectada localmente, pero no se pudo revocar el token en GitHub. " +
-          "El token expirará automáticamente, pero puedes revocarlo manualmente en " +
-          "github.com/settings/applications"
+          "Token desconectado localmente. El token puede ser de otra aplicación o ya estar revocado. " +
+          "Si persiste, revócalo manualmente en github.com/settings/applications"
+        );
+      } else {
+        // reason === 'temporary' or null
+        setNotice(
+          "Tu cuenta fue desconectada localmente, pero hubo un error temporal al revocar en GitHub. " +
+          "Reintenta en unos minutos o revócalo manualmente en github.com/settings/applications"
         );
       }
       
