@@ -345,4 +345,72 @@ describe("useJobAccordion", () => {
     // Solo debería haber 2 llamadas: inicial + una sola load more
     expect(mockGetMatches).toHaveBeenCalledTimes(2);
   });
+
+  it("respuesta obsoleta: abrir, cerrar, reabrir → primera respuesta no pisa estado", async () => {
+    let resolveFirst: (value: any) => void;
+    let resolveSecond: (value: any) => void;
+
+    const firstPromise = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondPromise = new Promise((resolve) => {
+      resolveSecond = resolve;
+    });
+
+    const mockGetMatches = vi
+      .spyOn(CompatibilityService, "getMatchesForJob")
+      .mockReturnValueOnce(firstPromise as any)
+      .mockReturnValueOnce(secondPromise as any);
+
+    const { result } = renderHook(() => useJobAccordion(mockRecruiterId));
+
+    // Primera apertura (request 1)
+    act(() => {
+      result.current.handleOpenJob(mockJobId);
+    });
+
+    await waitFor(() => {
+      expect(mockGetMatches).toHaveBeenCalledTimes(1);
+    });
+
+    // Segunda apertura inmediata (request 2, más reciente)
+    act(() => {
+      result.current.handleOpenJob(mockJobId);
+    });
+
+    await waitFor(() => {
+      expect(mockGetMatches).toHaveBeenCalledTimes(2);
+    });
+
+    // Resolver segunda respuesta primero (más reciente, requestId=2)
+    act(() => {
+      resolveSecond({
+        matches: [{ ...mockMatch, userId: "user2" }],
+        nextCursor: undefined,
+        hasMore: false,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.jobStates[mockJobId]?.loaded).toBe(true);
+      expect(result.current.jobStates[mockJobId]?.matches).toHaveLength(1);
+      expect(result.current.jobStates[mockJobId]?.matches[0]?.userId).toBe("user2");
+    });
+
+    // Resolver primera respuesta después (obsoleta, requestId=1)
+    act(() => {
+      resolveFirst({
+        matches: [{ ...mockMatch, userId: "user1" }],
+        nextCursor: undefined,
+        hasMore: false,
+      });
+    });
+
+    // Esperar un tick y verificar que el estado NO cambió
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // El estado debe seguir siendo de la segunda respuesta (user2), no pisado por user1
+    expect(result.current.jobStates[mockJobId]?.matches).toHaveLength(1);
+    expect(result.current.jobStates[mockJobId]?.matches[0]?.userId).toBe("user2");
+  });
 });
