@@ -2,6 +2,7 @@ import { queryCollection } from "@/lib/firebase/firestore";
 import { where, orderBy, limit, startAfter, query, getDocs, collection, doc, getDoc } from "firebase/firestore";
 import { Firestore } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
+import type { CandidateMatch } from "@/types/job.types";
 
 /**
  * Opciones de paginación para getMatchesForJob.
