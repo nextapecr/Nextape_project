@@ -12,16 +12,19 @@ export const runtime = "nodejs";
  * 
  * Flow:
  * 1. Client requests token revocation
- * 2. Server marks token as revoked in Firestore
- * 3. Server optionally revokes token on GitHub's side
- * 4. Future API requests will not use revoked token
+ * 2. Server attempts to revoke token on GitHub's side (DELETE /applications/{client_id}/token)
+ * 3. If GitHub revocation succeeds (204 or 404), delete encrypted data from Firestore
+ * 4. Mark token as revoked in Firestore (always, even if GitHub fails)
+ * 5. Return success status and whether GitHub revocation succeeded
  * 
  * Security:
  * - Verifies Firebase auth token (verifyRequestUid)
  * - Only user can revoke their own token
+ * - Deletes encrypted data only after confirmed GitHub revocation
+ * - Logs only HTTP status codes (not error messages with potential secrets)
  * 
  * Response:
- * { success: true } | { error: string }
+ * { success: true, githubRevoked: boolean } | { error: string }
  */
 export async function POST(req: NextRequest) {
   const uid = await verifyRequestUid(req.headers.get("authorization"));
@@ -37,19 +40,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "no_token_found" }, { status: 404 });
     }
 
-    // Mark token as revoked (soft delete)
-    await tokenRef.update({
-      revokedAt: FieldValue.serverTimestamp(),
-    });
-
-    // Optional: Revoke token on GitHub's side
-    // This requires GitHub App client_id + client_secret
-    // For now, we just mark it as revoked locally
-    // Future implementation can call:
-    // DELETE https://api.github.com/applications/{client_id}/token
-    // with basic auth (client_id:client_secret) and body { access_token }
-    
-    // Attempt to revoke on GitHub (best-effort, don't fail if this fails)
+    // Attempt to revoke on GitHub (best-effort, but we track success)
+    let githubRevoked = false;
     try {
       const token = await getGithubToken(uid);
       if (token && process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
@@ -57,7 +49,7 @@ export async function POST(req: NextRequest) {
           `${process.env.GITHUB_CLIENT_ID}:${process.env.GITHUB_CLIENT_SECRET}`
         ).toString('base64');
         
-        await fetch('https://api.github.com/applications/{client_id}/token', {
+        const response = await fetch(`https://api.github.com/applications/${process.env.GITHUB_CLIENT_ID}/token`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Basic ${basicAuth}`,
@@ -66,16 +58,48 @@ export async function POST(req: NextRequest) {
           },
           body: JSON.stringify({ access_token: token }),
         });
+
+        // 204 = successfully revoked, 404 = already revoked (both OK)
+        if (response.status === 204 || response.status === 404) {
+          githubRevoked = true;
+          console.log('[github/oauth/revoke] GitHub revocation successful:', {
+            status: response.status,
+            uid,
+          });
+        } else {
+          console.warn('[github/oauth/revoke] GitHub revocation failed:', {
+            status: response.status,
+            uid,
+          });
+        }
       }
-    } catch (err) {
-      // Best-effort revocation on GitHub side
-      // If it fails, local revocation is still effective
-      console.warn('[github/oauth/revoke] Failed to revoke on GitHub:', err);
+    } catch {
+      // Network or fetch error
+      console.warn('[github/oauth/revoke] GitHub revocation error:', {
+        status: 'network_error',
+        uid,
+      });
     }
 
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("[github/oauth/revoke] error:", err);
+    // Mark token as revoked (always, even if GitHub revocation failed)
+    const updates: Record<string, unknown> = {
+      revokedAt: FieldValue.serverTimestamp(),
+    };
+
+    // Only delete encrypted data if GitHub revocation succeeded
+    if (githubRevoked) {
+      updates.encryptedToken = FieldValue.delete();
+      updates.iv = FieldValue.delete();
+      updates.authTag = FieldValue.delete();
+    }
+
+    await tokenRef.update(updates);
+
+    return NextResponse.json({ success: true, githubRevoked });
+  } catch {
+    console.error("[github/oauth/revoke] error:", {
+      status: 'server_error',
+    });
     return NextResponse.json({ error: "server_error" }, { status: 500 });
   }
 }

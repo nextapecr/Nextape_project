@@ -237,11 +237,22 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
     setDisconnecting(true);
     setError(null);
     try {
-      await apiPost("/api/github/oauth/revoke", {});
-      setNotice("Cuenta de GitHub desconectada exitosamente.");
+      const response = await apiPost<{ success: boolean; githubRevoked: boolean }>("/api/github/oauth/revoke", {});
+      const githubRevoked = response?.githubRevoked === true;
+      
+      if (githubRevoked) {
+        setNotice("Cuenta de GitHub desconectada exitosamente.");
+      } else {
+        setNotice(
+          "Tu cuenta fue desconectada localmente, pero no se pudo revocar el token en GitHub. " +
+          "El token expirará automáticamente, pero puedes revocarlo manualmente en " +
+          "github.com/settings/applications"
+        );
+      }
+      
       // Trigger re-check of OAuth status
       window.location.reload();
-    } catch (err) {
+    } catch {
       setError("No se pudo desconectar la cuenta de GitHub. Inténtalo de nuevo.");
     } finally {
       setDisconnecting(false);
