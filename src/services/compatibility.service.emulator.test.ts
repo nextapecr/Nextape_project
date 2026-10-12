@@ -24,7 +24,8 @@ import {
   where, 
   orderBy, 
   limit, 
-  Timestamp 
+  Timestamp,
+  Firestore
 } from "firebase/firestore";
 import { CompatibilityService } from "./compatibility.service";
 
@@ -53,17 +54,26 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
     await testEnv.clearFirestore();
     
     // Aserción de seguridad: verificar que el projectId es demo-*
-    const ctx = testEnv.unauthenticatedContext();
-    const testDb = ctx.firestore();
-    const appOptions = (testDb as any)._delegate?.app?.options || (testDb as any).app?.options;
-    const projectId = appOptions?.projectId;
-    
-    if (!projectId || !projectId.startsWith("demo-")) {
+    if (!testEnv.projectId || !testEnv.projectId.startsWith("demo-")) {
       throw new Error(
-        `SECURITY VIOLATION: Test Firestore projectId must start with "demo-", got: ${projectId}`
+        `SECURITY VIOLATION: Test Firestore projectId must start with "demo-", got: ${testEnv.projectId}`
       );
     }
   });
+
+  /**
+   * Helper: inyecta el Firestore del testEnv autenticado para el recruiter.
+   * Garantiza aislamiento: NUNCA usa el db del cliente.
+   */
+  const callService = async (
+    recruiterId: string,
+    jobId: string,
+    options: { pageSize?: number; cursor?: string } = {}
+  ) => {
+    const ctx = testEnv.authenticatedContext(recruiterId);
+    const testDb = ctx.firestore() as unknown as Firestore;
+    return CompatibilityService.getMatchesForJob(recruiterId, jobId, options, testDb);
+  };
 
   describe("Security: ownership validation", () => {
     it("recruiter ajeno no puede listar matches de otro recruiter (query sin filtro de recruiterId → assertFails)", async () => {
@@ -126,12 +136,8 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
       });
 
       // Test: recruiter1 intenta acceder a job2 (de recruiter2)
-      // Usar el Firestore del contexto autenticado
-      const r1Ctx = testEnv.authenticatedContext(recruiter1);
-      const r1Db = r1Ctx.firestore();
-      
       try {
-        await CompatibilityService.getMatchesForJob(recruiter1, job2, {}, r1Db as unknown as Firestore);
+        await callService(recruiter1, job2);
         expect.fail("Debería lanzar error de acceso");
       } catch (err) {
         expect((err as Error).message).toBe("Job not found or access denied");
@@ -140,11 +146,8 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
 
     it("jobId inexistente → error controlado (mismo mensaje)", async () => {
       // Test: recruiter1 intenta acceder a job inexistente
-      const r1Ctx = testEnv.authenticatedContext(recruiter1);
-      const r1Db = r1Ctx.firestore();
-      
       try {
-        await CompatibilityService.getMatchesForJob(recruiter1, "job_inexistente", {}, r1Db as unknown as Firestore);
+        await callService(recruiter1, "job_inexistente");
         expect.fail("Debería lanzar error de acceso");
       } catch (err) {
         expect((err as Error).message).toBe("Job not found or access denied");
@@ -203,13 +206,8 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
         });
       });
 
-      // Página 1: pedir 2 resultados (usar Firestore autenticado del recruiter1)
-      const r1Ctx = testEnv.authenticatedContext(recruiter1);
-      const r1Db = r1Ctx.firestore();
-      
-      const page1 = await CompatibilityService.getMatchesForJob(recruiter1, job1, {
-        pageSize: 2,
-      }, r1Db as unknown as Firestore);
+      // Página 1: pedir 2 resultados
+      const page1 = await callService(recruiter1, job1, { pageSize: 2 });
 
       expect(page1.matches).toHaveLength(2);
       expect(page1.hasMore).toBe(true);
@@ -264,18 +262,15 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
       });
 
       // Paginar con pageSize 2: deberíamos obtener 3 páginas (2+2+1)
-      const r1Ctx = testEnv.authenticatedContext(recruiter1);
-      const r1Db = r1Ctx.firestore();
-      
       const allMatches: string[] = [];
       let cursor: string | undefined;
       let pageCount = 0;
 
       do {
-        const page = await CompatibilityService.getMatchesForJob(recruiter1, job1, {
+        const page = await callService(recruiter1, job1, {
           pageSize: 2,
           cursor,
-        }, r1Db as unknown as Firestore);
+        });
         allMatches.push(...page.matches.map((m) => m.userId));
         cursor = page.nextCursor;
         pageCount++;
