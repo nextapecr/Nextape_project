@@ -95,7 +95,7 @@ export const CompatibilityService = {
           throw new Error("Invalid cursor structure");
         }
         cursorData = parsed as CursorData;
-      } catch (err) {
+      } catch {
         throw new Error("Invalid cursor format");
       }
     }

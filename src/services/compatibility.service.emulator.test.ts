@@ -54,11 +54,7 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
     await testEnv.clearFirestore();
     
     // Aserción de seguridad: verificar que el projectId es demo-*
-    if (!testEnv.projectId || !testEnv.projectId.startsWith("demo-")) {
-      throw new Error(
-        `SECURITY VIOLATION: Test Firestore projectId must start with "demo-", got: ${testEnv.projectId}`
-      );
-    }
+    expect(testEnv.projectId).toMatch(/^demo-/);
   });
 
   /**
@@ -214,10 +210,10 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
       expect(page1.nextCursor).toBeDefined();
 
       // Página 2: usar el cursor
-      const page2 = await CompatibilityService.getMatchesForJob(recruiter1, job1, {
+      const page2 = await callService(recruiter1, job1, {
         pageSize: 2,
         cursor: page1.nextCursor,
-      }, r1Db as any);
+      });
 
       expect(page2.matches).toHaveLength(1);
       expect(page2.hasMore).toBe(false);
