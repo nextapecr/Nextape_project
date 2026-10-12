@@ -112,4 +112,80 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
     await assertFails(updateDoc(doc(alice, "jobs/j3"), { applicantsCount: 500 }));
     await assertFails(updateDoc(doc(alice, "jobs/j3"), { assessmentReady: true, assessmentPoolSize: 999 }));
   });
+
+  it("create job con applicantsCount=999 → assertFails", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    await assertFails(
+      setDoc(doc(alice, "jobs/j_applicants_999"), {
+        createdBy: "alice",
+        title: "Job1",
+        applicantsCount: 999,
+      })
+    );
+  });
+
+  it("create job con applicantsCount=0 → assertSucceeds", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    await assertSucceeds(
+      setDoc(doc(alice, "jobs/j_applicants_0"), {
+        createdBy: "alice",
+        title: "Job2",
+        applicantsCount: 0,
+      })
+    );
+  });
+
+  it("create job sin applicantsCount → assertSucceeds", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    await assertSucceeds(
+      setDoc(doc(alice, "jobs/j_no_applicants"), {
+        createdBy: "alice",
+        title: "Job3",
+      })
+    );
+  });
+
+  it("create job con assessmentReady=true → assertFails", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    await assertFails(
+      setDoc(doc(alice, "jobs/j_ready_true"), {
+        createdBy: "alice",
+        title: "Job4",
+        assessmentReady: true,
+      })
+    );
+  });
+
+  it("create job con assessmentReady=false → assertSucceeds", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    await assertSucceeds(
+      setDoc(doc(alice, "jobs/j_ready_false"), {
+        createdBy: "alice",
+        title: "Job5",
+        assessmentReady: false,
+      })
+    );
+  });
+
+  it("create job con assessmentPoolSize → assertFails", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    await assertFails(
+      setDoc(doc(alice, "jobs/j_pool"), {
+        createdBy: "alice",
+        title: "Job6",
+        assessmentPoolSize: 10,
+      })
+    );
+  });
+
+  it("create job con assessmentMissingSkills → assertFails", async () => {
+    const alice = testEnv.authenticatedContext("alice").firestore();
+    await assertFails(
+      setDoc(doc(alice, "jobs/j_missing"), {
+        createdBy: "alice",
+        title: "Job7",
+        assessmentMissingSkills: ["react"],
+      })
+    );
+  });
 });

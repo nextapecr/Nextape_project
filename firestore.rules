@@ -62,7 +62,14 @@ service cloud.firestore {
     match /jobs/{jobId} {
       allow read: if true;
       allow list: if true;
-      allow create: if isAuthenticated() && request.resource.data.createdBy == request.auth.uid;
+      allow create: if isAuthenticated()
+                    && request.resource.data.createdBy == request.auth.uid
+                    && (!request.resource.data.keys().hasAny(['applicantsCount'])
+                        || request.resource.data.applicantsCount == 0)
+                    && (!request.resource.data.keys().hasAny(['assessmentReady'])
+                        || request.resource.data.assessmentReady == false)
+                    && !request.resource.data.keys().hasAny(
+                         ['assessmentPoolSize','assessmentMissingSkills']);
       // El estado del repertorio y el contador de candidatos los escribe SOLO el servidor: el dueño
       // edita la vacante, pero no puede marcar su prueba como lista ni inflar sus candidatos.
       allow update: if isAuthenticated()
