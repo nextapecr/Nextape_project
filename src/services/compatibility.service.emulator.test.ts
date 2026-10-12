@@ -51,6 +51,18 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
 
   beforeEach(async () => {
     await testEnv.clearFirestore();
+    
+    // Aserción de seguridad: verificar que el projectId es demo-*
+    const ctx = testEnv.unauthenticatedContext();
+    const testDb = ctx.firestore();
+    const appOptions = (testDb as any)._delegate?.app?.options || (testDb as any).app?.options;
+    const projectId = appOptions?.projectId;
+    
+    if (!projectId || !projectId.startsWith("demo-")) {
+      throw new Error(
+        `SECURITY VIOLATION: Test Firestore projectId must start with "demo-", got: ${projectId}`
+      );
+    }
   });
 
   describe("Security: ownership validation", () => {
@@ -114,11 +126,12 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
       });
 
       // Test: recruiter1 intenta acceder a job2 (de recruiter2)
-      // Nota: Necesitamos usar el servicio directamente pero con contexto autenticado
-      // Como CompatibilityService usa el cliente por defecto, vamos a verificar el error
+      // Usar el Firestore del contexto autenticado
+      const r1Ctx = testEnv.authenticatedContext(recruiter1);
+      const r1Db = r1Ctx.firestore();
       
       try {
-        await CompatibilityService.getMatchesForJob(recruiter1, job2);
+        await CompatibilityService.getMatchesForJob(recruiter1, job2, {}, r1Db as unknown as Firestore);
         expect.fail("Debería lanzar error de acceso");
       } catch (err) {
         expect((err as Error).message).toBe("Job not found or access denied");
@@ -127,8 +140,11 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
 
     it("jobId inexistente → error controlado (mismo mensaje)", async () => {
       // Test: recruiter1 intenta acceder a job inexistente
+      const r1Ctx = testEnv.authenticatedContext(recruiter1);
+      const r1Db = r1Ctx.firestore();
+      
       try {
-        await CompatibilityService.getMatchesForJob(recruiter1, "job_inexistente");
+        await CompatibilityService.getMatchesForJob(recruiter1, "job_inexistente", {}, r1Db as unknown as Firestore);
         expect.fail("Debería lanzar error de acceso");
       } catch (err) {
         expect((err as Error).message).toBe("Job not found or access denied");
@@ -187,10 +203,13 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
         });
       });
 
-      // Página 1: pedir 2 resultados
+      // Página 1: pedir 2 resultados (usar Firestore autenticado del recruiter1)
+      const r1Ctx = testEnv.authenticatedContext(recruiter1);
+      const r1Db = r1Ctx.firestore();
+      
       const page1 = await CompatibilityService.getMatchesForJob(recruiter1, job1, {
         pageSize: 2,
-      });
+      }, r1Db as unknown as Firestore);
 
       expect(page1.matches).toHaveLength(2);
       expect(page1.hasMore).toBe(true);
@@ -200,7 +219,7 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
       const page2 = await CompatibilityService.getMatchesForJob(recruiter1, job1, {
         pageSize: 2,
         cursor: page1.nextCursor,
-      });
+      }, r1Db as any);
 
       expect(page2.matches).toHaveLength(1);
       expect(page2.hasMore).toBe(false);
@@ -245,6 +264,9 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
       });
 
       // Paginar con pageSize 2: deberíamos obtener 3 páginas (2+2+1)
+      const r1Ctx = testEnv.authenticatedContext(recruiter1);
+      const r1Db = r1Ctx.firestore();
+      
       const allMatches: string[] = [];
       let cursor: string | undefined;
       let pageCount = 0;
@@ -253,7 +275,7 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
         const page = await CompatibilityService.getMatchesForJob(recruiter1, job1, {
           pageSize: 2,
           cursor,
-        });
+        }, r1Db as unknown as Firestore);
         allMatches.push(...page.matches.map((m) => m.userId));
         cursor = page.nextCursor;
         pageCount++;

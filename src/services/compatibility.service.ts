@@ -1,6 +1,6 @@
 import { queryCollection } from "@/lib/firebase/firestore";
 import { where, orderBy, limit, startAfter, query, getDocs, collection, doc, getDoc } from "firebase/firestore";
-import { CandidateMatch } from "@/types/job.types";
+import { Firestore } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 
 /**
@@ -62,16 +62,19 @@ export const CompatibilityService = {
    * @param recruiterId - UID del reclutador autenticado
    * @param jobId - ID de la vacante
    * @param options - Opciones de paginación (pageSize max 50, cursor opaco)
+   * @param firestoreInstance - Instancia de Firestore (por defecto, db del cliente). Para tests.
    * @returns Resultado paginado con matches, nextCursor y hasMore
    * @throws Error si el cursor es inválido, o si la vacante no existe o no pertenece al reclutador
    */
   getMatchesForJob: async (
     recruiterId: string,
     jobId: string,
-    options: PaginationOptions = {}
+    options: PaginationOptions = {},
+    firestoreInstance?: Firestore
   ): Promise<PaginatedMatches> => {
+    const dbInstance = firestoreInstance ?? db;
     // Validar pertenencia del jobId ANTES de hacer la query de matches
-    const jobRef = doc(db, "jobs", jobId);
+    const jobRef = doc(dbInstance, "jobs", jobId);
     const jobSnap = await getDoc(jobRef);
     
     // Error genérico para no revelar si el jobId existe
@@ -97,7 +100,7 @@ export const CompatibilityService = {
     }
 
     // Construir query base
-    const collectionRef = collection(db, "candidate_matches");
+    const collectionRef = collection(dbInstance, "candidate_matches");
     let q = query(
       collectionRef,
       where("recruiterId", "==", recruiterId),
