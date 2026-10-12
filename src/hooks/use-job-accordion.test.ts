@@ -347,20 +347,21 @@ describe("useJobAccordion", () => {
   });
 
   it("respuesta obsoleta: abrir, cerrar, reabrir → primera respuesta no pisa estado", async () => {
-    let resolveFirst: (value: any) => void;
-    let resolveSecond: (value: any) => void;
+    type MatchResult = { matches: CandidateMatch[]; nextCursor?: string; hasMore: boolean };
+    let resolveFirst: (value: MatchResult) => void;
+    let resolveSecond: (value: MatchResult) => void;
 
-    const firstPromise = new Promise((resolve) => {
+    const firstPromise = new Promise<MatchResult>((resolve) => {
       resolveFirst = resolve;
     });
-    const secondPromise = new Promise((resolve) => {
+    const secondPromise = new Promise<MatchResult>((resolve) => {
       resolveSecond = resolve;
     });
 
     const mockGetMatches = vi
       .spyOn(CompatibilityService, "getMatchesForJob")
-      .mockReturnValueOnce(firstPromise as any)
-      .mockReturnValueOnce(secondPromise as any);
+      .mockReturnValueOnce(firstPromise)
+      .mockReturnValueOnce(secondPromise);
 
     const { result } = renderHook(() => useJobAccordion(mockRecruiterId));
 
