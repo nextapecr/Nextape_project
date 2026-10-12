@@ -73,9 +73,6 @@ export async function connectGithubOAuth(): Promise<string> {
   const { apiPost } = await import("@/lib/api");
   await apiPost("/api/github/oauth/callback", {
     accessToken: credential.accessToken,
-    githubUserId: parseInt(githubUserId, 10),
-    githubUsername,
-    scopes: ["user:email", "public_repo", "repo"],
   });
 
   return githubUsername;

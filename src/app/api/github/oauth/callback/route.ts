@@ -14,21 +14,23 @@ export const runtime = "nodejs";
  * Flow:
  * 1. Client obtains OAuth code from GitHub (via Firebase popup)
  * 2. Client exchanges code for access token (Firebase handles this)
- * 3. Client sends access token + user info to this endpoint
- * 4. Server encrypts token with AES-256-GCM
- * 5. Server stores in github_tokens/{uid}
+ * 3. Client sends access token to this endpoint
+ * 4. Server validates token against GitHub API (GET /user)
+ * 5. Server derives id, login, and scopes from GitHub response
+ * 6. Server verifies GitHub ID matches Firebase provider data
+ * 7. Server encrypts token with AES-256-GCM
+ * 8. Server stores in github_tokens/{uid}
  * 
  * Security:
  * - Verifies Firebase auth token (verifyRequestUid)
+ * - Validates token against GitHub API (not trusting client data)
+ * - Verifies GitHub ID matches Firebase provider
  * - Encrypts token before storage (never stored plaintext)
  * - Server-only collection (client cannot read/write)
  * 
  * Body:
  * {
- *   accessToken: string,      // GitHub OAuth access token
- *   githubUserId: number,     // GitHub numeric ID
- *   githubUsername: string,   // GitHub login
- *   scopes: string[]          // Granted scopes ["user:email", "public_repo"]
+ *   accessToken: string,      // GitHub OAuth access token from Firebase
  * }
  * 
  * Response:
@@ -43,22 +45,70 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   
   const accessToken = typeof body?.accessToken === "string" ? body.accessToken : "";
-  const githubUserId = typeof body?.githubUserId === "number" ? body.githubUserId : 0;
-  const githubUsername = typeof body?.githubUsername === "string" ? body.githubUsername.trim() : "";
-  const scopes = Array.isArray(body?.scopes) ? body.scopes : [];
 
   // Validate input
   if (!accessToken) {
     return NextResponse.json({ error: "missing_access_token" }, { status: 400 });
   }
-  if (!githubUserId || githubUserId <= 0) {
-    return NextResponse.json({ error: "invalid_github_user_id" }, { status: 400 });
-  }
-  if (!githubUsername) {
-    return NextResponse.json({ error: "missing_github_username" }, { status: 400 });
-  }
 
   try {
+    // Phase: Token Hardening - Validate token against GitHub API
+    // Call GET https://api.github.com/user to derive id, login, and scopes from server
+    const githubUserResponse = await fetch("https://api.github.com/user", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "NEXTAPE-OAuth",
+      },
+    });
+
+    if (!githubUserResponse.ok) {
+      console.error("[github/oauth/callback] GitHub API validation failed:", {
+        status: githubUserResponse.status,
+      });
+      return NextResponse.json(
+        { error: "github_token_invalid", message: "GitHub rejected the token" },
+        { status: 403 }
+      );
+    }
+
+    const githubUser = await githubUserResponse.json();
+    const githubUserId = typeof githubUser.id === "number" ? githubUser.id : 0;
+    const githubUsername = typeof githubUser.login === "string" ? githubUser.login.trim() : "";
+    
+    // Extract scopes from X-OAuth-Scopes header (comma-separated list)
+    const scopesHeader = githubUserResponse.headers.get("X-OAuth-Scopes") || "";
+    const scopes = scopesHeader
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    if (!githubUserId || !githubUsername) {
+      return NextResponse.json({ error: "incomplete_github_profile" }, { status: 400 });
+    }
+
+    // Phase: Token Hardening - Verify GitHub ID matches Firebase provider data
+    const { adminAuth } = await import("@/lib/firebase/admin");
+    const userRecord = await adminAuth().getUser(uid);
+    const githubProvider = userRecord.providerData.find((p) => p.providerId === "github.com");
+    
+    if (githubProvider) {
+      // Provider exists: verify numeric ID matches
+      const firebaseGithubId = githubProvider.uid; // This is the numeric GitHub ID as string
+      if (firebaseGithubId !== String(githubUserId)) {
+        console.error("[github/oauth/callback] GitHub ID mismatch:", {
+          status: 403,
+          firebaseId: firebaseGithubId,
+          githubId: String(githubUserId),
+        });
+        return NextResponse.json(
+          { error: "github_id_mismatch", message: "Token does not match your linked GitHub account" },
+          { status: 403 }
+        );
+      }
+    }
+    // If no GitHub provider linked, we allow connection (first-time link)
+
     // Encrypt token with AES-256-GCM
     const encrypted = encryptToken(accessToken);
 
