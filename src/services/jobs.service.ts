@@ -42,14 +42,26 @@ export const JobService = {
   /**
    * Vacantes creadas por un reclutador (para sus paneles de gestión y candidatos).
    *
-   * Se ordena en cliente a propósito: `where(createdBy) + orderBy(postedAt)` exige un **índice
-   * compuesto** en Firestore y, sin él, la query lanza `failed-precondition`. El reclutador veía
-   * entonces "no tienes vacantes" aunque las tuviera. Un reclutador maneja pocas vacantes, así
-   * que ordenar aquí sale gratis y elimina la dependencia de infra. Mismo criterio que
-   * `CompatibilityService.getMatchesForRecruiter`.
+   * Con el índice compuesto `(createdBy ASC, postedAt DESC)` habilitado, delegamos el ordenamiento
+   * a Firestore. Limitamos a 100 vacantes (escenario extremadamente improbable para un reclutador
+   * individual) y mantenemos el sort en memoria como red de seguridad ante docs corruptos.
    */
   getJobsByRecruiter: async (uid: string) => {
-    const jobs = await queryCollection<JobOpportunity>("jobs", where("createdBy", "==", uid));
+    const jobs = await queryCollection<JobOpportunity>(
+      "jobs",
+      where("createdBy", "==", uid),
+      orderBy("postedAt", "desc"),
+      limit(100)
+    );
+
+    // Warn si alcanzamos el límite (posible truncamiento)
+    if (jobs.length === 100) {
+      console.warn(
+        `[getJobsByRecruiter] Recruiter ${uid.slice(0, 8)}... has >=100 jobs; oldest may be hidden. Consider pagination.`
+      );
+    }
+
+    // Red de seguridad: re-ordenar en memoria por si Firestore devuelve docs corruptos
     return jobs.sort((a, b) => postedAtMillis(b) - postedAtMillis(a));
   },
 
