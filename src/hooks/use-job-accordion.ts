@@ -59,7 +59,8 @@ export function useJobAccordion(recruiterId: string) {
 
         // Descartar si hay una request más reciente
         if (activeRequests.current[jobId] !== undefined && 
-            activeRequests.current[jobId] > (activeRequests.current[jobId] || 0)) {
+            activeRequests.current[jobId] > requestId) {
+          loadingMoreRefs.current[jobId] = false;
           return;
         }
 
