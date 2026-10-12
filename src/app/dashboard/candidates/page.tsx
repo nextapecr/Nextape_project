@@ -4,19 +4,28 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Users, Loader2, Briefcase, ShieldCheck, PlusCircle, Trophy } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Users, Loader2, Briefcase, ShieldCheck, PlusCircle, Trophy, AlertCircle } from "lucide-react";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { useJobAccordion } from "@/hooks/use-job-accordion";
 import { JobService } from "@/services/jobs.service";
-import { CompatibilityService } from "@/services/compatibility.service";
-import type { JobOpportunity, CandidateMatch } from "@/types/job.types";
+import type { JobOpportunity } from "@/types/job.types";
 
 type VacancyRow = JobOpportunity & { id: string };
 
 export default function CandidatesPage() {
   const { user, authLoading } = useAuthUser();
   const [vacancies, setVacancies] = useState<VacancyRow[]>([]);
-  const [matches, setMatches] = useState<CandidateMatch[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const { jobStates, handleOpenJob, handleLoadMore, handleRetry } = useJobAccordion(
+    user?.uid || ""
+  );
 
   useEffect(() => {
     if (authLoading) return;
@@ -27,14 +36,10 @@ export default function CandidatesPage() {
 
     const fetchData = async () => {
       try {
-        const [jobs, candidateMatches] = await Promise.all([
-          JobService.getJobsByRecruiter(user.uid),
-          CompatibilityService.getMatchesForRecruiter(user.uid),
-        ]);
+        const jobs = await JobService.getJobsByRecruiter(user.uid);
         setVacancies(jobs as VacancyRow[]);
-        setMatches(candidateMatches);
       } catch (error) {
-        console.error("Error fetching candidates data:", error);
+        console.error("Error fetching vacancies:", error);
       } finally {
         setLoading(false);
       }
@@ -51,18 +56,15 @@ export default function CandidatesPage() {
     );
   }
 
-  // Candidatos verificados = personas distintas que han completado una prueba de mis vacantes.
-  const verifiedCandidates = new Set(matches.map((m) => m.userId)).size;
-  // Candidatos por vacante, rankeados por su resultado en The LINE.
-  const matchesByJob = new Map<string, CandidateMatch[]>();
-  for (const m of matches) {
-    const list = matchesByJob.get(m.jobId) ?? [];
-    list.push(m);
-    matchesByJob.set(m.jobId, list);
-  }
-  for (const list of matchesByJob.values()) {
-    list.sort((a, b) => b.score - a.score);
-  }
+  // Conteo total de candidatos cargados (suma de todas las vacantes abiertas)
+  const totalLoadedMatches = Object.values(jobStates).reduce(
+    (sum, state) => sum + state.matches.length,
+    0
+  );
+  // Candidatos verificados únicos (userId distintos)
+  const verifiedCandidates = new Set(
+    Object.values(jobStates).flatMap((state) => state.matches.map((m) => m.userId))
+  ).size;
 
   return (
     <div className="space-y-12">
@@ -73,6 +75,18 @@ export default function CandidatesPage() {
         </p>
       </header>
 
+      {vacancies.length === 100 && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-2xl flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-bold text-sm">Mostrando tus 100 vacantes más recientes</p>
+            <p className="text-xs mt-1 text-amber-700">
+              Si tienes más vacantes, las más antiguas no se listan. Considera archivar las que ya no estén activas.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <div className="bg-white p-8 rounded-[2rem] shadow-apple border border-gray-50">
           <Briefcase className="h-5 w-5 text-brand-blue mb-4" />
@@ -81,8 +95,8 @@ export default function CandidatesPage() {
         </div>
         <div className="bg-white p-8 rounded-[2rem] shadow-apple border border-gray-50">
           <Users className="h-5 w-5 text-brand-green mb-4" />
-          <span className="text-4xl font-black italic tracking-tighter">{matches.length}</span>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">Aplicaciones totales</p>
+          <span className="text-4xl font-black italic tracking-tighter">{totalLoadedMatches}</span>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">Aplicaciones cargadas</p>
         </div>
         <div className="bg-white p-8 rounded-[2rem] shadow-apple border border-gray-50">
           <ShieldCheck className="h-5 w-5 text-brand-purple mb-4" />
@@ -107,68 +121,140 @@ export default function CandidatesPage() {
           </Link>
         </div>
       ) : (
-        <div className="space-y-6">
+        <Accordion type="single" collapsible className="space-y-6">
           {vacancies.map((job) => {
-            const jobMatches = matchesByJob.get(job.id) ?? [];
+            const jobState = jobStates[job.id];
+            const applicantsCount = job.applicantsCount || 0;
+
             return (
-              <div key={job.id} className="bg-white rounded-[2.5rem] p-8 md:p-10 border border-gray-50 shadow-apple space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-2">
-                    <h2 className="text-2xl font-bold italic leading-none">{job.title}</h2>
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {(job.requiredSkills || []).map((s) => (
-                        <Badge key={s} className="bg-brand-blue/5 text-brand-blue border-none rounded-full py-1.5 px-4 text-[8px] font-bold uppercase tracking-widest">
-                          {s}
-                        </Badge>
-                      ))}
+              <AccordionItem
+                key={job.id}
+                value={job.id}
+                className="bg-white rounded-[2.5rem] border border-gray-50 shadow-apple overflow-hidden"
+              >
+                <AccordionTrigger
+                  className="px-8 md:px-10 py-8 hover:no-underline hover:bg-gray-50/50 transition-colors"
+                  onClick={() => handleOpenJob(job.id)}
+                >
+                  <div className="flex items-center justify-between w-full pr-4">
+                    <div className="space-y-2 text-left">
+                      <h2 className="text-2xl font-bold italic leading-none">{job.title}</h2>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {(job.requiredSkills || []).map((s) => (
+                          <Badge
+                            key={s}
+                            className="bg-brand-blue/5 text-brand-blue border-none rounded-full py-1.5 px-4 text-[8px] font-bold uppercase tracking-widest"
+                          >
+                            {s}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-3xl font-black italic tracking-tighter">
+                        {applicantsCount}
+                      </span>
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+                        Candidatos
+                      </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-black italic tracking-tighter">{jobMatches.length}</span>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Candidatos</p>
-                  </div>
-                </div>
+                </AccordionTrigger>
 
-                {jobMatches.length === 0 ? (
-                  <div className="pt-6 border-t border-gray-50">
-                    <p className="text-sm text-gray-400 font-medium flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-gray-300" />
-                      Aún nadie ha completado la prueba de esta vacante. Los candidatos aparecerán aquí rankeados por su DNA.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="pt-6 border-t border-gray-50 space-y-3">
-                    {jobMatches.map((m, idx) => (
-                      <div key={m.userId} className="flex items-center gap-4 bg-gray-50 rounded-2xl p-4 md:p-5">
-                        <div className="flex items-center justify-center h-9 w-9 shrink-0 rounded-full bg-white shadow-apple text-sm font-black italic text-gray-400">
-                          {idx === 0 ? <Trophy className="h-4 w-4 text-brand-orange" /> : idx + 1}
-                        </div>
-                        <div className="flex-grow min-w-0">
-                          <p className="font-bold italic leading-tight truncate">{m.candidateName}</p>
-                          <div className="flex flex-wrap gap-1.5 pt-1.5">
-                            {Object.entries(m.skills || {}).map(([skill, val]) => (
-                              <Badge key={skill} className="bg-white text-gray-500 border-none rounded-full py-1 px-3 text-[8px] font-bold uppercase tracking-widest">
-                                {skill} {val}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className="text-2xl font-black italic tracking-tighter text-brand-blue">{m.score}%</div>
-                          <p className="text-[8px] font-bold uppercase tracking-widest text-gray-400">The LINE</p>
-                        </div>
-                        <div className="text-right shrink-0 hidden sm:block border-l border-gray-200 pl-4">
-                          <div className="text-2xl font-black italic tracking-tighter">{m.matchPercent}%</div>
-                          <p className="text-[8px] font-bold uppercase tracking-widest text-gray-400">Afinidad CORE</p>
-                        </div>
+                <AccordionContent className="px-8 md:px-10 pb-8">
+                  <div className="pt-6 border-t border-gray-50 space-y-4">
+                    {jobState?.error && (
+                      <div className="bg-red-50 border border-red-200 text-red-900 p-4 rounded-2xl flex items-center justify-between">
+                        <span className="text-sm">{jobState.error}</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleRetry(job.id)}
+                          className="ml-4"
+                        >
+                          Reintentar
+                        </Button>
                       </div>
-                    ))}
+                    )}
+
+                    {jobState?.loaded && jobState.matches.length === 0 && !jobState.error && (
+                      <p className="text-sm text-gray-400 font-medium flex items-center gap-2 py-4">
+                        <ShieldCheck className="h-4 w-4 text-gray-300" />
+                        Aún nadie ha completado la prueba de esta vacante. Los candidatos aparecerán aquí rankeados por su DNA.
+                      </p>
+                    )}
+
+                    {jobState?.matches && jobState.matches.length > 0 && (
+                      <div className="space-y-3">
+                        {jobState.matches.map((m, idx) => (
+                          <div
+                            key={m.userId}
+                            className="flex items-center gap-4 bg-gray-50 rounded-2xl p-4 md:p-5"
+                          >
+                            <div className="flex items-center justify-center h-9 w-9 shrink-0 rounded-full bg-white shadow-apple text-sm font-black italic text-gray-400">
+                              {idx === 0 ? (
+                                <Trophy className="h-4 w-4 text-brand-orange" />
+                              ) : (
+                                idx + 1
+                              )}
+                            </div>
+                            <div className="flex-grow min-w-0">
+                              <p className="font-bold italic leading-tight truncate">
+                                {m.candidateName}
+                              </p>
+                              <div className="flex flex-wrap gap-1.5 pt-1.5">
+                                {Object.entries(m.skills || {}).map(([skill, val]) => (
+                                  <Badge
+                                    key={skill}
+                                    className="bg-white text-gray-500 border-none rounded-full py-1 px-3 text-[8px] font-bold uppercase tracking-widest"
+                                  >
+                                    {skill} {val}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="text-2xl font-black italic tracking-tighter text-brand-blue">
+                                {m.score}%
+                              </div>
+                              <p className="text-[8px] font-bold uppercase tracking-widest text-gray-400">
+                                The LINE
+                              </p>
+                            </div>
+                            <div className="text-right shrink-0 hidden sm:block border-l border-gray-200 pl-4">
+                              <div className="text-2xl font-black italic tracking-tighter">
+                                {m.matchPercent}%
+                              </div>
+                              <p className="text-[8px] font-bold uppercase tracking-widest text-gray-400">
+                                Afinidad CORE
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {jobState?.loadingMore && (
+                      <div className="flex justify-center py-4">
+                        <Loader2 className="h-6 w-6 animate-spin text-brand-blue" />
+                      </div>
+                    )}
+
+                    {jobState?.hasMore && !jobState.loadingMore && (
+                      <Button
+                        variant="ghost"
+                        onClick={() => handleLoadMore(job.id)}
+                        className="w-full rounded-xl border border-gray-200 hover:bg-gray-50"
+                      >
+                        Ver más candidatos
+                      </Button>
+                    )}
                   </div>
-                )}
-              </div>
+                </AccordionContent>
+              </AccordionItem>
             );
           })}
-        </div>
+        </Accordion>
       )}
     </div>
   );
