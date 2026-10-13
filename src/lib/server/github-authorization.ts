@@ -48,6 +48,7 @@ export function authorizeRepo(
   const canonicalFullName = repoData.full_name;
   const isPrivate = Boolean(repoData.private);
   
+  // Public repos are always allowed
   if (!isPrivate) {
     return {
       allowed: true,
@@ -56,14 +57,14 @@ export function authorizeRepo(
     };
   }
   
-  // Private repo: check allowlist (case-insensitive)
-  const allowlistNormalized = allowlist.map((name) => name.toLowerCase());
-  const inAllowlist = allowlistNormalized.includes(canonicalFullName.toLowerCase());
+  // Private repos must be in allowlist (case-insensitive match)
+  const allowlistNormalized = new Set(allowlist.map((name) => name.toLowerCase()));
+  const isInAllowlist = allowlistNormalized.has(canonicalFullName.toLowerCase());
   
   return {
-    allowed: inAllowlist,
+    allowed: isInAllowlist,
     canonicalFullName,
-    reason: inAllowlist ? "private_in_allowlist" : "private_not_in_allowlist",
+    reason: isInAllowlist ? "private_in_allowlist" : "private_not_in_allowlist",
   };
 }
 
