@@ -17,6 +17,7 @@ import {
   generateAnalysisId,
 } from "@/services/github-error-classifier";
 import type { GithubRepoEvaluateResponse, GithubRepoEvidence } from "@/types/github.types";
+import { validateRepoRef, authorizeRepo } from "@/lib/server/github-authorization";
 
 export const runtime = "nodejs";
 
@@ -66,6 +67,51 @@ export async function POST(req: NextRequest) {
   const analysisId = generateAnalysisId(uid);
 
   try {
+    // Phase 3 & 6: Get user's OAuth token (used for auth check, cache check, and analysis)
+    const userToken = await getGithubToken(uid);
+    
+    // Phase 6: Validate private repo authorization BEFORE consuming rate limit
+    // Fetch repo metadata (lightweight call) to check visibility
+    const repoMetadata = await GithubSignalsService.getRepoMetadata(owner, repo, userToken || undefined);
+    
+    // Check allowlist if private
+    if (repoMetadata.private) {
+      const userDocRef = adminDb().collection("users").doc(uid);
+      const userDoc = await userDocRef.get();
+      const privateReposAllowlist = (userDoc.data()?.privateReposAllowlist as string[]) ?? [];
+      
+      const authResult = authorizeRepo(repoMetadata, privateReposAllowlist);
+      
+      if (!authResult.allowed) {
+        console.log(`
+╔════════════════════════════════════════════════════════════════
+║ 🚫 PRIVATE REPO NOT AUTHORIZED (Phase 6)
+║ Repo: ${fullName}
+║ Reason: ${authResult.reason}
+║ ✅ NO rate limit consumed
+║ ✅ NO Firestore write
+╚════════════════════════════════════════════════════════════════
+        `);
+        return NextResponse.json(
+          {
+            error: "private_repo_not_authorized",
+            message: `Private repository ${fullName} is not in your allowlist`,
+            repoFullName: fullName,
+          },
+          { status: 403 }
+        );
+      }
+      
+      console.log(`
+╔════════════════════════════════════════════════════════════════
+║ ✅ PRIVATE REPO AUTHORIZED (Phase 6)
+║ Repo: ${fullName}
+║ Reason: ${authResult.reason}
+║ Proceeding with analysis...
+╚════════════════════════════════════════════════════════════════
+      `);
+    }
+
     // Phase 5: Verificar cache ANTES de consumir rate limit o hacer llamadas pesadas a GitHub
     const docRef = adminDb()
       .collection("github_evidence")
@@ -78,8 +124,7 @@ export async function POST(req: NextRequest) {
 
     // Si existe análisis previo con la versión actual del motor, verificar si el SHA cambió
     if (existing && existing.engineVersion === GITHUB_ENGINE_VERSION && existing.lastCommitSHA) {
-      // Phase 5: Obtener SHA actual con llamada ligera (1 commit)
-      const userToken = await getGithubToken(uid);
+      // Phase 5: Obtener SHA actual con llamada ligera (1 commit) - reuse userToken
       const currentSHA = await GithubSignalsService.getLatestCommitSHA(owner, repo, userToken || undefined);
       
       if (currentSHA && currentSHA === existing.lastCommitSHA) {
@@ -119,9 +164,7 @@ export async function POST(req: NextRequest) {
     const limit = await consumeRateLimit(adminDb(), "github_evaluate", uid, GITHUB_RATE_LIMITS.evaluate);
     if (!limit.allowed) return rateLimitedResponse(limit);
 
-    // Phase 3: Obtener token OAuth del usuario para filtrar commits
-    const userToken = await getGithubToken(uid);
-
+    // Phase 3 & 6: Use userToken fetched earlier for all GitHub API calls
     const [{ signals, tree, pushedAt, isPrivate }] = await Promise.all([
       GithubSignalsService.getRepoSnapshot(owner, repo, userToken || undefined),
     ]);
