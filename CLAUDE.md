@@ -174,4 +174,4 @@ nativas no instaladas (`tree-sitter`, `@genkit-ai/compat-oai`); en CI pasa.
 - 🔴 **`.env.example` no documenta `GITHUB_TOKEN`, `MISTRAL_API_KEY` ni `NVIDIA_API_KEY`**: un despliegue
   que la siga deja `/api/github/*` roto.
 - 🟠 `jobs` valida campos server-only en `update` pero no en `create`. (`/api/line/start` ya tiene límite de
-  1 intento / 24 h y las sesiones llevan `expireAt` para TTL: ver `docs/CONTEXT.md` §3.1.)
+  1 intento / 24 h y limpia las sesiones vencidas del usuario: ver `docs/CONTEXT.md` §3.1.)

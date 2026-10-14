@@ -217,3 +217,29 @@ export function seenRanks(seen: string[]): Map<string, number> {
   seen.forEach((fp, i) => ranks.set(fp, i));
   return ranks;
 }
+
+/* ─────────────────────── Limpieza de sesiones vencidas ───────────────────── */
+
+/** Edad a partir de la cual una sesión ANTIGUA (sin `expiresAt`) se da por abandonada. */
+export const LEGACY_SESSION_MAX_AGE_MS = 24 * HOUR_MS;
+
+/** Cuántas sesiones del usuario se revisan como mucho en cada limpieza. */
+export const SESSION_CLEANUP_SCAN_LIMIT = 50;
+
+/**
+ * ¿Se puede borrar esta sesión? Sí si venció hace más que el margen de envío (ya no se aceptaría)
+ * o, en sesiones de antes de este cambio sin `expiresAt`, si tiene más de un día.
+ *
+ * Existe porque la política TTL de Firestore exige facturación activada (plan Blaze) y el proyecto
+ * está en el plan gratuito. Sin TTL, la propia app borra las sesiones abandonadas del usuario
+ * cada vez que empieza una prueba nueva.
+ */
+export function isSessionDisposable(
+  session: { expiresAt?: unknown; createdAtMs?: number | null },
+  now: number,
+): boolean {
+  if (typeof session.expiresAt === "number" && Number.isFinite(session.expiresAt)) {
+    return now > session.expiresAt + SUBMIT_GRACE_MS;
+  }
+  return typeof session.createdAtMs === "number" && now - session.createdAtMs > LEGACY_SESSION_MAX_AGE_MS;
+}

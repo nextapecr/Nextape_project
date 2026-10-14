@@ -14,7 +14,9 @@ import {
 import {
   attemptRule,
   attemptScope,
+  isSessionDisposable,
   questionFingerprint,
+  SESSION_CLEANUP_SCAN_LIMIT,
   seenRanks,
   timeLimitMinutesFor,
   updateSeenList,
@@ -219,8 +221,23 @@ export async function POST(req: NextRequest) {
     const now = Date.now();
     const expiresAt = now + timeLimitMinutes * 60 * 1000;
 
+    // Limpieza: sesiones vencidas o abandonadas de ESTE usuario (la TTL de Firestore requiere
+    // facturación). Solo filtra por `userId` (índice simple, sin índice compuesto) y decide en
+    // memoria. Nunca toca una sesión que todavía se podría enviar.
+    const ownSessions = await adminDb()
+      .collection("line_sessions")
+      .where("userId", "==", uid)
+      .limit(SESSION_CLEANUP_SCAN_LIMIT)
+      .get();
+
     const sessionRef = adminDb().collection("line_sessions").doc();
     const batch = adminDb().batch();
+    ownSessions.forEach((doc) => {
+      const data = doc.data();
+      const createdAtMs =
+        typeof data.createdAt?.toMillis === "function" ? (data.createdAt.toMillis() as number) : null;
+      if (isSessionDisposable({ expiresAt: data.expiresAt, createdAtMs }, now)) batch.delete(doc.ref);
+    });
     batch.set(sessionRef, {
       userId: uid,
       jobId: jobId ?? null,

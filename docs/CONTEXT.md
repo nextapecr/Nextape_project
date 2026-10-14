@@ -307,7 +307,8 @@ bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.j
 - **H3 — `jobs` valida los campos server-only en `update` pero NO en `create`.** Se puede crear una vacante
   con `applicantsCount` o `assessmentReady` arbitrarios desde el navegador.
 - **H4 — ✅ Resuelto (2026-10):** `/api/line/start` limita a 1 intento cada 24 h por tecnología o vacante, y
-  las sesiones llevan `expireAt` para una política TTL (pendiente de activar, ver `docs/DEPLOYMENT.md`).
+  `start` borra las sesiones vencidas del propio usuario (la TTL de Firestore exige facturación; ver
+  `docs/DEPLOYMENT.md`).
 - **H5 — El estado vacío del roadmap es inalcanzable:** el error `ROADMAP_REQUIRES_LINE_EVALUATION` lo captura
   un `catch` genérico, así que quien no ha hecho The LINE ve un error genérico en vez del CTA para hacerla.
 - **H6 — Agujero de rutas en el escalón superior:** un usuario con nivel inferido `senior` construye

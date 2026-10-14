@@ -4,7 +4,9 @@ import {
   attemptCooldownHours,
   attemptRule,
   attemptScope,
+  isSessionDisposable,
   isSubmissionLate,
+  LEGACY_SESSION_MAX_AGE_MS,
   levelWeight,
   questionFingerprint,
   seenRanks,
@@ -160,5 +162,21 @@ describe("variedad de preguntas", () => {
     const r = seenRanks(["viejo", "nuevo"]);
     expect(r.get("viejo")).toBeLessThan(r.get("nuevo")!);
     expect(r.get("nunca")).toBeUndefined();
+  });
+});
+
+describe("limpieza de sesiones abandonadas", () => {
+  const now = 10_000_000_000;
+
+  it("borra solo las que ya no se podrían enviar", () => {
+    expect(isSessionDisposable({ expiresAt: now - SUBMIT_GRACE_MS - 1 }, now)).toBe(true);
+    expect(isSessionDisposable({ expiresAt: now - SUBMIT_GRACE_MS }, now)).toBe(false);
+    expect(isSessionDisposable({ expiresAt: now + 60_000 }, now)).toBe(false); // en curso
+  });
+
+  it("las antiguas sin expiresAt se borran al pasar un día", () => {
+    expect(isSessionDisposable({ createdAtMs: now - LEGACY_SESSION_MAX_AGE_MS - 1 }, now)).toBe(true);
+    expect(isSessionDisposable({ createdAtMs: now - 60_000 }, now)).toBe(false);
+    expect(isSessionDisposable({ createdAtMs: null }, now)).toBe(false);
   });
 });
