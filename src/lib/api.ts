@@ -12,6 +12,8 @@ export class ApiError extends Error {
   public httpStatus?: number;
   public stage?: string;
   public retryable?: boolean;
+  /** Segundos hasta poder reintentar (respuestas 429 de límite de intentos). */
+  public retryAfterSeconds?: number;
 
   constructor(
     code: string,
@@ -52,16 +54,20 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   });
 
   if (!res.ok) {
-    const data = await res.json().catch(() => ({})) as Partial<GithubErrorResponse>;
+    const data = await res.json().catch(() => ({})) as Partial<GithubErrorResponse> & {
+      retryAfterSeconds?: number;
+    };
     
     // Preserve all error details from backend
-    throw new ApiError(
+    const error = new ApiError(
       data.error || `request_failed_${res.status}`,
       data.message,
       data.httpStatus || res.status,
       data.stage,
       data.retryable
     );
+    if (typeof data.retryAfterSeconds === "number") error.retryAfterSeconds = data.retryAfterSeconds;
+    throw error;
   }
   return res.json() as Promise<T>;
 }

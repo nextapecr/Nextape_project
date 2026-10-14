@@ -1,16 +1,48 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { technologiesByCategory, CATEGORY_LABELS } from "@/lib/technologies";
 import { LEVELS, LEVEL_LABELS } from "@/lib/levels";
-import { Terminal, Cpu, Loader2, CheckCircle2, AlertCircle, Github } from "lucide-react";
-import { apiPost, apiGet } from "@/lib/api";
+import { Terminal, Cpu, Loader2, CheckCircle2, AlertCircle, Github, Timer } from "lucide-react";
+import { apiPost, apiGet, ApiError } from "@/lib/api";
+import { JobService } from "@/services/jobs.service";
 import { QuestionCard, QuestionTypeBadge } from "@/components/line/QuestionCard";
 import type { Answer, PublicQuestion } from "@/types/question.types";
+
+/** Tiempo por defecto de una prueba (debe coincidir con `PRACTICE_TIME_LIMIT_MINUTES` del servidor). */
+const DEFAULT_TIME_LIMIT_MINUTES = 30;
+
+/** Peso de cada nivel en el DNA. Solo para explicarlo en pantalla: el cálculo es del servidor. */
+const LEVEL_WEIGHT_LABELS: Record<string, string> = { junior: "×0.6", mid: "×0.8", senior: "×1" };
+
+/** "1:05:09" / "29:59". */
+function formatClock(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
+/** "14 h 5 min" / "35 min". */
+function formatWait(ms: number): string {
+  const totalMin = Math.max(1, Math.ceil(ms / 60000));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
+}
+
+interface SubmitResult {
+  overall: number;
+  skillScores: Record<string, number>;
+  dnaScores: Record<string, number>;
+  level: string | null;
+  levelWeight: number;
+}
 
 function LineContent() {
   const searchParams = useSearchParams();
@@ -22,7 +54,16 @@ function LineContent() {
   const [currentQIndex, setCurrentQIndex] = useState(0);
   // La forma de cada respuesta depende del tipo de su pregunta (índice, booleano o array).
   const [answers, setAnswers] = useState<Answer[]>([]);
-  const [score, setScore] = useState(0);
+  const [result, setResult] = useState<SubmitResult | null>(null);
+  /** El tiempo se agotó y la prueba se envió sola. */
+  const [timedOut, setTimedOut] = useState(false);
+  /** Momento (reloj local) en que se acaba el tiempo, y segundos que quedan. */
+  const [deadline, setDeadline] = useState<number | null>(null);
+  const [remaining, setRemaining] = useState<number | null>(null);
+  /** Evita enviar dos veces (al responder la última pregunta y al agotarse el tiempo a la vez). */
+  const submittingRef = useRef(false);
+  /** Respuestas actuales, para el envío automático desde el temporizador. */
+  const answersRef = useRef<Answer[]>([]);
   // En el modo práctica el usuario elige una tecnología concreta del catálogo (o un stack amplio).
   // Preselección desde enlaces (p. ej. "Practicar en The LINE" del roadmap: ?technology=&level=).
   const [technology, setTechnology] = useState(searchParams.get("technology") ?? "react");
@@ -40,16 +81,39 @@ function LineContent() {
 
   /** Tamaño del examen antes de empezar: 10 con GitHub analizado, 20 sin él (lo decide el servidor). */
   const [examInfo, setExamInfo] = useState<{ examSize: number; hasGithub: boolean } | null>(null);
+  /** Minutos de la prueba: 30 en práctica, o los que fije la vacante. */
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(DEFAULT_TIME_LIMIT_MINUTES);
+  /** Horas entre intentos de una misma tecnología, y cuándo vuelve a estar libre cada una. */
+  const [cooldownHours, setCooldownHours] = useState(24);
+  const [cooldowns, setCooldowns] = useState<Record<string, number>>({});
   const [loadingLabel, setLoadingLabel] = useState("Preparando tu prueba");
 
   useEffect(() => {
-    if (jobId) return; // la prueba de una vacante usa su propio repertorio
-    apiGet<{ available: Record<string, string[]>; examSize: number; hasGithub: boolean }>(
-      "/api/line/catalog"
-    )
+    if (jobId) {
+      // La prueba de una vacante usa su propio repertorio; solo hace falta su tiempo límite
+      // (la vacante es de lectura pública).
+      JobService.getJob(jobId)
+        .then((job) => {
+          const t = job?.examTimeLimitMinutes;
+          if (typeof t === "number" && t > 0) setTimeLimitMinutes(t);
+        })
+        .catch((err) => console.error("[line] no se pudo leer la vacante:", err));
+      return;
+    }
+    apiGet<{
+      available: Record<string, string[]>;
+      examSize: number;
+      hasGithub: boolean;
+      timeLimitMinutes?: number;
+      cooldownHours?: number;
+      cooldowns?: Record<string, number>;
+    }>("/api/line/catalog")
       .then((res) => {
         setAvailable(res.available);
         setExamInfo({ examSize: res.examSize, hasGithub: res.hasGithub });
+        if (res.timeLimitMinutes) setTimeLimitMinutes(res.timeLimitMinutes);
+        if (typeof res.cooldownHours === "number") setCooldownHours(res.cooldownHours);
+        setCooldowns(res.cooldowns ?? {});
       })
       .catch((err) => {
         // Sin catálogo se muestra el listado completo: es preferible a dejar el selector vacío.
@@ -67,6 +131,14 @@ function LineContent() {
   }, [available, technology]);
 
   const levelsForTechnology = available?.[technology] ?? [...LEVELS];
+
+  /** Milisegundos hasta poder volver a intentar la tecnología elegida (0 = disponible). */
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const waitMs = !jobId && cooldowns[technology] ? Math.max(0, cooldowns[technology] - now) : 0;
 
   useEffect(() => {
     if (!levelsForTechnology.includes(difficulty)) setLevel(levelsForTechnology[0] ?? "senior");
@@ -94,17 +166,22 @@ function LineContent() {
     setLoadingLabel("Preparando tu prueba");
     setStatus("loading");
     setError(null);
-    setScore(0);
+    setResult(null);
+    setTimedOut(false);
     setAnswers([]);
+    answersRef.current = [];
+    submittingRef.current = false;
     setCurrentQIndex(0);
     try {
       // Las preguntas se sortean EN SERVIDOR de un repertorio ya existente y llegan SIN la
       // respuesta correcta.
       const payload = jobId ? { jobId } : { technology, level: difficulty };
-      const data = await apiPost<{ sessionId: string; questions: PublicQuestion[] }>(
-        "/api/line/start",
-        payload
-      );
+      const data = await apiPost<{
+        sessionId: string;
+        questions: PublicQuestion[];
+        timeLimitSeconds?: number;
+        timeLimitMinutes?: number;
+      }>("/api/line/start", payload);
 
       if (!data.questions || data.questions.length === 0) {
         setError("No se pudieron generar las preguntas. Inténtalo de nuevo en unos segundos.");
@@ -114,12 +191,27 @@ function LineContent() {
 
       setSessionId(data.sessionId);
       setQuestions(data.questions);
+      // El reloj cuenta en local desde ahora; el servidor tiene su propio vencimiento.
+      const seconds = data.timeLimitSeconds ?? timeLimitMinutes * 60;
+      if (data.timeLimitMinutes) setTimeLimitMinutes(data.timeLimitMinutes);
+      setDeadline(Date.now() + seconds * 1000);
+      setRemaining(seconds);
       setStatus("active");
     } catch (err) {
       console.error("Simulation failed to start:", err);
       // `pool_not_seeded` = esa tecnología/nivel aún no está en el banco precargado. Es un caso
       // esperado y accionable, no un fallo genérico: lo resuelve `npm run seed:questions`.
-      const code = err instanceof Error ? err.message : "";
+      const code = err instanceof ApiError ? err.code : err instanceof Error ? err.message : "";
+      if (code === "rate_limited") {
+        const wait = err instanceof ApiError && err.retryAfterSeconds ? err.retryAfterSeconds * 1000 : 0;
+        if (!jobId && wait) setCooldowns((c) => ({ ...c, [technology]: Date.now() + wait }));
+        setError(
+          `Solo se permite 1 intento cada ${cooldownHours} h ${jobId ? "por vacante" : "por tecnología"}.` +
+            (wait ? ` Podrás volver a intentarlo en ${formatWait(wait)}.` : "")
+        );
+        setStatus("idle");
+        return;
+      }
       // Cada motivo tiene su mensaje: antes todo lo que no fuera "sin banco" se mostraba como un
       // error de conexión, también cuando el problema era la vacante.
       const messages: Record<string, string> = {
@@ -134,27 +226,60 @@ function LineContent() {
     }
   };
 
-  const finishSimulation = async (finalAnswers: Answer[]) => {
-    setLoadingLabel("Calculando tu resultado");
-    setStatus("loading");
-    try {
-      // La corrección y la escritura del DNA ocurren EN SERVIDOR (no falsificable en cliente).
-      const data = await apiPost<{ overall: number }>("/api/line/submit", {
-        sessionId,
-        answers: finalAnswers,
-      });
-      setScore(data.overall);
-      setStatus("finished");
-    } catch (err) {
-      console.error("Failed to submit simulation:", err);
-      setError("No se pudo calcular el resultado. Inténtalo de nuevo.");
-      setStatus("idle");
-    }
-  };
+  const finishSimulation = useCallback(
+    async (finalAnswers: Answer[]) => {
+      if (submittingRef.current) return;
+      submittingRef.current = true;
+      setDeadline(null);
+      setLoadingLabel("Calculando tu resultado");
+      setStatus("loading");
+      try {
+        // La corrección y la escritura del DNA ocurren EN SERVIDOR (no falsificable en cliente).
+        const data = await apiPost<SubmitResult>("/api/line/submit", {
+          sessionId,
+          answers: finalAnswers,
+        });
+        setResult(data);
+        setStatus("finished");
+      } catch (err) {
+        console.error("Failed to submit simulation:", err);
+        const code = err instanceof ApiError ? err.code : "";
+        setError(
+          code === "session_expired"
+            ? "Se acabó el tiempo de la prueba antes de poder enviarla. El intento se contó igual."
+            : "No se pudo calcular el resultado. Inténtalo de nuevo."
+        );
+        setStatus("idle");
+      }
+    },
+    [sessionId]
+  );
+
+  /**
+   * Temporizador. Al llegar a 0 envía lo respondido; las preguntas que faltan van como `null`
+   * (sin responder) y cuentan como falladas. El servidor también lo hace cumplir.
+   */
+  useEffect(() => {
+    if (status !== "active" || deadline === null) return;
+    const tick = () => {
+      const left = Math.ceil((deadline - Date.now()) / 1000);
+      setRemaining(left);
+      if (left <= 0) {
+        const padded: Answer[] = questions.map((_, i) => answersRef.current[i] ?? null);
+        setTimedOut(true);
+        void finishSimulation(padded);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [status, deadline, questions, finishSimulation]);
 
   const handleAnswer = async (answer: Answer) => {
+    if (submittingRef.current) return;
     const updatedAnswers = [...answers, answer];
     setAnswers(updatedAnswers);
+    answersRef.current = updatedAnswers;
 
     if (currentQIndex < questions.length - 1) {
       setCurrentQIndex((i) => i + 1);
@@ -186,11 +311,36 @@ function LineContent() {
         <div className="space-y-4">
           <h2 className="text-5xl font-black italic tracking-tighter">SIMULACIÓN COMPLETADA.</h2>
           <p className="text-gray-500 font-medium">Tus resultados han sido integrados en tu identidad CORE.</p>
+          {timedOut && (
+            <p className="text-brand-orange text-sm font-bold">
+              Se acabó el tiempo: las preguntas sin responder contaron como falladas.
+            </p>
+          )}
         </div>
         <div className="bg-white p-12 rounded-[3rem] shadow-apple border border-gray-50 inline-block">
-          <span className="text-8xl font-black text-brand-blue tracking-tighter italic">{score}%</span>
+          <span className="text-8xl font-black text-brand-blue tracking-tighter italic">{result?.overall ?? 0}%</span>
           <span className="block text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300 mt-4">Puntuación Verificada</span>
         </div>
+        {result && Object.keys(result.dnaScores ?? {}).length > 0 && (
+          <div className="max-w-md mx-auto bg-gray-50 rounded-[2rem] p-6 space-y-3 text-left">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              Tu DNA quedó así
+              {result.level ? ` · nivel ${LEVEL_LABELS[result.level] ?? result.level} ${LEVEL_WEIGHT_LABELS[result.level] ?? ""}` : ""}
+            </p>
+            {Object.entries(result.dnaScores).map(([skill, dna]) => (
+              <div key={skill} className="flex items-center justify-between text-sm">
+                <span className="font-bold">{skill}</span>
+                <span className="text-gray-500">
+                  prueba {result.skillScores[skill] ?? 0}% → DNA <span className="font-bold text-black">{dna}%</span>
+                </span>
+              </div>
+            ))}
+            <p className="text-[11px] text-gray-400 leading-relaxed">
+              El DNA es el promedio de tus últimos 3 intentos, ponderado por nivel: un 100 % en Junior
+              aporta 60, en Mid 80 y en Senior 100.
+            </p>
+          </div>
+        )}
         <div className="pt-10">
           <Button onClick={() => window.location.href = "/dashboard/core"} className="h-16 px-12 bg-black text-white rounded-2xl font-bold uppercase tracking-widest shadow-apple-lg">Ir al CORE</Button>
         </div>
@@ -302,6 +452,21 @@ function LineContent() {
                 </div>
               )}
 
+              <div className="flex items-start gap-3 bg-gray-50 p-4 rounded-2xl text-xs font-medium text-gray-500">
+                <Timer className="h-4 w-4 shrink-0 mt-0.5 text-gray-400" />
+                <p className="leading-relaxed">
+                  Tendrás <span className="font-bold text-black">{timeLimitMinutes} minutos</span>. Al
+                  acabarse el tiempo la prueba se envía sola. Puedes hacer 1 intento cada {cooldownHours} h{" "}
+                  {jobId ? "por vacante" : "por tecnología"}, y el intento cuenta desde que empiezas.
+                </p>
+              </div>
+
+              {waitMs > 0 && (
+                <div className="flex items-center gap-2 text-brand-orange text-xs font-bold bg-brand-orange/5 p-4 rounded-xl">
+                  <AlertCircle className="h-4 w-4 shrink-0" /> Ya hiciste esta tecnología hoy. Disponible en {formatWait(waitMs)}.
+                </div>
+              )}
+
               {error && (
                 <div className="flex items-center gap-2 text-brand-red text-xs font-bold bg-brand-red/5 p-4 rounded-xl">
                   <AlertCircle className="h-4 w-4 shrink-0" /> {error}
@@ -310,6 +475,7 @@ function LineContent() {
 
               <Button
                 onClick={startSimulation}
+                disabled={waitMs > 0}
                 className="w-full h-16 bg-black text-white rounded-2xl text-base font-bold shadow-apple uppercase tracking-widest hover:scale-[1.02] transition-transform"
               >
                 Iniciar Sincronización
@@ -339,8 +505,20 @@ function LineContent() {
                 <Terminal className="h-6 w-6 text-brand-blue" />
                 <h2 className="text-xl font-black italic tracking-tighter uppercase">THE_LINE_ENV_01</h2>
              </div>
-             <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-500">
-               Pregunta {currentQIndex + 1} de {questions.length}
+             <div className="flex items-center gap-6">
+               {remaining !== null && (
+                 <div
+                   className={`flex items-center gap-2 font-mono text-sm font-bold tabular-nums ${
+                     remaining <= 300 ? "text-brand-red" : "text-gray-300"
+                   }`}
+                   aria-label="Tiempo restante"
+                 >
+                   <Timer className="h-4 w-4" /> {formatClock(remaining)}
+                 </div>
+               )}
+               <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-500">
+                 Pregunta {currentQIndex + 1} de {questions.length}
+               </div>
              </div>
           </div>
 

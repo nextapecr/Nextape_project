@@ -126,8 +126,19 @@ blanca**, no borrando campos: un tipo nuevo con clave nueva no se filtra por des
 **Flujo:** `/api/line/start` lee el repertorio, sortea con `pickRandomQuestions` (estratificado por
 `(tag, tipo)` para que los scores sean comparables entre candidatos), crea `line_sessions` (con las claves,
 server-only) y devuelve `PublicQuestion[]`. `/api/line/submit` valida la forma de cada respuesta, corrige,
-escribe el DNA **en transacción** (`max(actual, nuevo)` por skill), registra el intento y **borra la sesión**
-(un solo uso).
+escribe el DNA **en transacción**, registra el intento y **borra la sesión** (un solo uso).
+
+**Política de intentos (2026-10, H1 de la auditoría)** — [`line-policy.ts`](../src/lib/server/line-policy.ts):
+- **1 intento cada 24 h** por tecnología (sin importar el nivel) o por vacante → `429 rate_limited`. Se consume
+  en `start`, con el repertorio ya validado: abandonar una prueba empezada gasta el intento.
+- **Tiempo:** 30 min en práctica; en una vacante, `job.examTimeLimitMinutes` (5–480). La sesión guarda
+  `expiresAt`; `submit` rechaza envíos con más de 90 s de retraso (`410 session_expired`). Al llegar a 0 el
+  cliente envía solo, con `null` en las no respondidas (cuentan como falladas).
+- **DNA = promedio de los últimos 3 intentos por skill, ponderados por nivel** (junior ×0.6, mid ×0.8,
+  senior ×1). La nota de la prueba se sigue mostrando en %. En vacantes se pondera con el nivel real de las
+  preguntas de cada skill (`covered[].level`).
+- **Variedad:** se priorizan las preguntas que el usuario no ha visto (`line_seen`, por huella del enunciado) y
+  las opciones se barajan en cada sesión (salvo si alguna depende de su posición, p. ej. "Todas las anteriores").
 
 **Tamaño del examen:** **10** con GitHub verificado, **20** sin él; `job.examQuestionCount` del reclutador
 lo sobreescribe, acotado a `[10, 30]`.
@@ -224,7 +235,7 @@ marcado `@deprecated` y **solo lo importa el Dev UI de Genkit**: es código muer
 
 | Endpoint | Qué hace | Auth | Rate limit |
 |---|---|---|---|
-| `POST /api/line/start` | Sortea preguntas, crea sesión, devuelve `PublicQuestion[]` | ID token | ❌ |
+| `POST /api/line/start` | Sortea preguntas, crea sesión, devuelve `PublicQuestion[]` | ID token | ✅ 1 / 24 h por tecnología o vacante |
 | `POST /api/line/submit` | Corrige, escribe DNA + intento + candidatura | ID token + dueño de la sesión | ❌ |
 | `GET /api/line/catalog` | Combinaciones disponibles + `examSize` (nunca preguntas) | ID token | ❌ |
 | `POST /api/jobs/assessment` | Compone el repertorio de una vacante | ID token + dueño del job | ❌ |
@@ -295,9 +306,8 @@ bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.j
 
 - **H3 — `jobs` valida los campos server-only en `update` pero NO en `create`.** Se puede crear una vacante
   con `applicantsCount` o `assessmentReady` arbitrarios desde el navegador.
-- **H4 — `/api/line/start` y `/api/line/submit` no tienen rate limit**, y cada `start` **escribe un documento**
-  con claves de respuesta. Sumado a que **`line_sessions` no tiene TTL** (solo se borra al enviar), las
-  sesiones abandonadas se acumulan indefinidamente.
+- **H4 — ✅ Resuelto (2026-10):** `/api/line/start` limita a 1 intento cada 24 h por tecnología o vacante, y
+  las sesiones llevan `expireAt` para una política TTL (pendiente de activar, ver `docs/DEPLOYMENT.md`).
 - **H5 — El estado vacío del roadmap es inalcanzable:** el error `ROADMAP_REQUIRES_LINE_EVALUATION` lo captura
   un `catch` genérico, así que quien no ha hecho The LINE ve un error genérico en vez del CTA para hacerla.
 - **H6 — Agujero de rutas en el escalón superior:** un usuario con nivel inferido `senior` construye

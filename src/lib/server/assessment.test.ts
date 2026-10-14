@@ -12,6 +12,7 @@ import {
   countByType,
   LEVELS,
   SPECIALTY_STACKS,
+  shuffleQuestionOptions,
 } from "./assessment";
 import type {
   MultipleChoiceQuestion,
@@ -388,5 +389,91 @@ describe("SPECIALTY_STACKS", () => {
     expect(SPECIALTY_STACKS.frontend).toContain("react");
     expect(SPECIALTY_STACKS.backend).toContain("postgresql");
     expect(SPECIALTY_STACKS.devops).toContain("kubernetes");
+  });
+});
+
+describe("H1 — sin responder, preferencia por lo no visto y opciones barajadas", () => {
+  it("acepta null como 'sin responder' y lo corrige como fallada", () => {
+    const questions = [mc("1", "react", 3), tf("2", "react", false)];
+    expect(isValidAnswerSet(questions, [3, null])).toBe(true);
+    expect(isValidAnswerSet(questions, [null, null])).toBe(true);
+    expect(gradeAnswers(questions, [3, null]).overall).toBe(50);
+  });
+
+  it("prioriza las preguntas que el usuario no ha visto", () => {
+    const pool = Array.from({ length: 25 }, (_, i) => mc(String(i), "react", 0, `q${i}`));
+    const seen = new Set(pool.slice(0, 20).map((q) => q.id));
+    // Las 20 primeras ya se vieron (rango = su índice); las 5 últimas nunca.
+    const recency = (q: Question) => (seen.has(q.id) ? Number(q.id) : undefined);
+    for (let run = 0; run < 20; run++) {
+      const picked = pickRandomQuestions(pool, 10, recency);
+      const ids = new Set(picked.map((q) => q.id));
+      for (const fresh of ["20", "21", "22", "23", "24"]) expect(ids.has(fresh)).toBe(true);
+      // Las 5 restantes son las vistas hace más tiempo (ids 0–4).
+      const old = picked.filter((q) => seen.has(q.id)).map((q) => Number(q.id));
+      expect(Math.max(...old)).toBeLessThan(5);
+    }
+  });
+
+  it("sin historial sigue sorteando igual que antes", () => {
+    const pool = Array.from({ length: 25 }, (_, i) => mc(String(i), "react", 0, `q${i}`));
+    expect(pickRandomQuestions(pool, 20)).toHaveLength(20);
+  });
+});
+
+describe("shuffleQuestionOptions", () => {
+  const answerText = (q: Question): unknown => {
+    switch (q.type) {
+      case "multiple_choice":
+      case "code_output":
+        return q.options[q.correctIndex];
+      case "multi_select":
+        return q.correctIndexes.map((i) => q.options[i]).sort();
+      case "ordering":
+        return q.correctOrder.map((i) => q.items[i]);
+      case "true_false":
+        return q.correct;
+    }
+  };
+
+  it("cambia el orden pero la respuesta correcta sigue siendo la misma", () => {
+    const originals: Question[] = [
+      mc("1", "react", 2),
+      ms("2", "react", [0, 3]),
+      ord("3", "react", [2, 0, 3, 1]),
+      tf("4", "react", true),
+    ];
+    let moved = false;
+    for (let run = 0; run < 50; run++) {
+      for (const q of originals) {
+        const s = shuffleQuestionOptions(q);
+        expect(answerText(s)).toEqual(answerText(q));
+        if (s.type === "multiple_choice" && q.type === "multiple_choice" && s.correctIndex !== q.correctIndex) {
+          moved = true;
+        }
+      }
+    }
+    expect(moved).toBe(true);
+  });
+
+  it("corregir la copia barajada da la nota correcta", () => {
+    const q = shuffleQuestionOptions(ord("1", "react", [2, 0, 3, 1]));
+    if (q.type !== "ordering") throw new Error("tipo");
+    expect(gradeQuestion(q, q.correctOrder)).toBe(1);
+  });
+
+  it("no baraja si una opción depende de su posición", () => {
+    const q: MultipleChoiceQuestion = {
+      ...mc("1", "react", 3),
+      options: ["useMemo", "useEffect", "useRef", "Todas las anteriores"],
+    };
+    for (let run = 0; run < 20; run++) expect(shuffleQuestionOptions(q)).toBe(q);
+  });
+
+  it("no muta la pregunta original", () => {
+    const q = mc("1", "react", 2);
+    const before = JSON.stringify(q);
+    shuffleQuestionOptions(q);
+    expect(JSON.stringify(q)).toBe(before);
   });
 });

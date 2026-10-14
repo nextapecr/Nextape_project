@@ -93,7 +93,10 @@ firebase deploy --only firestore:rules,storage:rules   # usa .firebaserc → stu
 - **Tamaño de función**: `firebase-admin` + `genkit` son pesados; si Netlify se queja del tamaño de la
   función, avísame (hay opciones para aligerar).
 - **Sesiones huérfanas**: `line_sessions` se borra al enviar; si un usuario abandona a mitad, el doc queda.
-  Opcional: activar una **TTL policy** de Firestore sobre `createdAt` para limpiarlas.
+  Cada sesión lleva `expireAt` (vencimiento + 1 día). Para que Firestore las borre solo, activa una **TTL
+  policy** sobre ese campo (una sola vez):
+  `gcloud firestore fields ttls update expireAt --collection-group=line_sessions --enable-ttl`
+  ⚠️ No uses `createdAt`: un TTL borra el documento cuando su fecha ya pasó, o sea, al instante.
 - **`apphosting.yaml`** y la sección `hosting` de `firebase.json` son restos de Firebase Hosting; con
   Netlify no se usan y pueden eliminarse para evitar confusión.
 - **Ranking de candidatos (A4, resuelto)**: tomar The LINE de una vacante ahora, además de actualizar el
