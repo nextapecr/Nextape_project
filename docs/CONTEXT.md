@@ -202,7 +202,8 @@ marcado `@deprecated` y **solo lo importa el Dev UI de Genkit**: es código muer
   Los seeds **validan antes de escribir** que los pesos de cada ruta sumen 1.0 (±0.001), que cada id de
   `skillWeights` exista en el catálogo y que cada prerequisito exista.
 - **Gate:** sin ninguna entrada en el DNA lanza `ROADMAP_REQUIRES_LINE_EVALUATION` — The LINE es obligatorio.
-- **Resolución del score, en cascada:** `dna[skill.id]` (`line`) → proxy de GitHub por dimensión (`github`)
+- **Resolución del score, en cascada:** The LINE (`line`: el id de la skill o, vía
+  [`skill-technology-map.ts`](../src/lib/skill-technology-map.ts), la mejor nota de sus tecnologías relacionadas) → proxy de GitHub por dimensión (`github`)
   → promedio de la categoría (`category-inferred`) → `null` (`unknown`, **no** "gap con 0").
 - **Orden:** topológico de Kahn (nivel topológico primario), `rawPriority` como desempate dentro del nivel.
 - **Estado por skill:** `unknown` → `completed` → `blocked` (prerequisito no dominado) → `gap`.
@@ -289,15 +290,14 @@ bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.j
 
 ### 🔴 Graves
 
-- **H1 — Los vocabularios de The LINE y del roadmap están desacoplados.** El motor busca `dna[skill.id]`,
-  pero las claves del DNA son ids de tecnología (`react`, `node.js`, `typescript`) y los del catálogo son
-  slugs conceptuales (`typescript-basics`, `unit-testing`, `api-design-rest`). **De las 112 skills del
-  catálogo solo 2 (`postgresql`, `terraform`) coinciden con alguna de las 55 tecnologías —y en la práctica
-  solo `postgresql`, porque `terraform` únicamente colisiona si tiene banco sembrado—. No existe capa de
-  mapeo.** Consecuencia real: casi todo cae a `category-inferred` y de ahí a `unknown`; `gap` queda vacío,
-  no hay "siguiente paso", el progreso sale 0, y el gate "The LINE obligatorio" se pasa sin que ninguna
-  medición real alimente el plan. `docs/TECH_DEBT.md` (A10) registra una versión **más estrecha** del
-  problema (resolución de alias); el desajuste real es **taxonómico** y no está documentado en ningún sitio.
+- **H1 — ✅ Resuelto (2026-10): los vocabularios de The LINE y del roadmap ya están conectados.** Antes el motor
+  buscaba `dna[skill.id]` y los ids del catálogo (`react-fundamentals`) nunca coinciden con los del DNA (`react`):
+  solo 2 de 112 skills coincidían. Ahora [`src/lib/skill-technology-map.ts`](../src/lib/skill-technology-map.ts)
+  dice qué tecnologías de The LINE evidencian cada skill (62 de 112 conectadas; el resto no tiene ninguna tecnología
+  que la mida y queda como `unknown`). La nota es la **mejor** de las tecnologías relacionadas, y como el DNA está
+  ponderado por nivel, un examen junior no da por dominada una skill avanzada. También resuelve alias (A10) y el
+  botón "Practicar" lleva a la tecnología relacionada que tenga banco. Con los bancos de hoy (13 tecnologías),
+  20 skills del roadmap ya se alimentan de The LINE; cada tecnología nueva que se siembre suma las suyas.
 - **H2 — `.env.example` está incompleto.** Falta `GITHUB_TOKEN` (y su correspondiente `GROQ_API_KEY`/`GROQ_MODEL`).
   Un despliegue que siga la plantilla al pie de la letra deja `/api/github/*` roto
   (IA lanza → 500, pero fallback determinístico mantiene funcionalidad básica) y el motor cae a 60 req/h anónimas **para toda la plataforma**.

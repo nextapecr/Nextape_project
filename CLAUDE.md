@@ -169,8 +169,8 @@ necesitan el emulador y **CI no lo arranca**) · `typecheck` falla **solo en loc
 nativas no instaladas (`tree-sitter`, `@genkit-ai/compat-oai`); en CI pasa.
 
 **Pendiente destacado** (detalle en [`docs/CONTEXT.md`](./docs/CONTEXT.md) §9 y [`docs/TECH_DEBT.md`](./docs/TECH_DEBT.md)):
-- 🔴 **Los vocabularios de The LINE y del roadmap están desacoplados** (ids de tecnología vs. slugs del
-  catálogo: solo coinciden 2 de 112). El roadmap apenas se alimenta del DNA real.
+- ✅ Roadmap y The LINE conectados (`src/lib/skill-technology-map.ts`): 62 de 112 skills del catálogo se miden
+  con tecnologías de The LINE. Al añadir una skill o una tecnología, revisa ese mapa.
 - 🔴 **`.env.example` no documenta `GITHUB_TOKEN`, `MISTRAL_API_KEY` ni `NVIDIA_API_KEY`**: un despliegue
   que la siga deja `/api/github/*` roto.
 - 🟠 `jobs` valida campos server-only en `update` pero no en `create`. (`/api/line/start` ya tiene límite de
