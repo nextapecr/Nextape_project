@@ -52,7 +52,7 @@ Ver detalle en [`CHANGELOG_FIXES.md`](./CHANGELOG_FIXES.md).
 
 | # | Problema | Acción |
 |---|---|---|
-| C1 | ✅ **Resuelto.** Migrado a **Groq** (`genkitx-groq`, `llama-3.3-70b-versatile`) por coste. Modelo centralizado en `genkit.ts` (`GROQ_MODEL`). `blueprint.md` (histórico) aún menciona Gemini. |
+| C1 | ✅ **Resuelto.** Migrado a **Groq** por coste; hoy con GPT-OSS (`gpt-oss-120b` → `gpt-oss-20b`), porque Llama 3.3 salió del plan gratuito. Modelo centralizado en `genkit.ts` (`GROQ_MODEL`). `blueprint.md` (histórico) aún menciona Gemini. |
 | C2 | Blueprint dice `users` con lectura pública para reclutadores; la regla es **owner-only** → rompe el journey de reclutador. | Decidir modelo de visibilidad de candidatos y alinear reglas + blueprint. |
 | C3 | Umbrales de "grade" divergen entre `core` y `profile`. | Extraer a una única función util de grading. |
 | C4 | `company` hardcodeado a `"Empresa NEXTAPE"` en toda vacante; telemetría falsa ("12ms/Encrypted"); `totalApplicants:0`; fallbacks de roadmap/stackMap hardcodeados. | Sustituir por datos reales / marcar claramente como demo. |

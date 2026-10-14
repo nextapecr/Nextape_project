@@ -7,10 +7,13 @@ agentes de IA + humanos). Mantener actualizada cuando cambie el código.
 
 | Documento | Contenido |
 |---|---|
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Visión global: stack, patrón (monolito modular), estructura de carpetas, rutas, journeys, comandos. **Empieza aquí.** |
+| [CONTEXT.md](./CONTEXT.md) | **Empieza aquí.** Mapa del sistema y su estado real, verificado contra el código: subsistemas, datos, endpoints y hallazgos pendientes. |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Visión global: stack, patrón (monolito modular), estructura de carpetas, rutas, journeys, comandos. |
+| [DECISIONS.md](./DECISIONS.md) | Decisiones técnicas y por qué (proveedor de IA, OAuth de GitHub, scoring de The LINE…). |
+| [ROADMAP_DETERMINISTIC.md](./ROADMAP_DETERMINISTIC.md) | Algoritmos del roadmap: resolución de notas, conexión con el DNA, prioridad y orden. |
 | [DATABASE.md](./DATABASE.md) | Modelo de datos Firestore: colecciones, esquemas, relaciones, índices, reglas de negocio de datos. |
 | [SECURITY.md](./SECURITY.md) | Auth, reglas de Firestore/Storage, secretos, superficie de ataque y checklist de seguridad. |
-| [BACKEND_AI.md](./BACKEND_AI.md) | Server actions, servicios y flows de Genkit/Groq. Frontera cliente/servidor. |
+| [BACKEND_AI.md](./BACKEND_AI.md) | Servicios, route handlers y flows de Genkit con Groq (GPT-OSS). Frontera cliente/servidor. |
 | [FRONTEND.md](./FRONTEND.md) | Rutas, layout/navegación, sistema de diseño, estado, código muerto, bugs de UI. |
 | [TECH_DEBT.md](./TECH_DEBT.md) | Backlog consolidado de inconsistencias/bugs por prioridad (🔴🟠🟡). |
 | [PRODUCTION_READINESS.md](./PRODUCTION_READINESS.md) | Checklist por fases para llevar a producción. |

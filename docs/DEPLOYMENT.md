@@ -28,14 +28,24 @@ Da a los route handlers permiso para escribir el DNA de forma segura.
 
 ### 2) API Key de Groq → variable en Netlify (OBLIGATORIO para la IA)
 La usa la precarga del banco de preguntas (`npm run seed:questions`); The LINE y las pruebas de vacantes ya no
-dependen de ella en tiempo de petición. Groq es el proveedor de IA del proyecto
-(modelos open-source tipo Llama), elegido por su bajo coste frente a Gemini.
+dependen de ella en tiempo de petición; también el feedback del análisis de GitHub (si falta, ese feedback
+cae a un texto determinístico). Groq es el único proveedor de IA del proyecto (modelos GPT-OSS).
 
 1. Consíguela en **Groq Console** (https://console.groq.com/keys).
 2. Netlify → Environment variables → añade:
    - **Key:** `GROQ_API_KEY`
    - **Value:** tu API key.
-   - (Opcional) `GROQ_MODEL` para cambiar el modelo por defecto (`groq/llama-3.3-70b-versatile`).
+   - (Opcional) `GROQ_MODEL` para cambiar el modelo por defecto (`groq/openai/gpt-oss-120b`).
+
+### 2b) Clave de cifrado de tokens de GitHub → variable en Netlify (OBLIGATORIO para GitHub)
+Los tokens OAuth de GitHub de cada usuario se guardan cifrados (AES-256-GCM). Sin esta clave, "Conectar
+GitHub" devuelve 500.
+
+1. Genera una clave: `openssl rand -hex 32` (64 caracteres hexadecimales).
+2. Netlify → Environment variables → `TOKEN_ENCRYPTION_KEY` = esa clave.
+3. ⚠️ No la cambies después: los tokens ya guardados dejarían de poder descifrarse.
+4. (Recomendado) `GITHUB_CLIENT_ID` y `GITHUB_CLIENT_SECRET` de la OAuth App de GitHub, para revocar el token
+   en GitHub cuando el usuario desconecta. Lista completa de variables: `.env.example`.
 
 ### 3) Config web de Firebase → variables en Netlify (recomendado)
 Opcional (hay fallback en `client.ts`), pero recomendable para no hardcodear el proyecto:

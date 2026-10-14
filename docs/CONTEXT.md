@@ -24,8 +24,8 @@
    pregunta es una atribución suya, no una cita verificada. Por eso nunca se envía al cliente.
 3. **La IA ya NO corre en tiempo de petición.** Las preguntas se **precargan** con un script y en runtime
    solo se sortean. Ver §3.1.
-4. **Hay dos proveedores de IA**, no uno: Groq GPT-OSS (principal, 120B→20B fallback) para generación
-   de preguntas y feedback de GitHub. Ver §6.
+4. **Hay un solo proveedor de IA: Groq** (GPT-OSS 120B, con fallback a 20B y, si todo falla, un resultado
+   determinístico). NVIDIA y Mistral se descartaron (`docs/DECISIONS.md`). Ver §6.
 5. **El experimento de Cloudflare se abandonó.** El despliegue real es **Netlify**. Queda configuración
    muerta en el repo (§7).
 
@@ -246,7 +246,7 @@ marcado `@deprecated` y **solo lo importa el Dev UI de Genkit**: es código muer
 
 ---
 
-## 6. IA — tres proveedores
+## 6. IA — un proveedor (Groq)
 
 | Proveedor | Para qué | Variables |
 |---|---|---|
@@ -316,8 +316,8 @@ bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.j
   (un senior recibe la ruta junior→mid); en los otros 4 roles, banner de error.
 - **H7 — `precision` se calcula y se tira:** la página solo lee `.items`, así que el mensaje "conecta GitHub
   para más precisión" que promete el tipo no se muestra jamás.
-- **H8 — `docs/ROADMAP_DETERMINISTIC.md` no existe** pese a estar referenciado en 5 archivos como la única
-  documentación de los algoritmos.
+- **H8 — ✅ Resuelto (2026-10):** [`docs/ROADMAP_DETERMINISTIC.md`](./ROADMAP_DETERMINISTIC.md) documenta los
+  algoritmos del roadmap.
 
 ### 🟡 Menores
 

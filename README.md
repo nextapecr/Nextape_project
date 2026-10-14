@@ -1,35 +1,49 @@
-# NEXTAPE - Developer Hiring Reimagined
+# NEXTAPE — Contratación técnica, reinventada
 
-NEXTAPE es una plataforma de evaluación técnica de élite que utiliza IA para validar el "Technical DNA" de los desarrolladores.
+Plataforma de evaluación técnica que construye el **"DNA técnico verificado"** de cada desarrollador y lo
+conecta con vacantes. Dos roles: `developer` y `recruiter`.
 
-## 🚀 Migración al Repositorio Oficial (Rama: migration)
+- **The LINE** — examen por tecnología y nivel (junior / mid / senior), o por vacante. Preguntas
+  precargadas, corrección en servidor, 1 intento cada 24 h y tiempo límite. **Única fuente del DNA.**
+- **CORE** — el DNA: una nota por tecnología (promedio de los últimos 3 intentos, ponderado por nivel).
+- **GitHub** — analiza el código real de tus repositorios (AST con tree-sitter) en 5 dimensiones de ingeniería.
+- **Roadmap** — plan de mejora determinista hacia un rol y nivel, alimentado por The LINE y GitHub.
+- **Vacantes y candidatos** — el reclutador publica, se compone la prueba y ve a los candidatos rankeados.
 
-Si tienes problemas de permisos (Error 403) al subir el código, sigue estos pasos:
+## Stack
 
-### 1. Ejecutar el script automatizado
+Next.js 15 (App Router) · React 19 · TypeScript · Tailwind + shadcn/ui · Firebase (Auth, Firestore, Storage)
++ Firebase Admin SDK en los route handlers · Genkit + **Groq** (GPT-OSS) solo para precargar preguntas y el
+feedback de GitHub · Hosting en **Netlify**.
+
+## Arrancar en local
+
 ```bash
-chmod +x migration.sh
-./migration.sh
+npm install
+cp .env.example .env.local   # y rellena los valores (ver comentarios del archivo)
+npm run dev                  # http://localhost:9002
 ```
 
-### 2. Uso de Personal Access Token (PAT)
-GitHub ya no acepta contraseñas normales por terminal para operaciones de Git. 
-1. Ve a **GitHub Settings** > **Developer Settings** > **Personal Access Tokens**.
-2. Genera un nuevo token con el permiso `repo` activado.
-3. Copia el token y úsalo como **contraseña** cuando la terminal te lo pida.
+Para probar The LINE sin esperar 24 h entre intentos, pon `LINE_ATTEMPT_COOLDOWN_HOURS=0` en tu `.env.local`.
 
-### 3. Comandos Manuales de Limpieza
-Si sigues viendo que Git intenta usar una cuenta antigua:
-```bash
-git config --global --unset credential.helper
-git credential-cache exit
-```
+## Comandos
 
-## 🏗️ Arquitectura
-- **Capa Frontend**: `src/app/` (Next.js 15 App Router)
-- **Dashboard Dual**: Rutas protegidas con lógica específica para `developer` y `recruiter`.
-- **The LINE**: Motor de simulación técnica basado en Genkit + Gemini 1.5 Flash.
-- **CORE Identity**: Identidad técnica persistida en Firestore que promedia los últimos 3 intentos.
+| Comando | Para qué |
+|---|---|
+| `npm run dev` | Servidor de desarrollo |
+| `npm run typecheck` · `npm run lint` · `npm test` | Lo que valida CI antes de aceptar un cambio |
+| `npm run build` | Build de producción |
+| `npm run inventory:pools` | (Solo lectura) qué bancos de preguntas hay en la base de datos |
+| `npm run seed:questions -- --dry-run` | Plan de precarga del banco de The LINE (escribe solo con `--yes`) |
 
-## 🛠️ Configuración
-Configura tu `.env` con las credenciales de Firebase y la API Key de Google AI (Gemini).
+## Cómo trabajamos
+
+- `main` es la versión en producción. Nadie trabaja directo en `main`: cada uno en su rama y Pull Request.
+- Antes de pedir revisión: `npm run typecheck`, `npm run lint` y `npm test` en verde.
+
+## Documentación
+
+- [`CLAUDE.md`](./CLAUDE.md) — reglas del proyecto (también para agentes de IA).
+- [`docs/CONTEXT.md`](./docs/CONTEXT.md) — mapa del sistema y su estado real. **Empieza aquí.**
+- [`docs/README.md`](./docs/README.md) — índice del resto: arquitectura, base de datos, seguridad, despliegue,
+  decisiones y deuda técnica.
