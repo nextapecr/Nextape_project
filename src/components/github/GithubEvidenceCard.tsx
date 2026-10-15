@@ -303,6 +303,21 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
               return;
             }
             
+            // Repo not found or no access: translate to Spanish
+            if (err.code === "repo_not_found_or_no_access") {
+              failed.push({
+                fullName: repo.fullName,
+                errorCode: err.code,
+                message: "Repositorio no encontrado o sin acceso", // Translate to Spanish
+                httpStatus: err.httpStatus,
+                stage: err.stage,
+                retryable: false,
+              });
+              done += 1;
+              setRun((prev) => (prev ? { ...prev, done, failed: [...failed] } : prev));
+              return;
+            }
+            
             if (err.code === "GITHUB_RATE_LIMITED" || err.message === "rate_limited") {
               rateLimited = true;
             }

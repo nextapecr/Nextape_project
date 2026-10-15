@@ -90,8 +90,8 @@ export async function POST(req: NextRequest) {
       if (error instanceof Error && 'httpStatus' in error && (error as any).httpStatus === 404) {
         return NextResponse.json(
           {
-            error: "repo_not_found",
-            message: "Repository not found or no access. It may be private or doesn't exist.",
+            error: "repo_not_found_or_no_access",
+            message: "Repository not found or no access",
             repoFullName: fullName,
           },
           { status: 404 }
