@@ -38,6 +38,11 @@ export interface JobOpportunity {
    */
   examQuestionCount?: number | null;
   /**
+   * Minutos que tiene cada candidato para responder la prueba, fijados por el reclutador (5–480).
+   * Si falta, 30 (lo mismo que una práctica de The LINE). Lo aplica el servidor.
+   */
+  examTimeLimitMinutes?: number | null;
+  /**
    * Vacante abierta a candidaturas. `false` = archivada: deja de listarse para developers y no
    * admite nuevas pruebas, pero se conserva junto con sus candidatos.
    * Si falta, se considera activa (vacantes creadas antes de este campo).

@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb, verifyRequestUid } from "@/lib/firebase/admin";
 import { examSizeFor } from "@/lib/server/assessment";
 import { hasGithubEvidence } from "@/lib/server/github-evidence";
+import {
+  attemptCooldownHours,
+  PRACTICE_SCOPE_PREFIX,
+  PRACTICE_TIME_LIMIT_MINUTES,
+} from "@/lib/server/line-policy";
+import { RATE_LIMIT_COLLECTION } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -15,6 +21,9 @@ export const runtime = "nodejs";
  *
  * Solo lee metadatos (clave, nivel, número de preguntas). **Nunca** devuelve preguntas: el
  * repertorio contiene las claves de respuesta y es server-only.
+ *
+ * También devuelve `cooldowns` (tecnología → epoch ms en que se puede volver a intentar) para que
+ * la UI avise ANTES de empezar en vez de devolver un 429 al pulsar el botón.
  */
 export async function GET(req: NextRequest) {
   const uid = await verifyRequestUid(req.headers.get("authorization"));
@@ -23,10 +32,26 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [snap, githubSnap] = await Promise.all([
+    const cooldownHours = attemptCooldownHours();
+    const [snap, githubSnap, limitsSnap] = await Promise.all([
       adminDb().collection("line_question_pools").get(),
       adminDb().collection("github_evidence").doc(uid).get(),
+      adminDb().collection(RATE_LIMIT_COLLECTION).where("uid", "==", uid).get(),
     ]);
+
+    /** subject → momento (epoch ms) en que vuelve a estar disponible. */
+    const cooldowns: Record<string, number> = {};
+    const now = Date.now();
+    const windowMs = cooldownHours * 60 * 60 * 1000;
+    limitsSnap.forEach((doc) => {
+      const data = doc.data();
+      const scope = String(data.scope ?? "");
+      if (!scope.startsWith(PRACTICE_SCOPE_PREFIX) || windowMs <= 0) return;
+      const retryAt = Number(data.windowStart) + windowMs;
+      if (Number(data.count) >= 1 && retryAt > now) {
+        cooldowns[scope.slice(PRACTICE_SCOPE_PREFIX.length)] = retryAt;
+      }
+    });
     // La UI explica el tamaño del examen ANTES de empezar: 10 con GitHub analizado, 20 sin él.
     const hasGithub = hasGithubEvidence(githubSnap.data());
 
@@ -48,6 +73,9 @@ export async function GET(req: NextRequest) {
       available,
       hasGithub,
       examSize: examSizeFor({ hasGithubEvidence: hasGithub }),
+      timeLimitMinutes: PRACTICE_TIME_LIMIT_MINUTES,
+      cooldownHours,
+      cooldowns,
     });
   } catch (err) {
     console.error("[line/catalog] error:", err);

@@ -17,9 +17,8 @@ genera **roadmaps** de mejora y calcula **compatibilidad** con vacantes. Dos rol
 | Framework | **Next.js 15.5** (App Router, RSC) + **React 19** |
 | Lenguaje | TypeScript 5 (`strict: true`, alias `@/* → src/*`) |
 | UI | **shadcn/ui** (Radix + CVA) + **Tailwind CSS 3** |
-| 3D | three.js + `@react-three/fiber` + `@react-three/drei` (`public/models/laptop.glb`) |
 | Auth/DB/Storage | **Firebase** Web SDK v11 (Auth, Firestore, Storage) |
-| IA | **Genkit 1.28** + **`genkitx-groq`** — proveedor **Groq**, modelo `llama-3.3-70b-versatile` (open-source, bajo coste) |
+| IA | **Genkit 1.28** + **`genkitx-groq`** — proveedor **Groq**, modelo `groq/openai/gpt-oss-120b` (fallback automático a `gpt-oss-20b`) |
 | Formularios | react-hook-form + zod + `@hookform/resolvers` |
 | Gráficos | recharts |
 | Hosting | **Netlify** (`netlify.toml` + `@netlify/plugin-nextjs`); route handlers `/api/*` = Netlify Functions. Firebase solo Auth+Firestore. Ver [DEPLOYMENT](./DEPLOYMENT.md). |
@@ -51,7 +50,7 @@ El cómputo del Roadmap (`src/lib/roadmap-engine.ts`) se ejecuta **directamente 
                │ read (rules)                          │ POST /api/* (Bearer token)
                ▼                                        ▼
         Firebase (Auth/Firestore)          Route handlers (Node) ── Admin SDK ─► Firestore
-                                            └── ai/flows (Genkit) ─► Groq (Llama 3.3 70b)
+                                            └── ai/flows (Genkit) ─► Groq (GPT-OSS 120B/20B)
                ▲ writes de confianza (DNA, intentos, claves) SOLO desde aquí ─────┘
 ```
 

@@ -15,12 +15,14 @@
  * Ver docs/ARCHITECTURE.md §Excepciones al patrón server-trust.
  *
  * Algoritmos implementados:
- *   1. Score resolution  (§2.2): The LINE > GitHub Engine proxy > 0
+ *   1. Score resolution  (§2.2): The LINE (directa o por tecnologías relacionadas, ver
+ *      `src/lib/skill-technology-map.ts`) > GitHub Engine proxy > promedio de categoría > sin datos
  *   2. Prioridad         (§2.3): rawPriority = (deficit/100) × routeWeight → nivel discreto
  *   3. Kahn's topo sort  (§2.4): prerequisitos antes de sus dependientes, prioridad dentro del nivel
  */
 
 import { SENIORITY_THRESHOLDS } from "@/services/github-engine/role-mapping/role-weights";
+import { lineEvidenceForSkill } from "@/lib/skill-technology-map";
 import type {
   ComputeRoadmapInput,
   ComputeRoadmapResult,
@@ -56,7 +58,7 @@ function calculateCategoryAverages(
 
   // Agrupar scores de THE LINE por categoría
   for (const skill of catalog) {
-    const score = dna[skill.id] ?? dna[skill.id.toLowerCase()];
+    const score = lineEvidenceForSkill(skill.id, dna)?.score;
     if (score !== undefined && typeof score === "number") {
       if (!categoryScores.has(skill.category)) {
         categoryScores.set(skill.category, []);
@@ -95,11 +97,13 @@ function resolveScore(
   dna: Record<string, number>,
   githubScores: ComputeRoadmapInput["githubScores"],
   categoryAverages: Map<string, number>
-): { score: number | null; source: ScoreSource } {
-  // 1. The LINE — evidencia directa
-  const lineScore = dna[skill.id] ?? dna[skill.id.toLowerCase()];
-  if (lineScore !== undefined && typeof lineScore === "number") {
-    return { score: lineScore, source: "line" };
+): { score: number | null; source: ScoreSource; technologies?: string[] } {
+  // 1. The LINE — evidencia directa (id de la skill) o de las tecnologías que la evidencian.
+  //    Antes solo se buscaba `dna[skill.id]`, y los ids del catálogo ("react-fundamentals") nunca
+  //    coinciden con los del DNA ("react"): el roadmap ignoraba casi todo The LINE (H6).
+  const line = lineEvidenceForSkill(skill.id, dna);
+  if (line) {
+    return { score: line.score, source: "line", technologies: line.technologies };
   }
 
   // 2. GitHub Engine — proxy por dimensión
@@ -295,7 +299,7 @@ export function computeRoadmap(input: ComputeRoadmapInput): ComputeRoadmapResult
   // Construir mapas de prerequisitos y dominio
   const prereqMap = new Map<string, string[]>();
   const dominated = new Set<string>();
-  const scoreMap = new Map<string, { score: number | null; source: ScoreSource }>();
+  const scoreMap = new Map<string, { score: number | null; source: ScoreSource; technologies?: string[] }>();
 
   for (const skill of routeSkills) {
     prereqMap.set(skill.id, skill.prerequisites);
@@ -330,7 +334,7 @@ export function computeRoadmap(input: ComputeRoadmapInput): ComputeRoadmapResult
 
   const items: RoadmapItem[] = sortedIds.map((skillId, idx) => {
     const skill = skillById.get(skillId)!;
-    const { score, source } = scoreMap.get(skillId)!;
+    const { score, source, technologies } = scoreMap.get(skillId)!;
     const weight = route.skillWeights[skillId] ?? 0;
     const deficit = deficitMap.get(skillId)!;
     const priority = calcPriority(deficit, weight);
@@ -372,6 +376,7 @@ export function computeRoadmap(input: ComputeRoadmapInput): ComputeRoadmapResult
       blockedBy,
       prerequisites: skill.prerequisites,
       scoreSource: source,
+      ...(technologies?.length ? { evidenceTechnologies: technologies } : {}),
     };
   });
 

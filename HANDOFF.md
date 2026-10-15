@@ -1,3 +1,6 @@
+> **Nota (2026-10):** este handoff es un registro histórico de la rama `fix/system-hardening`. El estado
+> actual del sistema está en [`docs/CONTEXT.md`](./docs/CONTEXT.md) y las variables de entorno en `.env.example`.
+
 # Handoff / Notas para el equipo — NEXTAPE
 
 > Escribo esto antes de cerrar por hoy para que puedan seguir sin bloquearse. Resumo qué dejé hecho,
@@ -54,7 +57,7 @@ funciona del todo** (el nuevo pipeline de servidor necesita credenciales). Guía
 **`docs/DEPLOYMENT.md`**. Resumen:
 
 1. Crear un **service account** en Firebase y ponerlo como variable `FIREBASE_SERVICE_ACCOUNT` en Netlify.
-2. Poner la **API key de Gemini** como `GEMINI_API_KEY` en Netlify.
+2. Poner la **API key de Groq** como `GROQ_API_KEY` en Netlify (el proyecto ya no usa Gemini).
 3. En Firebase Auth: habilitar los proveedores y **añadir el dominio de Netlify** a los dominios autorizados.
 4. Desplegar las reglas: `firebase deploy --only firestore:rules,storage:rules`.
 5. Redeploy en Netlify y correr el checklist de verificación de `docs/DEPLOYMENT.md`.

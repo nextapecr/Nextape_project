@@ -30,7 +30,8 @@ export default function NewVacancyPage() {
     level: "senior",
     skills: [] as string[],
     // Vacío = automático (10 con GitHub analizado, 20 sin él).
-    examQuestionCount: ""
+    examQuestionCount: "",
+    examTimeLimitMinutes: ""
   });
 
   // El nombre de la empresa se prefija con el del perfil, pero es editable: un reclutador puede
@@ -67,6 +68,10 @@ export default function NewVacancyPage() {
       company: formData.company.trim() || "Empresa",
       ...(formData.examQuestionCount
         ? { examQuestionCount: Math.min(Math.max(Math.round(Number(formData.examQuestionCount)), 10), 30) }
+        : {}),
+      // Minutos para responder la prueba (5–480). Vacío = 30, como una práctica de The LINE.
+      ...(formData.examTimeLimitMinutes
+        ? { examTimeLimitMinutes: Math.min(Math.max(Math.round(Number(formData.examTimeLimitMinutes)), 5), 480) }
         : {}),
       active: true,
       postedAt: Timestamp.now(),
@@ -246,6 +251,23 @@ export default function NewVacancyPage() {
                        <p className="text-[9px] text-gray-500 leading-relaxed">
                          Déjalo vacío para usar el tamaño automático: 10 preguntas si el candidato tiene su
                          GitHub analizado, 20 si no. Si lo fijas, entre 10 y 30.
+                       </p>
+                    </div>
+
+                    <div className="space-y-2">
+                       <Label className="text-[9px] font-bold uppercase tracking-widest text-gray-500">Tiempo límite (minutos)</Label>
+                       <Input
+                         type="number"
+                         min={5}
+                         max={480}
+                         placeholder="30"
+                         value={formData.examTimeLimitMinutes}
+                         onChange={e => setFormData({...formData, examTimeLimitMinutes: e.target.value})}
+                         className="bg-white/5 border-none h-12 rounded-xl text-white px-4"
+                       />
+                       <p className="text-[9px] text-gray-500 leading-relaxed">
+                         Cuánto tiempo tiene cada candidato para responder. Déjalo vacío para 30 minutos.
+                         Puedes poner entre 5 y 480 (8 horas). Al acabarse, la prueba se envía sola.
                        </p>
                     </div>
                  </div>

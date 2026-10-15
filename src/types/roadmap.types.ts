@@ -64,7 +64,8 @@ export type SkillDimension =
 /**
  * Origen del score de una skill en el cómputo del roadmap.
  * Usado para trazabilidad en el resultado final.
- * - 'line': The LINE directo (evidencia específica de esta skill)
+ * - 'line': The LINE — nota de la propia skill o de las tecnologías que la evidencian
+ *   (`evidenceTechnologies`, mapa en `src/lib/skill-technology-map.ts`)
  * - 'github': GitHub Engine proxy (evidencia por dimensión agregada)
  * - 'category-inferred': inferido del promedio de THE LINE en la misma categoría
  * - 'none': sin evidencia alguna (ni directa, ni proxy, ni inferible)
@@ -177,6 +178,12 @@ export interface RoadmapItem {
   prerequisites: string[];
   /** Origen del score: 'line' (The LINE directo), 'github' (proxy Engine), 'none' (sin datos). */
   scoreSource: ScoreSource;
+  /**
+   * Con `scoreSource: 'line'`: tecnologías de The LINE de las que sale la nota (la mejor primero).
+   * Ej.: la skill `react-fundamentals` se mide con el examen de `react` o de `nextjs`.
+   * Ver `src/lib/skill-technology-map.ts`.
+   */
+  evidenceTechnologies?: string[];
 }
 
 // ─────────────────────────────────────────────────────────

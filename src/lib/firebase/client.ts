@@ -8,8 +8,7 @@ import { getStorage } from "firebase/storage";
 // Config web de Firebase. Los valores son públicos (no son secretos), pero se leen de
 // variables de entorno `NEXT_PUBLIC_FIREBASE_*` para poder cambiar de proyecto por entorno,
 // con fallback a los valores actuales para no romper el desarrollo local. Ver `.env.example`.
-// ⚠️ PENDIENTE (docs/TECH_DEBT B3): `projectId` aquí (`studio-...`) NO coincide con `.firebaserc`
-// (`nextape-prod`). Definir el proyecto canónico y fijarlo por env.
+// Proyecto canónico: `studio-4462619429-470d8`, el mismo de `.firebaserc` (TECH_DEBT B3, resuelto).
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "AIzaSyALMrOQqW8MUX0Ube0HX4HOwDJgWKj_Rtg",
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "studio-4462619429-470d8.firebaseapp.com",

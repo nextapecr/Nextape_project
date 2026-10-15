@@ -55,6 +55,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Preguntas que cada usuario ya vio por repertorio (huellas, no preguntas), para no repetirle
+    // las mismas en el siguiente intento. SERVER-ONLY: si el cliente pudiera escribirlo, podría
+    // vaciarlo o elegir qué preguntas le tocan.
+    match /line_seen/{seenId} {
+      allow read, write: if false;
+    }
+
     // Trabajos / Vacantes.
     // Lectura pública. Escritura solo del reclutador DUEÑO (`createdBy`), sin borrado desde
     // cliente y sin poder reasignar la propiedad. Esto desbloquea la creación de vacantes y su

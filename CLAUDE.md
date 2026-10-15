@@ -23,8 +23,8 @@ Roles: `developer` y `recruiter`.
 **Stack:** Next.js 15 (App Router) · React 19 · TypeScript (strict) · Firebase (Auth/Firestore/Storage,
 Web SDK + Admin SDK) · **tree-sitter** (`@kreuzberg/tree-sitter-language-pack`, 21 gramáticas) ·
 Genkit 1.28 · Tailwind 3 + shadcn/ui.
-**IA — tres proveedores:** **Groq** principal (`genkitx-groq`, `llama-3.3-70b-versatile`), **NVIDIA NIM**
-como fallback ante 429, y **Mistral** para el feedback del análisis de GitHub.
+**IA — un solo proveedor: Groq** (`genkitx-groq`), modelo `groq/openai/gpt-oss-120b` (fallback automático a `gpt-oss-20b`), y si todo falla,
+**fallback determinístico** sin IA. NVIDIA NIM y Mistral se evaluaron y se descartaron (ver `docs/DECISIONS.md`).
 Hosting: **Netlify** (Firebase solo Auth+DB). La config de Cloudflare/App Hosting que queda en el repo
 está **muerta** — no la uses como referencia.
 
@@ -90,8 +90,9 @@ Estas reglas son **vinculantes**. Si una tarea requiere romper una, **detente y 
    server-only → `allow read, write: if false` (el Admin SDK las bypassa).
 5. **No relajes reglas de seguridad** (`if true`, `write:false → true`, lecturas públicas) sin revisión
    explícita. Ver [`docs/SECURITY.md`](./docs/SECURITY.md).
-6. **Nunca commitees secretos.** Config web Firebase → `.env` (`NEXT_PUBLIC_*`); Gemini y credenciales
-   del Admin SDK (`FIREBASE_SERVICE_ACCOUNT`) → secret manager. `.env*` está en `.gitignore`: mantenlo así.
+6. **Nunca commitees secretos.** Config web Firebase → `.env` (`NEXT_PUBLIC_*`); `GROQ_API_KEY`,
+   `TOKEN_ENCRYPTION_KEY` y las credenciales del Admin SDK (`FIREBASE_SERVICE_ACCOUNT`) → variables de entorno
+   de Netlify. Lista completa y comentada en `.env.example`. `.env*` está en `.gitignore`: mantenlo así.
 7. **No confíes en el `role` del cliente** para autorización de datos; la autoridad son las reglas y el servidor.
 
 ### 4.2 Datos
@@ -108,11 +109,12 @@ Estas reglas son **vinculantes**. Si una tarea requiere romper una, **detente y 
     Consúmelos vía el wrapper `export async function`.
 12. **Nunca importes el Firebase Web SDK dentro de un archivo `'use server'`.** Si un flow necesita
     escribir datos de forma confiable, usa Admin SDK en servidor, no el Web SDK del cliente.
-13. **Proveedores IA = Groq · NVIDIA NIM · Mistral.** Nunca Gemini ni Anthropic.
-    - **Groq** es el principal (`genkitx-groq`, `GROQ_API_KEY`/`GROQ_MODEL`, centralizado en `src/ai/genkit.ts`).
-    - **NVIDIA NIM** es el fallback automático ante 429 (`NVIDIA_API_KEY`/`NVIDIA_MODEL`).
-    - **Mistral** solo genera el feedback del análisis de GitHub (`MISTRAL_API_KEY`/`MISTRAL_MODEL`), y
-      **recibe únicamente números, nunca código**. No cambies eso.
+13. **Proveedor IA = Groq, y solo Groq.** Nunca Gemini, Anthropic, NVIDIA ni Mistral (descartados en
+    `docs/DECISIONS.md`; `src/ai/mistral.ts` es código muerto que nadie importa).
+    - `genkitx-groq`, `GROQ_API_KEY`/`GROQ_MODEL`, centralizado en `src/ai/genkit.ts`. Por defecto
+      `gpt-oss-120b`; `generateJsonWithFallback` (`src/ai/generate.ts`) pasa a `gpt-oss-20b` si el 120B falla.
+    - El feedback del análisis de GitHub **recibe únicamente números, nunca código**, y si la IA falla se
+      genera un feedback determinístico. No cambies eso.
     Genera JSON con `generateJson` (esquema tolerante → normalización → esquema estricto Zod).
     - ⚠️ **La IA NO se invoca en tiempo de petición.** El banco de preguntas se precarga con un script.
       Si una tecnología no tiene banco, la respuesta correcta es `503 pool_not_seeded` — **nunca** generar
@@ -146,7 +148,7 @@ En [`.claude/agents/`](./.claude/agents/) hay agentes por área. Úsalos (o dele
 | Agente | Cuándo |
 |---|---|
 | `frontend-engineer` | UI, rutas, componentes, estado, diseño. |
-| `backend-ai-engineer` | Servicios, route handlers, flows de Genkit (Groq/NVIDIA/Mistral). |
+| `backend-ai-engineer` | Servicios, route handlers, flows de Genkit (Groq). |
 | `database-architect` | Modelo de datos Firestore, colecciones, tipos, migraciones. |
 | `security-auditor` | Reglas Firestore/Storage, auth, integridad, revisión de seguridad. |
 | `ai-flow-reviewer` | Revisión de prompts/flows de IA (calidad, coste, structured output). |
@@ -164,14 +166,14 @@ Ya construido: capa de confianza en servidor (DNA/scoring), banco de preguntas p
 55 tecnologías), **motor de GitHub** (AST con tree-sitter, 21 lenguajes), **roadmap determinista v2**
 (112 skills / 10 rutas), cierre del loop reclutador (`candidate_matches`), rate limiting y CI.
 
-**Estado verificado:** `lint` 0 errores / 21 warnings · `test` 116 pasan, 8 *skipped* (los de reglas
-necesitan el emulador y **CI no lo arranca**) · `typecheck` falla **solo en local** por dependencias
-nativas no instaladas (`tree-sitter`, `@genkit-ai/compat-oai`); en CI pasa.
+**Estado verificado (2026-10-14, rama `test-vernon`, Linux + Node 22 como CI):** `typecheck` limpio ·
+`lint` 0 errores / 50 warnings · `test` 224 pasan, 25 *skipped* (los de reglas necesitan el emulador y **CI no
+lo arranca**) · `build` OK con Next.js 15.5.27. En Windows, `typecheck` puede fallar si los bindings nativos de
+`tree-sitter` no se instalaron; en CI pasa.
 
 **Pendiente destacado** (detalle en [`docs/CONTEXT.md`](./docs/CONTEXT.md) §9 y [`docs/TECH_DEBT.md`](./docs/TECH_DEBT.md)):
-- 🔴 **Los vocabularios de The LINE y del roadmap están desacoplados** (ids de tecnología vs. slugs del
-  catálogo: solo coinciden 2 de 112). El roadmap apenas se alimenta del DNA real.
-- 🔴 **`.env.example` no documenta `GITHUB_TOKEN`, `MISTRAL_API_KEY` ni `NVIDIA_API_KEY`**: un despliegue
-  que la siga deja `/api/github/*` roto.
-- 🟠 `jobs` valida campos server-only en `update` pero no en `create`; `/api/line/*` sin rate limit y
-  `line_sessions` sin TTL.
+- ✅ Roadmap y The LINE conectados (`src/lib/skill-technology-map.ts`): 62 de 112 skills del catálogo se miden
+  con tecnologías de The LINE. Al añadir una skill o una tecnología, revisa ese mapa.
+- ✅ `.env.example` está completo y marca qué es obligatorio (incluida `TOKEN_ENCRYPTION_KEY` para GitHub).
+- 🟠 `jobs` valida campos server-only en `update` pero no en `create`. (`/api/line/start` ya tiene límite de
+  1 intento / 24 h y limpia las sesiones vencidas del usuario: ver `docs/CONTEXT.md` §3.1.)
