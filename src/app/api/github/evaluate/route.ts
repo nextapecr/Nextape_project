@@ -61,6 +61,16 @@ export async function POST(req: NextRequest) {
 
   const owner = ownerPart;
   const repo = namePart;
+  
+  // Validate owner/repo before interpolating into URL (injection protection)
+  const validationResult = validateRepoRef(owner, repo);
+  if (!validationResult.valid) {
+    return NextResponse.json(
+      { error: "invalid_repo_name", message: validationResult.reason },
+      { status: 400 }
+    );
+  }
+  
   const fullName = `${owner}/${repo}`;
   
   // Generate unique analysis ID for error correlation

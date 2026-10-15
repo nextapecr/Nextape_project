@@ -6,23 +6,23 @@ import { validateRepoRef, authorizeRepo, filterEvidenceForAggregate } from "./gi
 
 describe("validateRepoRef", () => {
   it("accepts valid owner/repo pairs", () => {
-    expect(validateRepoRef("owner", "repo")).toBe(true);
-    expect(validateRepoRef("my-org", "my-project")).toBe(true);
-    expect(validateRepoRef("user123", "repo_name")).toBe(true);
-    expect(validateRepoRef("Company", "Product.API")).toBe(true);
+    expect(validateRepoRef("owner", "repo").valid).toBe(true);
+    expect(validateRepoRef("my-org", "my-project").valid).toBe(true);
+    expect(validateRepoRef("user123", "repo_name").valid).toBe(true);
+    expect(validateRepoRef("Company", "Product.API").valid).toBe(true);
   });
 
   it("rejects invalid owner names", () => {
-    expect(validateRepoRef("", "repo")).toBe(false);
-    expect(validateRepoRef("-invalid", "repo")).toBe(false); // Can't start with hyphen
-    expect(validateRepoRef("invalid-", "repo")).toBe(false); // Can't end with hyphen
-    expect(validateRepoRef("owner/extra", "repo")).toBe(false); // No slashes in owner
+    expect(validateRepoRef("", "repo").valid).toBe(false);
+    expect(validateRepoRef("-invalid", "repo").valid).toBe(false); // Can't start with hyphen
+    expect(validateRepoRef("invalid-", "repo").valid).toBe(false); // Can't end with hyphen
+    expect(validateRepoRef("owner/extra", "repo").valid).toBe(false); // No slashes in owner
   });
 
   it("rejects empty or missing segments", () => {
-    expect(validateRepoRef("", "")).toBe(false);
-    expect(validateRepoRef("owner", "")).toBe(false);
-    expect(validateRepoRef("", "repo")).toBe(false);
+    expect(validateRepoRef("", "").valid).toBe(false);
+    expect(validateRepoRef("owner", "").valid).toBe(false);
+    expect(validateRepoRef("", "repo").valid).toBe(false);
   });
 });
 

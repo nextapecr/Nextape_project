@@ -12,10 +12,12 @@
  * - No more than one slash
  * - No empty segments
  * 
- * @returns true if valid, false otherwise
+ * @returns Object with valid flag and reason if invalid
  */
-export function validateRepoRef(owner: string, repo: string): boolean {
-  if (!owner || !repo) return false;
+export function validateRepoRef(owner: string, repo: string): { valid: boolean; reason?: string } {
+  if (!owner || !repo) {
+    return { valid: false, reason: 'Owner and repo name are required' };
+  }
   
   // GitHub username/org pattern: alphanumeric, hyphens, max 39 chars
   const OWNER_PATTERN = /^[a-z0-9]([a-z0-9]|-(?=[a-z0-9])){0,38}$/i;
@@ -23,7 +25,15 @@ export function validateRepoRef(owner: string, repo: string): boolean {
   // GitHub repo name pattern: alphanumeric, hyphens, underscores, dots
   const REPO_PATTERN = /^[a-z0-9._-]+$/i;
   
-  return OWNER_PATTERN.test(owner) && REPO_PATTERN.test(repo);
+  if (!OWNER_PATTERN.test(owner)) {
+    return { valid: false, reason: 'Invalid owner format' };
+  }
+  
+  if (!REPO_PATTERN.test(repo)) {
+    return { valid: false, reason: 'Invalid repo name format' };
+  }
+  
+  return { valid: true };
 }
 
 /**
