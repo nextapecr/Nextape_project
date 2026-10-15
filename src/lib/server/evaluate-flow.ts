@@ -41,7 +41,7 @@ export async function evaluateRepoFlow(
     metadata = await deps.fetchRepoMetadata(owner, repo);
   } catch (error) {
     // 404: repo doesn't exist or no access
-    if (error instanceof Error && 'httpStatus' in error && (error as any).httpStatus === 404) {
+    if (error instanceof Error && 'httpStatus' in error && (error as Error & { httpStatus: number }).httpStatus === 404) {
       return { type: 'repo_not_found', status: 404 };
     }
     throw error;

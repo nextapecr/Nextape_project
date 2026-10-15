@@ -354,7 +354,6 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
       setProfile(fromAggregate(aggregate, user));
 
       // Calculate how many repos were skipped (not authorized private repos)
-      const analyzed = repos.length - failed.length;
       const skipped = repos.length - done;
       
       if (totalRepos > repos.length) {

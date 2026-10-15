@@ -129,8 +129,8 @@ describe("evaluate flow - 403 prevents rate limit and Firestore write", () => {
 
   it("RED: 404 from metadata → repo_not_found WITHOUT write", async () => {
     // Arrange
-    const error = new Error("Not found");
-    (error as any).httpStatus = 404;
+    const error = new Error("Not found") as Error & { httpStatus: number };
+    error.httpStatus = 404;
     
     const fetchRepoMetadata = vi.fn().mockRejectedValue(error);
     
