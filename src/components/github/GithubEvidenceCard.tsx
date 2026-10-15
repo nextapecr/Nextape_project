@@ -295,6 +295,14 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
         } catch (err) {
           // Capture detailed error information
           if (err instanceof ApiError) {
+            // Private repo not authorized: count as skipped, not as failure
+            if (err.code === "private_repo_not_authorized") {
+              // Don't add to failed list, just skip silently
+              done += 1;
+              setRun((prev) => (prev ? { ...prev, done } : prev));
+              return;
+            }
+            
             if (err.code === "GITHUB_RATE_LIMITED" || err.message === "rate_limited") {
               rateLimited = true;
             }
@@ -330,9 +338,23 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
       });
       setProfile(fromAggregate(aggregate, user));
 
+      // Calculate how many repos were skipped (not authorized private repos)
+      const analyzed = repos.length - failed.length;
+      const skipped = repos.length - done;
+      
       if (totalRepos > repos.length) {
         setNotice(`Se analizaron tus ${repos.length} repositorios con actividad más reciente (de ${totalRepos}).`);
       }
+      
+      // Show notice about skipped private repos (without listing them)
+      if (skipped > 0) {
+        setNotice(
+          (notice ? notice + " " : "") +
+          `${skipped} ${skipped === 1 ? 'repositorio privado fue omitido' : 'repositorios privados fueron omitidos'} ` +
+          `(no están en tu allowlist). `
+        );
+      }
+      
       if (failed.length > 0) {
         // Count retryable vs permanent failures
         const retryableCount = failed.filter(f => f.retryable).length;
