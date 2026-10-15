@@ -338,6 +338,48 @@ export const GithubSignalsService = {
   },
 
   /**
+   * Obtiene metadatos básicos de un repositorio (lightweight).
+   * Útil para validar permisos antes de operaciones costosas.
+   * 
+   * @param owner - Propietario del repositorio
+   * @param repo - Nombre del repositorio
+   * @param token - OAuth token opcional
+   * @returns Metadatos del repositorio con full_name y private flag
+   */
+  async getRepoMetadata(
+    owner: string,
+    repo: string,
+    token?: string,
+  ): Promise<{ full_name: string; private: boolean }> {
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'NEXTAPE-GitHub-Engine',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const repoRes = await fetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}`, { headers });
+
+    if (!repoRes.ok) {
+      const status = repoRes.status;
+      const endpoint = `/repos/${owner}/${repo}`;
+      throw new GithubApiError(
+        `No se pudo obtener metadatos del repositorio ${owner}/${repo} (HTTP ${status})`,
+        status,
+        endpoint,
+        'get_repo_info'
+      );
+    }
+
+    const repoData = await repoRes.json();
+    return {
+      full_name: String(repoData.full_name || `${owner}/${repo}`),
+      private: Boolean(repoData.private),
+    };
+  },
+
+  /**
    * Señales y árbol de un repositorio en una sola pasada.
    *
    * Las tres consultas independientes van en paralelo, y el árbol se devuelve para reutilizarlo al
