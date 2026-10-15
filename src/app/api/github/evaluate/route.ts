@@ -18,6 +18,7 @@ import {
 } from "@/services/github-error-classifier";
 import type { GithubRepoEvaluateResponse, GithubRepoEvidence } from "@/types/github.types";
 import { validateRepoRef, authorizeRepo } from "@/lib/server/github-authorization";
+import { evaluateRepoFlow, type EvaluateFlowDeps } from "@/lib/server/evaluate-flow";
 
 export const runtime = "nodejs";
 
@@ -77,17 +78,133 @@ export async function POST(req: NextRequest) {
   const analysisId = generateAnalysisId(uid);
 
   try {
-    // Phase 3 & 6: Get user's OAuth token (used for auth check, cache check, and analysis)
+    // Get user's OAuth token
     const userToken = await getGithubToken(uid);
     
-    // Phase 6: Validate private repo authorization BEFORE consuming rate limit
-    // Fetch repo metadata (lightweight call) to check visibility
-    let repoMetadata;
-    try {
-      repoMetadata = await GithubSignalsService.getRepoMetadata(owner, repo, userToken || undefined);
-    } catch (error) {
-      // Handle 404: repository doesn't exist or no access
-      if (error instanceof Error && 'httpStatus' in error && (error as any).httpStatus === 404) {
+    // Delegate to evaluateRepoFlow with real dependencies
+    const deps: EvaluateFlowDeps = {
+      fetchRepoMetadata: async (owner: string, repo: string) => {
+        return await GithubSignalsService.getRepoMetadata(owner, repo, userToken || undefined);
+      },
+      
+      getUserAllowlist: async (uid: string) => {
+        const userDocRef = adminDb().collection("users").doc(uid);
+        const userDoc = await userDocRef.get();
+        return (userDoc.data()?.privateReposAllowlist as string[]) ?? [];
+      },
+      
+      checkCache: async (uid: string, repoFullName: string) => {
+        const docRef = adminDb()
+          .collection("github_evidence")
+          .doc(uid)
+          .collection("repos")
+          .doc(repoDocId(repoFullName));
+        
+        const existingSnap = await docRef.get();
+        const existing = existingSnap.data() as GithubRepoEvidence | undefined;
+        
+        if (existing && existing.engineVersion === GITHUB_ENGINE_VERSION && existing.lastCommitSHA) {
+          const currentSHA = await GithubSignalsService.getLatestCommitSHA(owner, repo, userToken || undefined);
+          
+          if (currentSHA && currentSHA === existing.lastCommitSHA) {
+            const cached: GithubRepoEvaluateResponse = {
+              cached: true,
+              fullName: repoFullName,
+              skillScores: existing.skillScores,
+              filesAnalyzed: existing.filesAnalyzed ?? 0,
+              parsedLanguages: existing.parsedLanguages ?? {},
+            };
+            return { hit: true, data: cached };
+          }
+        }
+        
+        return { hit: false };
+      },
+      
+      consumeRateLimit: async (uid: string) => {
+        const limit = await consumeRateLimit(adminDb(), "github_evaluate", uid, GITHUB_RATE_LIMITS.evaluate);
+        return { allowed: limit.allowed };
+      },
+      
+      writeEvidence: async (uid: string, repoFullName: string, data: unknown) => {
+        const docRef = adminDb()
+          .collection("github_evidence")
+          .doc(uid)
+          .collection("repos")
+          .doc(repoDocId(repoFullName));
+        
+        await docRef.set(data);
+      },
+      
+      analyzeRepo: async (owner: string, repo: string) => {
+        const [{ signals, tree, pushedAt, isPrivate }] = await Promise.all([
+          GithubSignalsService.getRepoSnapshot(owner, repo, userToken || undefined),
+        ]);
+        
+        const userCommits = await GithubSignalsService.getUserCommitsInRepo(
+          owner,
+          repo,
+          githubUsername,
+          userToken || undefined,
+        );
+        
+        const userTouchedFiles = new Set<string>();
+        for (const commit of userCommits) {
+          for (const file of commit.files) {
+            userTouchedFiles.add(file);
+          }
+        }
+        
+        const files = await GithubSignalsService.fetchCentralSourceFiles(
+          owner,
+          repo,
+          signals.lastCommitSHA,
+          tree,
+          Array.from(userTouchedFiles),
+          userToken || undefined,
+        );
+        
+        const { ir, metrics, skillScores } = analyzeRepositorySources(files, signals);
+        
+        const parsedLanguages: Record<string, number> = {};
+        for (const file of ir.files) {
+          parsedLanguages[file.language] = (parsedLanguages[file.language] ?? 0) + 1;
+        }
+        
+        const evidence: GithubRepoEvidence = {
+          uid,
+          githubUsername,
+          fullName,
+          pushedAt,
+          lastCommitSHA: signals.lastCommitSHA,
+          repoSignals: signals,
+          metrics,
+          skillScores,
+          filesAnalyzed: ir.files.length,
+          parsedLanguages,
+          analyzedAt: FieldValue.serverTimestamp() as unknown as FirebaseFirestore.Timestamp,
+          engineVersion: GITHUB_ENGINE_VERSION,
+          isPrivate,
+        };
+        
+        const response: GithubRepoEvaluateResponse = {
+          cached: false,
+          fullName,
+          skillScores,
+          filesAnalyzed: ir.files.length,
+          parsedLanguages,
+        };
+        
+        return { evidence, response };
+      },
+    };
+    
+    // Execute flow
+    const result = await evaluateRepoFlow(owner, repo, uid, deps);
+    
+    // Handle result
+    switch (result.type) {
+      case 'repo_not_found':
         return NextResponse.json(
           {
             error: "repo_not_found_or_no_access",
@@ -96,24 +213,12 @@ export async function POST(req: NextRequest) {
           },
           { status: 404 }
         );
-      }
-      throw error;
-    }
-    
-    // Check allowlist if private
-    if (repoMetadata.private) {
-      const userDocRef = adminDb().collection("users").doc(uid);
-      const userDoc = await userDocRef.get();
-      const privateReposAllowlist = (userDoc.data()?.privateReposAllowlist as string[]) ?? [];
       
-      const authResult = authorizeRepo(repoMetadata, privateReposAllowlist);
-      
-      if (!authResult.allowed) {
+      case 'not_authorized':
         console.log(`
 ╔════════════════════════════════════════════════════════════════
 ║ 🚫 PRIVATE REPO NOT AUTHORIZED (Phase 6)
 ║ Repo: ${fullName}
-║ Reason: ${authResult.reason}
 ║ ✅ NO rate limit consumed
 ║ ✅ NO Firestore write
 ╚════════════════════════════════════════════════════════════════
@@ -126,131 +231,24 @@ export async function POST(req: NextRequest) {
           },
           { status: 403 }
         );
-      }
       
-      console.log(`
-╔════════════════════════════════════════════════════════════════
-║ ✅ PRIVATE REPO AUTHORIZED (Phase 6)
-║ Repo: ${fullName}
-║ Reason: ${authResult.reason}
-║ Proceeding with analysis...
-╚════════════════════════════════════════════════════════════════
-      `);
-    }
-
-    // Phase 5: Verificar cache ANTES de consumir rate limit o hacer llamadas pesadas a GitHub
-    const docRef = adminDb()
-      .collection("github_evidence")
-      .doc(uid)
-      .collection("repos")
-      .doc(repoDocId(fullName));
-
-    const existingSnap = await docRef.get();
-    const existing = existingSnap.data() as GithubRepoEvidence | undefined;
-
-    // Si existe análisis previo con la versión actual del motor, verificar si el SHA cambió
-    if (existing && existing.engineVersion === GITHUB_ENGINE_VERSION && existing.lastCommitSHA) {
-      // Phase 5: Obtener SHA actual con llamada ligera (1 commit) - reuse userToken
-      const currentSHA = await GithubSignalsService.getLatestCommitSHA(owner, repo, userToken || undefined);
-      
-      if (currentSHA && currentSHA === existing.lastCommitSHA) {
-        // SHA no cambió: devolver cache sin consumir rate limit ni llamar a GitHub API
+      case 'cache_hit':
         console.log(`
 ╔════════════════════════════════════════════════════════════════
 ║ 🎯 CACHE HIT (Phase 5)
 ║ Repo: ${fullName}
-║ SHA: ${currentSHA.slice(0, 7)} (sin cambios)
-║ ✅ NO se ejecuta motor
-║ ✅ NO se llama a GitHub API completa
-║ ✅ NO se consume rate limit
+║ ✅ NO rate limit consumed
 ╚════════════════════════════════════════════════════════════════
         `);
-        const cached: GithubRepoEvaluateResponse = {
-          cached: true,
-          fullName,
-          skillScores: existing.skillScores,
-          filesAnalyzed: existing.filesAnalyzed ?? 0,
-          parsedLanguages: existing.parsedLanguages ?? {},
-        };
-        return NextResponse.json(cached);
-      }
+        return NextResponse.json(result.data);
       
-      console.log(`
-╔════════════════════════════════════════════════════════════════
-║ 🔄 CACHE MISS (Phase 5)
-║ Repo: ${fullName}
-║ SHA anterior: ${existing.lastCommitSHA.slice(0, 7)}
-║ SHA actual: ${currentSHA?.slice(0, 7) || 'unknown'}
-║ ⚙️  Ejecutando análisis completo...
-╚════════════════════════════════════════════════════════════════
-      `);
+      case 'rate_limited':
+        const limit = await consumeRateLimit(adminDb(), "github_evaluate", uid, GITHUB_RATE_LIMITS.evaluate);
+        return rateLimitedResponse(limit);
+      
+      case 'success':
+        return NextResponse.json((result.data as { response: unknown }).response);
     }
-
-    // Cada análisis gasta ~5 peticiones del GITHUB_TOKEN compartido por toda la plataforma.
-    const limit = await consumeRateLimit(adminDb(), "github_evaluate", uid, GITHUB_RATE_LIMITS.evaluate);
-    if (!limit.allowed) return rateLimitedResponse(limit);
-
-    // Phase 3 & 6: Use userToken fetched earlier for all GitHub API calls
-    const [{ signals, tree, pushedAt, isPrivate }] = await Promise.all([
-      GithubSignalsService.getRepoSnapshot(owner, repo, userToken || undefined),
-    ]);
-
-    // Phase 3: Obtener commits del usuario en este repo
-    const userCommits = await GithubSignalsService.getUserCommitsInRepo(
-      owner,
-      repo,
-      githubUsername,
-      userToken || undefined,
-    );
-    
-    // Extraer lista de archivos tocados por el usuario
-    const userTouchedFiles = new Set<string>();
-    for (const commit of userCommits) {
-      for (const file of commit.files) {
-        userTouchedFiles.add(file);
-      }
-    }
-
-    const files = await GithubSignalsService.fetchCentralSourceFiles(
-      owner,
-      repo,
-      signals.lastCommitSHA,
-      tree,
-      Array.from(userTouchedFiles), // Phase 3: Priorizar archivos del usuario
-      userToken || undefined, // Pass OAuth token
-    );
-    const { ir, metrics, skillScores } = analyzeRepositorySources(files, signals);
-
-    const parsedLanguages: Record<string, number> = {};
-    for (const file of ir.files) {
-      parsedLanguages[file.language] = (parsedLanguages[file.language] ?? 0) + 1;
-    }
-
-    const evidence: GithubRepoEvidence = {
-      uid,
-      githubUsername,
-      fullName,
-      pushedAt,
-      lastCommitSHA: signals.lastCommitSHA,
-      repoSignals: signals,
-      metrics,
-      skillScores,
-      filesAnalyzed: ir.files.length,
-      parsedLanguages,
-      analyzedAt: FieldValue.serverTimestamp() as unknown as FirebaseFirestore.Timestamp,
-      engineVersion: GITHUB_ENGINE_VERSION,
-      isPrivate, // Phase 4: Save private flag
-    };
-    await docRef.set(evidence);
-
-    const response: GithubRepoEvaluateResponse = {
-      cached: false,
-      fullName,
-      skillScores,
-      filesAnalyzed: ir.files.length,
-      parsedLanguages,
-    };
-    return NextResponse.json(response);
   } catch (err) {
     // Classify and log error for diagnosis
     let stage: 'get_repo_info' | 'get_tree' | 'get_user_commits' | 'fetch_file' | 'parse_files' | 'save_evidence' | 'unknown' = 'unknown';
