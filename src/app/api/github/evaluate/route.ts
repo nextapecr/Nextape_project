@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
           .collection("repos")
           .doc(repoDocId(repoFullName));
         
-        await docRef.set(data);
+        await docRef.set(data as GithubRepoEvidence);
       },
       
       analyzeRepo: async (owner: string, repo: string) => {
