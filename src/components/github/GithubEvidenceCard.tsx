@@ -156,7 +156,7 @@ const ERROR_MESSAGES: Record<string, (user: string) => string> = {
   rate_limited: () => "Has lanzado demasiados análisis en poco tiempo. Espera unos minutos y vuelve a intentarlo.",
 };
 
-export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?: string }) {
+export function GithubEvidenceCard({ uid, githubUrl: _githubUrl }: { uid: string; githubUrl?: string }) {
   const [profile, setProfile] = useState<ProfileView | null>(null);
   const [loading, setLoading] = useState(true);
   const [run, setRun] = useState<RunState | null>(null);

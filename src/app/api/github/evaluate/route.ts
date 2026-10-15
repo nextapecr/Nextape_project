@@ -255,7 +255,7 @@ export async function POST(req: NextRequest) {
     
     // Determine stage from error type
     if (err instanceof GithubApiError) {
-      stage = err.stage as any;
+      stage = err.stage as typeof stage;
     } else if (err instanceof Error) {
       const msg = err.message.toLowerCase();
       if (msg.includes('firestore') || msg.includes('firebase')) {
