@@ -82,7 +82,23 @@ export async function POST(req: NextRequest) {
     
     // Phase 6: Validate private repo authorization BEFORE consuming rate limit
     // Fetch repo metadata (lightweight call) to check visibility
-    const repoMetadata = await GithubSignalsService.getRepoMetadata(owner, repo, userToken || undefined);
+    let repoMetadata;
+    try {
+      repoMetadata = await GithubSignalsService.getRepoMetadata(owner, repo, userToken || undefined);
+    } catch (error) {
+      // Handle 404: repository doesn't exist or no access
+      if (error instanceof Error && 'httpStatus' in error && (error as any).httpStatus === 404) {
+        return NextResponse.json(
+          {
+            error: "repo_not_found",
+            message: "Repository not found or no access. It may be private or doesn't exist.",
+            repoFullName: fullName,
+          },
+          { status: 404 }
+        );
+      }
+      throw error;
+    }
     
     // Check allowlist if private
     if (repoMetadata.private) {
