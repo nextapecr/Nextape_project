@@ -174,10 +174,13 @@ export function isValidAnswerFor(question: Question, answer: Answer): boolean {
  *
  * Sin esto, un envío incompleto se corregía en silencio: las faltantes contaban como falladas y
  * el candidato recibía un score bajo sin saber por qué.
+ *
+ * Debe haber una entrada por pregunta. `null` es válido y significa **sin responder** (cuenta
+ * como fallada): es lo que envía el cliente cuando se acaba el tiempo a mitad de la prueba.
  */
 export function isValidAnswerSet(questions: Question[], answers: Answer[]): boolean {
   if (!Array.isArray(answers) || answers.length !== questions.length) return false;
-  return questions.every((q, i) => isValidAnswerFor(q, answers[i]));
+  return questions.every((q, i) => answers[i] === null || isValidAnswerFor(q, answers[i]));
 }
 
 /* ──────────────────────────────── Grading ────────────────────────────────── */
@@ -287,8 +290,17 @@ export function dedupeQuestions(questions: Question[]): Question[] {
  * por turnos, todos reciben el mismo *reparto* de skills y de tipos aunque las preguntas cambien.
  *
  * Devuelve menos de `count` solo si el repertorio no da para más.
+ *
+ * `recency` (opcional) da preferencia a lo que el usuario NO ha visto: dentro de cada grupo
+ * salen primero las preguntas que nunca le tocaron y luego las que vio hace más tiempo. Valor
+ * mayor = vista más recientemente; ausente = nunca vista. No rompe la estratificación: solo
+ * decide QUÉ pregunta sale de cada grupo, no cuántas.
  */
-export function pickRandomQuestions(pool: Question[], count: number): Question[] {
+export function pickRandomQuestions(
+  pool: Question[],
+  count: number,
+  recency?: (q: Question) => number | undefined,
+): Question[] {
   if (count <= 0 || pool.length === 0) return [];
   if (pool.length <= count) return shuffle(pool);
 
@@ -300,7 +312,14 @@ export function pickRandomQuestions(pool: Question[], count: number): Question[]
     groups.set(key, [...(groups.get(key) ?? []), q]);
   }
 
-  const buckets = shuffle([...groups.values()]).map((g) => shuffle(g));
+  // `pop()` toma del final: se ordena para que al final queden las menos vistas. El barajado
+  // previo deshace los empates al azar (sort es estable).
+  const byFreshness = (g: Question[]) =>
+    recency
+      ? shuffle(g).sort((a, b) => (recency(b) ?? -1) - (recency(a) ?? -1))
+      : shuffle(g);
+
+  const buckets = shuffle([...groups.values()]).map(byFreshness);
   const picked: Question[] = [];
 
   while (picked.length < count) {
@@ -333,4 +352,64 @@ export function countByType(questions: Question[]): Record<QuestionType, number>
     if (q.type in counts) counts[q.type]++;
   }
   return counts;
+}
+
+/* ──────────────────────── Barajado de opciones ───────────────────────────── */
+
+/**
+ * Opciones cuyo sentido depende de su posición ("Todas las anteriores", "A y B"…). Si una
+ * pregunta tiene alguna, NO se barajan sus opciones: moverlas cambiaría la respuesta correcta.
+ */
+const POSITIONAL_OPTION = /anterior|above|\bboth\b|\bambas\b|\bopci[oó]n(es)? [a-e]\b|\b[a-e] (y|and) [a-e]\b/i;
+
+function hasPositionalOption(options: string[]): boolean {
+  return options.some((o) => POSITIONAL_OPTION.test(String(o)));
+}
+
+/** Permutación aleatoria de 0..n-1. `perm[nueva] = vieja`. */
+function randomPermutation(n: number): number[] {
+  return shuffle(Array.from({ length: n }, (_, i) => i));
+}
+
+/**
+ * Devuelve una copia de la pregunta con las opciones (o los elementos a ordenar) en otro orden,
+ * y la clave reescrita para ese orden. Así, aunque una pregunta se repita entre intentos, "la
+ * respuesta era la B" deja de servir.
+ *
+ * La copia barajada es la que se guarda en la sesión (server-only) y se corrige contra ella, así
+ * que `gradeQuestion` no cambia.
+ */
+export function shuffleQuestionOptions(q: Question): Question {
+  switch (q.type) {
+    case "multiple_choice":
+    case "code_output": {
+      if (hasPositionalOption(q.options)) return q;
+      const perm = randomPermutation(q.options.length);
+      return {
+        ...q,
+        options: perm.map((old) => q.options[old]),
+        correctIndex: perm.indexOf(q.correctIndex),
+      };
+    }
+    case "multi_select": {
+      if (hasPositionalOption(q.options)) return q;
+      const perm = randomPermutation(q.options.length);
+      return {
+        ...q,
+        options: perm.map((old) => q.options[old]),
+        correctIndexes: q.correctIndexes.map((old) => perm.indexOf(old)).sort((a, b) => a - b),
+      };
+    }
+    case "ordering": {
+      // `correctOrder[k]` = índice en `items` del elemento que va en la posición k.
+      const perm = randomPermutation(q.items.length);
+      return {
+        ...q,
+        items: perm.map((old) => q.items[old]),
+        correctOrder: q.correctOrder.map((old) => perm.indexOf(old)),
+      };
+    }
+    case "true_false":
+      return q;
+  }
 }

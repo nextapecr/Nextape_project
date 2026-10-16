@@ -59,6 +59,7 @@ export default function ManageVacancyPage() {
     level: "senior",
     skills: [] as string[],
     examQuestionCount: "",
+    examTimeLimitMinutes: "",
   });
 
   useEffect(() => {
@@ -92,6 +93,7 @@ export default function ManageVacancyPage() {
           level: data.level || "senior",
           skills: normalizeJobSkills(data.requiredSkills),
           examQuestionCount: data.examQuestionCount ? String(data.examQuestionCount) : "",
+          examTimeLimitMinutes: data.examTimeLimitMinutes ? String(data.examTimeLimitMinutes) : "",
         });
       } catch (err) {
         console.error("Error loading vacancy:", err);
@@ -127,6 +129,9 @@ export default function ManageVacancyPage() {
         requiredSkills: skills,
         examQuestionCount: form.examQuestionCount
           ? Math.min(Math.max(Math.round(Number(form.examQuestionCount)), 10), 30)
+          : null,
+        examTimeLimitMinutes: form.examTimeLimitMinutes
+          ? Math.min(Math.max(Math.round(Number(form.examTimeLimitMinutes)), 5), 480)
           : null,
         updatedAt: Timestamp.now(),
       });
@@ -253,7 +258,7 @@ export default function ManageVacancyPage() {
               {job.assessmentReady
                 ? `Repertorio de ${job.assessmentPoolSize ?? "?"} preguntas. Cada candidato responde ${
                     job.examQuestionCount ? `${job.examQuestionCount}` : "10 si tiene GitHub analizado o 20 si no,"
-                  } sorteadas al azar.`
+                  } sorteadas al azar, con ${job.examTimeLimitMinutes ?? 30} minutos para responder.`
                 : "Sin prueba todavía. Se compone con preguntas del banco para las habilidades de la vacante."}
             </p>
           </div>
@@ -368,6 +373,21 @@ export default function ManageVacancyPage() {
               onChange={(e) => setForm({ ...form, examQuestionCount: e.target.value })}
               className="h-12 bg-gray-50 border-none rounded-xl w-32"
             />
+          </Field>
+
+          <Field label="Tiempo límite (minutos)">
+            <Input
+              type="number"
+              min={5}
+              max={480}
+              placeholder="30"
+              value={form.examTimeLimitMinutes}
+              onChange={(e) => setForm({ ...form, examTimeLimitMinutes: e.target.value })}
+              className="h-12 bg-gray-50 border-none rounded-xl w-32"
+            />
+            <p className="text-[10px] text-gray-400 mt-2 ml-1">
+              Entre 5 y 480. Vacío = 30 minutos. Aplica a las pruebas que empiecen después de guardar.
+            </p>
           </Field>
         </div>
 

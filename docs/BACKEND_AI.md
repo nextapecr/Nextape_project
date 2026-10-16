@@ -10,7 +10,7 @@ NEXTAPE tiene una **capa de confianza en servidor** sobre Firebase:
    (`src/lib/firebase/admin.ts`): todo lo sensible (scoring, corrección, escritura de DNA/intentos,
    generación de pruebas). El Admin SDK bypassa las reglas; por eso los datos "verificados" son
    `write:false` para el cliente.
-2. **Flows de Genkit** (`'use server'` en `src/ai/flows/*`): generación con Groq (Llama), invocados desde los handlers.
+2. **Flows de Genkit** (`'use server'` en `src/ai/flows/*`): generación con Groq (GPT-OSS 120B → 20B), invocados desde los handlers.
 3. **Firebase gestionado** (Auth + Firestore + Storage): el cliente **LEE** con el Web SDK (sujeto a reglas)
    y llama a la API con `apiPost` (`src/lib/api.ts`) adjuntando su Firebase ID token.
 

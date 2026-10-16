@@ -24,8 +24,8 @@
    pregunta es una atribución suya, no una cita verificada. Por eso nunca se envía al cliente.
 3. **La IA ya NO corre en tiempo de petición.** Las preguntas se **precargan** con un script y en runtime
    solo se sortean. Ver §3.1.
-4. **Hay dos proveedores de IA**, no uno: Groq GPT-OSS (principal, 120B→20B fallback) para generación
-   de preguntas y feedback de GitHub. Ver §6.
+4. **Hay un solo proveedor de IA: Groq** (GPT-OSS 120B, con fallback a 20B y, si todo falla, un resultado
+   determinístico). NVIDIA y Mistral se descartaron (`docs/DECISIONS.md`). Ver §6.
 5. **El experimento de Cloudflare se abandonó.** El despliegue real es **Netlify**. Queda configuración
    muerta en el repo (§7).
 
@@ -126,8 +126,19 @@ blanca**, no borrando campos: un tipo nuevo con clave nueva no se filtra por des
 **Flujo:** `/api/line/start` lee el repertorio, sortea con `pickRandomQuestions` (estratificado por
 `(tag, tipo)` para que los scores sean comparables entre candidatos), crea `line_sessions` (con las claves,
 server-only) y devuelve `PublicQuestion[]`. `/api/line/submit` valida la forma de cada respuesta, corrige,
-escribe el DNA **en transacción** (`max(actual, nuevo)` por skill), registra el intento y **borra la sesión**
-(un solo uso).
+escribe el DNA **en transacción**, registra el intento y **borra la sesión** (un solo uso).
+
+**Política de intentos (2026-10, H1 de la auditoría)** — [`line-policy.ts`](../src/lib/server/line-policy.ts):
+- **1 intento cada 24 h** por tecnología (sin importar el nivel) o por vacante → `429 rate_limited`. Se consume
+  en `start`, con el repertorio ya validado: abandonar una prueba empezada gasta el intento.
+- **Tiempo:** 30 min en práctica; en una vacante, `job.examTimeLimitMinutes` (5–480). La sesión guarda
+  `expiresAt`; `submit` rechaza envíos con más de 90 s de retraso (`410 session_expired`). Al llegar a 0 el
+  cliente envía solo, con `null` en las no respondidas (cuentan como falladas).
+- **DNA = promedio de los últimos 3 intentos por skill, ponderados por nivel** (junior ×0.6, mid ×0.8,
+  senior ×1). La nota de la prueba se sigue mostrando en %. En vacantes se pondera con el nivel real de las
+  preguntas de cada skill (`covered[].level`).
+- **Variedad:** se priorizan las preguntas que el usuario no ha visto (`line_seen`, por huella del enunciado) y
+  las opciones se barajan en cada sesión (salvo si alguna depende de su posición, p. ej. "Todas las anteriores").
 
 **Tamaño del examen:** **10** con GitHub verificado, **20** sin él; `job.examQuestionCount` del reclutador
 lo sobreescribe, acotado a `[10, 30]`.
@@ -191,7 +202,8 @@ marcado `@deprecated` y **solo lo importa el Dev UI de Genkit**: es código muer
   Los seeds **validan antes de escribir** que los pesos de cada ruta sumen 1.0 (±0.001), que cada id de
   `skillWeights` exista en el catálogo y que cada prerequisito exista.
 - **Gate:** sin ninguna entrada en el DNA lanza `ROADMAP_REQUIRES_LINE_EVALUATION` — The LINE es obligatorio.
-- **Resolución del score, en cascada:** `dna[skill.id]` (`line`) → proxy de GitHub por dimensión (`github`)
+- **Resolución del score, en cascada:** The LINE (`line`: el id de la skill o, vía
+  [`skill-technology-map.ts`](../src/lib/skill-technology-map.ts), la mejor nota de sus tecnologías relacionadas) → proxy de GitHub por dimensión (`github`)
   → promedio de la categoría (`category-inferred`) → `null` (`unknown`, **no** "gap con 0").
 - **Orden:** topológico de Kahn (nivel topológico primario), `rawPriority` como desempate dentro del nivel.
 - **Estado por skill:** `unknown` → `completed` → `blocked` (prerequisito no dominado) → `gap`.
@@ -224,7 +236,7 @@ marcado `@deprecated` y **solo lo importa el Dev UI de Genkit**: es código muer
 
 | Endpoint | Qué hace | Auth | Rate limit |
 |---|---|---|---|
-| `POST /api/line/start` | Sortea preguntas, crea sesión, devuelve `PublicQuestion[]` | ID token | ❌ |
+| `POST /api/line/start` | Sortea preguntas, crea sesión, devuelve `PublicQuestion[]` | ID token | ✅ 1 / 24 h por tecnología o vacante |
 | `POST /api/line/submit` | Corrige, escribe DNA + intento + candidatura | ID token + dueño de la sesión | ❌ |
 | `GET /api/line/catalog` | Combinaciones disponibles + `examSize` (nunca preguntas) | ID token | ❌ |
 | `POST /api/jobs/assessment` | Compone el repertorio de una vacante | ID token + dueño del job | ❌ |
@@ -234,7 +246,7 @@ marcado `@deprecated` y **solo lo importa el Dev UI de Genkit**: es código muer
 
 ---
 
-## 6. IA — tres proveedores
+## 6. IA — un proveedor (Groq)
 
 | Proveedor | Para qué | Variables |
 |---|---|---|
@@ -278,15 +290,14 @@ bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.j
 
 ### 🔴 Graves
 
-- **H1 — Los vocabularios de The LINE y del roadmap están desacoplados.** El motor busca `dna[skill.id]`,
-  pero las claves del DNA son ids de tecnología (`react`, `node.js`, `typescript`) y los del catálogo son
-  slugs conceptuales (`typescript-basics`, `unit-testing`, `api-design-rest`). **De las 112 skills del
-  catálogo solo 2 (`postgresql`, `terraform`) coinciden con alguna de las 55 tecnologías —y en la práctica
-  solo `postgresql`, porque `terraform` únicamente colisiona si tiene banco sembrado—. No existe capa de
-  mapeo.** Consecuencia real: casi todo cae a `category-inferred` y de ahí a `unknown`; `gap` queda vacío,
-  no hay "siguiente paso", el progreso sale 0, y el gate "The LINE obligatorio" se pasa sin que ninguna
-  medición real alimente el plan. `docs/TECH_DEBT.md` (A10) registra una versión **más estrecha** del
-  problema (resolución de alias); el desajuste real es **taxonómico** y no está documentado en ningún sitio.
+- **H1 — ✅ Resuelto (2026-10): los vocabularios de The LINE y del roadmap ya están conectados.** Antes el motor
+  buscaba `dna[skill.id]` y los ids del catálogo (`react-fundamentals`) nunca coinciden con los del DNA (`react`):
+  solo 2 de 112 skills coincidían. Ahora [`src/lib/skill-technology-map.ts`](../src/lib/skill-technology-map.ts)
+  dice qué tecnologías de The LINE evidencian cada skill (62 de 112 conectadas; el resto no tiene ninguna tecnología
+  que la mida y queda como `unknown`). La nota es la **mejor** de las tecnologías relacionadas, y como el DNA está
+  ponderado por nivel, un examen junior no da por dominada una skill avanzada. También resuelve alias (A10) y el
+  botón "Practicar" lleva a la tecnología relacionada que tenga banco. Con los bancos de hoy (13 tecnologías),
+  20 skills del roadmap ya se alimentan de The LINE; cada tecnología nueva que se siembre suma las suyas.
 - **H2 — `.env.example` está incompleto.** Falta `GITHUB_TOKEN` (y su correspondiente `GROQ_API_KEY`/`GROQ_MODEL`).
   Un despliegue que siga la plantilla al pie de la letra deja `/api/github/*` roto
   (IA lanza → 500, pero fallback determinístico mantiene funcionalidad básica) y el motor cae a 60 req/h anónimas **para toda la plataforma**.
@@ -295,9 +306,9 @@ bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.j
 
 - **H3 — `jobs` valida los campos server-only en `update` pero NO en `create`.** Se puede crear una vacante
   con `applicantsCount` o `assessmentReady` arbitrarios desde el navegador.
-- **H4 — `/api/line/start` y `/api/line/submit` no tienen rate limit**, y cada `start` **escribe un documento**
-  con claves de respuesta. Sumado a que **`line_sessions` no tiene TTL** (solo se borra al enviar), las
-  sesiones abandonadas se acumulan indefinidamente.
+- **H4 — ✅ Resuelto (2026-10):** `/api/line/start` limita a 1 intento cada 24 h por tecnología o vacante, y
+  `start` borra las sesiones vencidas del propio usuario (la TTL de Firestore exige facturación; ver
+  `docs/DEPLOYMENT.md`).
 - **H5 — El estado vacío del roadmap es inalcanzable:** el error `ROADMAP_REQUIRES_LINE_EVALUATION` lo captura
   un `catch` genérico, así que quien no ha hecho The LINE ve un error genérico en vez del CTA para hacerla.
 - **H6 — Agujero de rutas en el escalón superior:** un usuario con nivel inferido `senior` construye
@@ -305,8 +316,8 @@ bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.j
   (un senior recibe la ruta junior→mid); en los otros 4 roles, banner de error.
 - **H7 — `precision` se calcula y se tira:** la página solo lee `.items`, así que el mensaje "conecta GitHub
   para más precisión" que promete el tipo no se muestra jamás.
-- **H8 — `docs/ROADMAP_DETERMINISTIC.md` no existe** pese a estar referenciado en 5 archivos como la única
-  documentación de los algoritmos.
+- **H8 — ✅ Resuelto (2026-10):** [`docs/ROADMAP_DETERMINISTIC.md`](./ROADMAP_DETERMINISTIC.md) documenta los
+  algoritmos del roadmap.
 
 ### 🟡 Menores
 

@@ -28,6 +28,7 @@ import {
   type SeniorityLevel,
 } from "@/services/github-engine/role-mapping/role-weights";
 import type { RoadmapItem, RoadmapRoute, Skill, ScoreSource } from "@/types/roadmap.types";
+import { practiceTechnologyForSkill, technologyLabel } from "@/lib/skill-technology-map";
 import { onAuthStateChanged, User } from "firebase/auth";
 
 const ROLE_OPTIONS: { id: TargetRole; label: string }[] = [
@@ -57,6 +58,14 @@ const SCORE_SOURCE_LABELS: Record<ScoreSource, string> = {
   "category-inferred": "el promedio de pruebas parecidas",
   none: "sin datos todavía",
 };
+
+/** "The LINE (React, Next.js)" cuando la nota sale de tecnologías relacionadas con la skill. */
+function scoreSourceLabel(item: RoadmapItem): string {
+  if (item.scoreSource === "line" && item.evidenceTechnologies?.length) {
+    return `The LINE (${item.evidenceTechnologies.map(technologyLabel).join(", ")})`;
+  }
+  return SCORE_SOURCE_LABELS[item.scoreSource];
+}
 
 export default function RoadmapPage() {
   const [items, setItems] = useState<RoadmapItem[]>([]);
@@ -220,10 +229,13 @@ export default function RoadmapPage() {
    * Nunca ofrece un enlace a algo que no puede resolver ninguna de las dos cosas.
    */
   function getSkillAction(item: RoadmapItem): { label: string; href: string } | null {
-    if (practicable[item.skillId]) {
+    // La skill del catálogo casi nunca es una tecnología de The LINE: se ofrece practicar la
+    // tecnología relacionada que sí tenga preguntas (p. ej. react-fundamentals → React).
+    const tech = practiceTechnologyForSkill(item.skillId, practicable);
+    if (tech) {
       return {
-        label: "Practicar en The LINE",
-        href: `/dashboard/line?technology=${encodeURIComponent(item.skillId)}`,
+        label: tech === item.skillId ? "Practicar en The LINE" : `Practicar ${technologyLabel(tech)} en The LINE`,
+        href: `/dashboard/line?technology=${encodeURIComponent(tech)}`,
       };
     }
     if (item.scoreSource === "github") {
@@ -262,7 +274,7 @@ export default function RoadmapPage() {
             key={role.id}
             onClick={() => handleRoleChange(role.id)}
             className={cn(
-              "px-5 py-2.5 rounded-2xl text-[11px] font-bold uppercase tracking-widest transition-colors",
+              "lift px-5 py-2.5 rounded-2xl text-[11px] font-bold uppercase tracking-widest",
               targetRole === role.id
                 ? "bg-black text-white"
                 : "bg-white text-gray-500 border border-gray-100 hover:text-black"
@@ -342,7 +354,7 @@ export default function RoadmapPage() {
                   <p className="text-sm text-gray-400 font-medium">
                     {CATEGORY_LABELS[nextStep.category] ?? nextStep.category}
                     {nextStep.scoreSource !== "none" && (
-                      <> · medido con {SCORE_SOURCE_LABELS[nextStep.scoreSource]}</>
+                      <> · medido con {scoreSourceLabel(nextStep)}</>
                     )}
                   </p>
                 </div>
@@ -420,7 +432,7 @@ export default function RoadmapPage() {
                       <p className="font-bold truncate">{item.skillName}</p>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-gray-300">
                         {CATEGORY_LABELS[item.category] ?? item.category}
-                        {item.scoreSource !== "none" && <> · {SCORE_SOURCE_LABELS[item.scoreSource]}</>}
+                        {item.scoreSource !== "none" && <> · {scoreSourceLabel(item)}</>}
                       </p>
                     </div>
                     <ScoreGap item={item} />

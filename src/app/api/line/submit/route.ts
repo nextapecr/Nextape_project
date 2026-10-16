@@ -6,6 +6,7 @@ import {
   isValidAnswerSet,
   normalizeStoredQuestions,
 } from "@/lib/server/assessment";
+import { applyAttemptToDna, isSubmissionLate, levelWeight } from "@/lib/server/line-policy";
 import { calculateMatch } from "@/lib/match";
 import { canonicalSkillKey } from "@/lib/technologies";
 import type { Answer, Question } from "@/types/question.types";
@@ -15,10 +16,16 @@ export const runtime = "nodejs";
 /**
  * POST /api/line/submit
  * Recibe las respuestas de una sesión, corrige EN SERVIDOR contra la clave guardada, y persiste
- * el DNA (`user_skill_scores`, mejor score por skill) y el intento (`assessment_attempts`) con el
- * Admin SDK. El cliente nunca ve `correctIndex` ni puede escribir su propio DNA.
+ * el DNA (`user_skill_scores`) y el intento (`assessment_attempts`) con el Admin SDK. El cliente
+ * nunca ve `correctIndex` ni puede escribir su propio DNA.
  *
- * Body: { sessionId: string, answers: number[] }
+ * DNA (H1 de la auditoría): cada skill guarda sus últimos 3 intentos ponderados por nivel
+ * (junior ×0.6, mid ×0.8, senior ×1) y su valor es el PROMEDIO. Antes era la mejor nota.
+ *
+ * Tiempo: si la sesión tiene `expiresAt` y el envío llega después (más un margen de red), se
+ * rechaza con 410. Las respuestas `null` cuentan como sin responder (se acabó el tiempo).
+ *
+ * Body: { sessionId: string, answers: Answer[] }
  * Auth: header `Authorization: Bearer <Firebase ID token>`.
  */
 export async function POST(req: NextRequest) {
@@ -49,6 +56,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
+    const now = Date.now();
+    if (isSubmissionLate(session.expiresAt, now)) {
+      // La prueba venció sin enviarse a tiempo. No se corrige: quien la abrió y la dejó correr
+      // no puede volver horas después con las respuestas buscadas. El intento ya se consumió.
+      await adminDb().collection("assessment_attempts").doc(`${uid}_${sessionId}`).set({
+        assessmentId: sessionId,
+        userId: uid,
+        jobId: session.jobId ?? null,
+        status: "expired",
+        score: 0,
+        level: session.level ?? null,
+        startedAt: session.createdAt ?? FieldValue.serverTimestamp(),
+        completedAt: FieldValue.serverTimestamp(),
+      });
+      await sessionRef.delete();
+      return NextResponse.json({ error: "session_expired" }, { status: 410 });
+    }
+
     const questions = normalizeStoredQuestions(session.questions as Question[]);
 
     // El set de respuestas debe corresponder 1:1 con el examen y tener la forma que exige cada
@@ -67,22 +92,22 @@ export async function POST(req: NextRequest) {
       answersMap[q.id] = JSON.stringify(answers[i] ?? null);
     });
 
-    // DNA: merge quedándonos con el MEJOR score por skill.
+    // DNA: promedio de los últimos intentos, ponderados por nivel (ver line-policy.ts).
     // Va en TRANSACCIÓN: era un read-modify-write y dos simulaciones concurrentes del mismo
     // usuario (p.ej. dos pestañas) podían perder una de las dos actualizaciones.
+    const sessionLevel: string | undefined = typeof session.level === "string" ? session.level : undefined;
+    const skillLevels: Record<string, string> =
+      session.skillLevels && typeof session.skillLevels === "object" ? session.skillLevels : {};
     const scoresRef = adminDb().collection("user_skill_scores").doc(uid);
     const merged = await adminDb().runTransaction(async (tx) => {
       const currentSnap = await tx.get(scoresRef);
-      const next: Record<string, number> = { ...(currentSnap.data()?.scores || {}) };
-      for (const [skill, score] of Object.entries(skillScores)) {
-        next[skill] = Math.max(next[skill] ?? 0, score);
-      }
+      const next = applyAttemptToDna(currentSnap.data(), skillScores, skillLevels, sessionLevel, now);
       tx.set(
         scoresRef,
-        { uid, scores: next, updatedAt: FieldValue.serverTimestamp() },
+        { uid, scores: next.scores, history: next.history, updatedAt: FieldValue.serverTimestamp() },
         { merge: true }
       );
-      return next;
+      return next.scores;
     });
 
     // Registro del intento (historial + métrica de "Simulaciones").
@@ -94,6 +119,9 @@ export async function POST(req: NextRequest) {
       status: "completed",
       answers: answersMap,
       score: overall,
+      level: sessionLevel ?? null,
+      skillLevels,
+      unanswered: answers.filter((a) => a === null).length,
       startedAt: session.createdAt ?? FieldValue.serverTimestamp(),
       completedAt: FieldValue.serverTimestamp(),
     });
@@ -174,7 +202,18 @@ export async function POST(req: NextRequest) {
     // La sesión es de un solo uso.
     await sessionRef.delete();
 
-    return NextResponse.json({ overall, skillScores });
+    // `overall` y `skillScores` son la nota de ESTA prueba en %; `dnaScores` es cómo quedó el DNA
+    // de cada skill evaluada (promedio ponderado). La UI muestra ambas.
+    const dnaScores: Record<string, number> = {};
+    for (const skill of Object.keys(skillScores)) dnaScores[skill] = merged[skill];
+
+    return NextResponse.json({
+      overall,
+      skillScores,
+      dnaScores,
+      level: sessionLevel ?? null,
+      levelWeight: levelWeight(sessionLevel),
+    });
   } catch (err) {
     console.error("[line/submit] error:", err);
     return NextResponse.json({ error: "server_error" }, { status: 500 });

@@ -58,6 +58,9 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
     const alice = testEnv.authenticatedContext("alice").firestore();
     await assertFails(getDoc(doc(alice, "line_sessions/s1")));
     await assertFails(getDoc(doc(alice, "job_answer_keys/j1")));
+    // Preguntas vistas: si el cliente pudiera vaciarlas, elegiría qué preguntas le tocan.
+    await assertFails(getDoc(doc(alice, "line_seen/alice_react_senior")));
+    await assertFails(setDoc(doc(alice, "line_seen/alice_react_senior"), { fingerprints: [] }));
   });
 
   it("nadie puede crear intentos desde cliente (create:false, solo servidor)", async () => {

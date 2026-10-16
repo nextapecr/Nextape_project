@@ -42,14 +42,18 @@ Tipo: [`UserSkills`](../src/types/user.types.ts).
 |---|---|---|
 | `uid` | string | PK = uid |
 | `scores` | `{ [skillName: string]: number }` | clave = skill en **minúsculas**, valor 0–100 |
+| `history` | `{ [skillName: string]: { score, raw, level, at, legacy? }[] }` | Últimos 3 intentos por skill. `score` = nota × peso del nivel; `raw` = nota de la prueba en % |
 | `updatedAt` | Timestamp | ✅ ahora `Timestamp.now()` (antes `new Date()`) |
 
 - Leído por `SkillsService.getSkills`. Escrito por `SkillsService.updateSkillScores` (y el atajo
   `updateSkillScore`).
-- ✅ Persiste **todas** las habilidades evaluadas (por `tag`) y se queda con el **mejor** score por skill.
+- ✅ Persiste **todas** las habilidades evaluadas (por `tag`). Desde el 2026-10 (H1 de la auditoría) el score
+  de cada skill es el **promedio de sus últimos 3 intentos, ponderados por nivel**: junior ×0.6, mid ×0.8,
+  senior ×1 ([`line-policy.ts`](../src/lib/server/line-policy.ts)). Antes era el mejor score, y repetir no
+  costaba nada. Un DNA anterior sin `history` entra como un intento más (`legacy: true`) y sale a los 3 nuevos.
 - ✅ **Escritura SOLO en servidor** (B2): la escribe `/api/line/submit` con Admin SDK. El cliente es
   `write:false` → el DNA **no es falsificable**. Lectura: solo el owner. Ver SECURITY / BACKEND_AI.
-- ⚠️ La "media de últimos 3 intentos" del blueprint sigue sin implementarse (se toma el mejor, no la media).
+- ✅ La "media de últimos 3 intentos" del blueprint ya está implementada (ver arriba).
 
 ### `assessment_attempts/{attemptId}`  — Intentos de evaluación
 Tipo: [`AssessmentSession`](../src/types/assessment.types.ts).
@@ -71,8 +75,13 @@ Tipo: [`AssessmentSession`](../src/types/assessment.types.ts).
 
 ### `line_sessions/{sessionId}` y `job_answer_keys/{jobId}` — 🔒 server-only
 Colecciones de **confianza**, escritas/leídas SOLO por el Admin SDK (reglas `read, write: if false`).
-- `line_sessions`: `{ userId, jobId?, questions (con correctIndex), createdAt }`. Sesión de una simulación;
-  guarda la clave de respuestas. Se borra al enviar (`/api/line/submit`).
+- `line_sessions`: `{ userId, jobId?, questions (con clave, opciones ya barajadas), level, skillLevels,
+  timeLimitMinutes, expiresAt (ms), expireAt (Timestamp, para TTL), createdAt }`. Sesión de una simulación;
+  guarda la clave de respuestas. Se borra al enviar (`/api/line/submit`). Si el envío llega después de
+  `expiresAt` + 90 s, se rechaza (`410 session_expired`) y el intento queda como `expired`.
+- `line_seen/{uid}_{repertorio}`: `{ uid, poolKey, fingerprints[], updatedAt }`. Huellas (sha1 del enunciado)
+  de las últimas 150 preguntas que vio el usuario en ese repertorio, de la más antigua a la más reciente.
+  `/api/line/start` prioriza las no vistas. Server-only.
 - `job_answer_keys`: `{ jobId, questions (con clave), covered, missing, source: "bank", updatedAt }`. Repertorio
   de la prueba de una vacante, **compuesto desde `line_question_pools` sin IA** ([`job-pool.ts`](../src/lib/server/job-pool.ts)):
   hasta 30 preguntas por skill (máx. 8 skills), del nivel de la vacante o del más cercano con banco. `covered`
@@ -88,6 +97,7 @@ Tipo: [`JobOpportunity`](../src/types/job.types.ts).
 | `title`, `company`, `description`, `salary`, `location`, `type`, `level` | string | `company` editable (se prefija con el nombre del perfil) |
 | `requiredSkills` | string[] | Ids canónicos del catálogo (`src/lib/technologies.ts`) elegidos con `SkillPicker`. Las vacantes antiguas en texto libre ("React.js", "Node") se resuelven por alias |
 | `examQuestionCount` | `number \| null`? | Preguntas por examen fijadas por el reclutador (10–30). Vacío/`null` = automático: **10 si el candidato tiene GitHub analizado, 20 si no** |
+| `examTimeLimitMinutes` | `number \| null`? | Minutos para responder la prueba, fijados por el reclutador (5–480). Vacío/`null` = 30. Lo hace cumplir el servidor |
 | `assessmentReady` / `assessmentPoolSize` / `assessmentMissingSkills` | boolean / number / string[] | Estado del repertorio; lo escribe el servidor al componerlo |
 | `createdBy` | string | uid del reclutador |
 | `postedAt` | Timestamp | |
@@ -217,6 +227,9 @@ parsedLanguages, analyzedAt, engineVersion`.
 ([`rate-limit.ts`](../src/lib/server/rate-limit.ts)). Protege el `GITHUB_TOKEN` compartido (5000 req/h para toda la
 plataforma) y el coste de IA (Groq GPT-OSS).
 - **Escritor:** los endpoints de GitHub (Admin SDK, en transacción). **Cliente:** `read, write: if false`.
+- **The LINE:** también guarda aquí el límite de **1 intento cada 24 h** (`line_practice_<tecnología>` sin
+  importar el nivel, y `line_job_<jobId>` por vacante). Se consume en `/api/line/start`. Configurable con
+  `LINE_ATTEMPT_COOLDOWN_HOURS` (`0` = sin límite, solo para local).
 
 ### `core/{uid}`  — ⚠️ Colección fantasma
 - `CoreService` lee/escribe la colección `core`, **pero no existe regla para `core`**.
