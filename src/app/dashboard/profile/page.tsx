@@ -115,7 +115,7 @@ export default function ProfilePage() {
            {/* La tarjeta completa vive en /dashboard/github, con su entrada de menú: aquí quedaba
                en la tercera columna bajo el DNA y en pantallas pequeñas nadie la encontraba. */}
            <Link href="/dashboard/github" className="block">
-             <div className="bg-white p-8 rounded-[2.5rem] shadow-apple border border-gray-50 hover:shadow-apple-lg transition-shadow space-y-4">
+             <div className="lift-sm bg-white p-8 rounded-[2.5rem] shadow-apple border border-gray-50 hover:shadow-apple-lg space-y-4">
                <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center">
                  <Github className="h-6 w-6 text-white" />
                </div>

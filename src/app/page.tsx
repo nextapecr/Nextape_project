@@ -38,14 +38,26 @@ export default function Home() {
           : "bg-transparent py-6"
       )}>
         <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
-          <div className="text-xl md:text-2xl font-bold tracking-tighter flex items-center gap-2">
+          {/* El logo vuelve al inicio. Ya en "/", sube arriba del todo y quita el #ancla de la URL. */}
+          <Link
+            href="/"
+            aria-label="Nextape, ir al inicio"
+            onClick={(e) => {
+              if (window.location.pathname === "/") {
+                e.preventDefault();
+                window.history.replaceState(null, "", "/");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }
+            }}
+            className="lift text-xl md:text-2xl font-bold tracking-tighter flex items-center gap-2 rounded-lg"
+          >
              <div className="w-6 h-6 md:w-8 md:h-8 bg-brand-blue rounded-lg" />
              <span className="text-black italic">Nextape</span>
-          </div>
+          </Link>
           <div className="hidden md:flex items-center gap-8">
-            <Link href="#problem" className="text-[10px] font-bold uppercase tracking-widest text-gray-500 hover:text-brand-blue transition-colors">Problema</Link>
-            <Link href="#how-it-works" className="text-[10px] font-bold uppercase tracking-widest text-gray-500 hover:text-brand-blue transition-colors">Cómo funciona</Link>
-            <Link href="#faq" className="text-[10px] font-bold uppercase tracking-widest text-gray-500 hover:text-brand-blue transition-colors">FAQ</Link>
+            <Link href="#problem" className="lift inline-block text-[10px] font-bold uppercase tracking-widest text-gray-500 hover:text-brand-blue">Problema</Link>
+            <Link href="#how-it-works" className="lift inline-block text-[10px] font-bold uppercase tracking-widest text-gray-500 hover:text-brand-blue">Cómo funciona</Link>
+            <Link href="#faq" className="lift inline-block text-[10px] font-bold uppercase tracking-widest text-gray-500 hover:text-brand-blue">FAQ</Link>
           </div>
           <Button 
             onClick={() => setIsAuthModalOpen(true)}
@@ -74,7 +86,7 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8 px-6 max-w-lg mx-auto">
               <Button
                 onClick={() => setIsAuthModalOpen(true)}
-                className="bg-brand-blue text-white hover:bg-brand-blue/90 h-16 px-12 rounded-2xl text-sm font-bold shadow-apple-lg uppercase tracking-widest w-full transition-transform hover:scale-[1.02]"
+                className="bg-brand-blue text-white hover:bg-brand-blue/90 h-16 px-12 rounded-2xl text-sm font-bold shadow-apple-lg uppercase tracking-widest w-full"
               >
                 Ingresar como Candidato
               </Button>
@@ -102,7 +114,7 @@ export default function Home() {
                   { title: "Pruebas Genéricas", text: "Los desafíos de algoritmos no predicen cómo un desarrollador reacciona ante un fallo en producción." },
                   { title: "Ruido y Fricción", text: "Las empresas pierden 40+ horas en entrevistas con candidatos que no tienen el nivel requerido." }
                 ].map((item, i) => (
-                  <div key={i} className="flex gap-4 p-6 bg-white rounded-[2rem] shadow-apple border border-gray-50 group hover:border-brand-blue/30 transition-all">
+                  <div key={i} className="lift flex gap-4 p-6 bg-white rounded-[2rem] shadow-apple border border-gray-50 group hover:border-brand-blue/30">
                     <XCircle className="h-6 w-6 text-brand-red shrink-0" />
                     <div>
                       <h4 className="font-bold text-lg italic">{item.title}</h4>
@@ -113,7 +125,7 @@ export default function Home() {
               </div>
             </div>
             <div className="relative">
-               <div className="bg-gray-950 p-12 rounded-[3rem] text-white shadow-apple-lg relative overflow-hidden group min-h-[400px] flex flex-col justify-center">
+               <div className="lift-sm bg-gray-950 p-12 rounded-[3rem] text-white shadow-apple-lg relative overflow-hidden group min-h-[400px] flex flex-col justify-center">
                   <div className="w-12 h-12 bg-brand-blue/20 rounded-xl mb-8 flex items-center justify-center">
                      <Cpu className="h-6 w-6 text-brand-blue" />
                   </div>
@@ -140,7 +152,7 @@ export default function Home() {
                 { icon: Fingerprint, step: "02", title: "CORE", text: "Cada resultado construye tu DNA técnico verificado: una huella de habilidades medida, no declarada." },
                 { icon: Target, step: "03", title: "Match", text: "Tu DNA se compara con las vacantes para calcular tu compatibilidad real con cada posición." }
               ].map((item) => (
-                <div key={item.step} className="bg-white p-10 rounded-[2.5rem] shadow-apple border border-gray-50 space-y-6">
+                <div key={item.step} className="lift bg-white p-10 rounded-[2.5rem] shadow-apple border border-gray-50 hover:border-brand-blue/30 space-y-6">
                   <div className="flex items-center justify-between">
                     <div className="w-12 h-12 bg-brand-blue/10 rounded-2xl flex items-center justify-center">
                       <item.icon className="h-6 w-6 text-brand-blue" />
@@ -165,7 +177,7 @@ export default function Home() {
                 { q: "¿Cómo funciona la simulación?", a: "Generamos escenarios técnicos reales basados en tu stack. Tendrás que resolver anomalías, optimizar código o diseñar arquitecturas en tiempo real." },
                 { q: "¿Qué es el DNA técnico?", a: "Es tu huella técnica verificada. A diferencia de un CV, el DNA se construye con resultados de pruebas reales y es lo que las empresas consultan." }
               ].map((item, i) => (
-                <AccordionItem key={i} value={`item-${i}`} className="border-b border-gray-50 py-4">
+                <AccordionItem key={i} value={`item-${i}`} className="lift-sm border-b border-gray-50 py-4 rounded-2xl hover:bg-gray-50/60">
                   <AccordionTrigger className="text-left font-bold text-lg hover:no-underline hover:text-brand-blue transition-colors px-4">
                     {item.q}
                   </AccordionTrigger>
