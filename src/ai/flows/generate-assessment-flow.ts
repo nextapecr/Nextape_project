@@ -261,8 +261,11 @@ Responde solo con el JSON.`;
     const LenientOutput = z.object({ questions: z.array(LENIENT_BY_TYPE[type]) });
     console.log(`   ⏳ Generando tipo '${type}' (${count} preguntas)...`);
     const { data: parsed, model } = await generateJsonWithFallback(prompt, LenientOutput);
+    const modelName = model === 'primary' 
+      ? (process.env.GROQ_TIMELINE_MODEL_PRIMARY || 'llama-86m')
+      : (process.env.GROQ_TIMELINE_MODEL_FALLBACK || 'gpt-oss-120b');
     console.log(
-      `   ✅ Completado tipo '${type}': ${parsed.questions.length} preguntas (modelo: Groq ${model.toUpperCase()})`
+      `   ✅ Completado tipo '${type}': ${parsed.questions.length} preguntas (modelo: ${modelName} [${model}])`
     );
 
     // Solo se conserva `source` si es una URL que estaba en la lista: el modelo a veces inventa

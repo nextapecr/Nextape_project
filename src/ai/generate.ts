@@ -86,10 +86,15 @@ export function isProviderUnavailableError(err: unknown): boolean {
 }
 
 /**
- * Genera JSON con Groq 120B (primario) y, si falla con rate limit, reintenta con Groq 20B (backup).
+ * Genera JSON con el modelo primario (Llama 86M) y, si falla con rate limit, reintenta con el backup (GPT-OSS 120B).
  *
+ * Los modelos se configuran desde variables de entorno:
+ * - GROQ_TIMELINE_MODEL_PRIMARY (default: meta-llama/llama-prompt-guard-2-86m)
+ * - GROQ_TIMELINE_MODEL_FALLBACK (default: openai/gpt-oss-120b)
+ *
+ * Cada modelo tiene límites INDEPENDIENTES en Groq (no comparten el pool de tokens/requests).
  * Una vez detectado el rate limit en la corrida actual, las llamadas subsiguientes
- * cambian automáticamente a Groq 20B sin perder tiempo re-intentando 120B.
+ * cambian automáticamente al modelo de backup sin perder tiempo re-intentando el primario.
  *
  * Devuelve `{ data, model, usage }` para logging y medición de costos.
  * 
@@ -99,20 +104,22 @@ export async function generateJsonWithFallback<T>(
   prompt: string,
   schema: z.ZodType<T>,
   options: GenerateJsonOptions = {},
-): Promise<{ data: T; model: '120b' | '20b'; usage?: TokenUsage }> {
-  // Modelos GPT-OSS (free tier, agosto 2026+)
-  const MODEL_120B = 'groq/openai/gpt-oss-120b';
-  const MODEL_20B = 'groq/openai/gpt-oss-20b';
+): Promise<{ data: T; model: 'primary' | 'fallback'; usage?: TokenUsage }> {
+  // Modelos configurables desde .env.local
+  // Primario: Llama 86M (14.4K RPD, 500K TPD) - excelente para JSON estructurado
+  // Fallback: GPT-OSS 120B (1K RPD, 200K TPD) - backup robusto con arquitectura GPT
+  const MODEL_PRIMARY = process.env.GROQ_TIMELINE_MODEL_PRIMARY || 'meta-llama/llama-prompt-guard-2-86m';
+  const MODEL_FALLBACK = process.env.GROQ_TIMELINE_MODEL_FALLBACK || 'openai/gpt-oss-120b';
 
-  // Si ya sabemos que 120B no está disponible, usar 20B directamente
+  // Si ya sabemos que el modelo primario no está disponible, usar fallback directamente
   if (isGroq120bUnavailable) {
-    const result = await generateJsonWithModel(prompt, schema, MODEL_20B, options);
-    return { ...result, model: '20b' };
+    const result = await generateJsonWithModel(prompt, schema, `groq/${MODEL_FALLBACK}`, options);
+    return { ...result, model: 'fallback' };
   }
 
   try {
-    const result = await generateJsonWithModel(prompt, schema, MODEL_120B, options);
-    return { ...result, model: '120b' };
+    const result = await generateJsonWithModel(prompt, schema, `groq/${MODEL_PRIMARY}`, options);
+    return { ...result, model: 'primary' };
   } catch (err) {
     const rateLimited = isRateLimitError(err);
     if (!rateLimited && !isProviderUnavailableError(err)) throw err;
@@ -120,12 +127,12 @@ export async function generateJsonWithFallback<T>(
     isGroq120bUnavailable = true;
     console.warn(
       rateLimited
-        ? '[ai/generate] ⚠️ Groq 120B rate limit alcanzado — cambiando a 20B para esta sesión...'
-        : `[ai/generate] ⚠️ Groq 120B no disponible (${err instanceof Error ? err.message.slice(0, 120) : err}) — cambiando a 20B para esta sesión...`,
+        ? `[ai/generate] ⚠️ ${MODEL_PRIMARY} rate limit alcanzado — cambiando a ${MODEL_FALLBACK} para esta sesión...`
+        : `[ai/generate] ⚠️ ${MODEL_PRIMARY} no disponible (${err instanceof Error ? err.message.slice(0, 120) : err}) — cambiando a ${MODEL_FALLBACK} para esta sesión...`,
     );
 
-    const result = await generateJsonWithModel(prompt, schema, MODEL_20B, options);
-    return { ...result, model: '20b' };
+    const result = await generateJsonWithModel(prompt, schema, `groq/${MODEL_FALLBACK}`, options);
+    return { ...result, model: 'fallback' };
   }
 }
 

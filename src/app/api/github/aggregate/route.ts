@@ -9,6 +9,7 @@ import {
   GITHUB_USERNAME_PATTERN,
 } from "@/services/github-engine/evidence-keys";
 import { generateGithubFeedback } from "@/ai/flows/generate-github-feedback-flow";
+import { filterEvidenceForAggregate } from "@/lib/server/github-authorization";
 import type {
   EngineMetrics,
   GithubAggregateResponse,
@@ -89,17 +90,37 @@ export async function POST(req: NextRequest) {
     const profileRef = adminDb().collection("github_evidence").doc(uid);
     // Defensa en profundidad: limita a 100 repos aunque /api/github/repos ya poda a ese máximo.
     // Protege contra race conditions o fallos en la poda upstream.
-    const [snap, previousSnap] = await Promise.all([
+    const [snap, previousSnap, userSnap] = await Promise.all([
       profileRef.collection("repos").limit(100).get(),
       profileRef.get(),
+      adminDb().collection("users").doc(uid).get(),
     ]);
-    const repos = snap.docs
+    
+    // Phase 6: Get user's private repos allowlist for filtering
+    const privateReposAllowlist = (userSnap.data()?.privateReposAllowlist as string[]) ?? [];
+    
+    const allRepos = snap.docs
       .map((doc) => doc.data() as GithubRepoEvidence)
       .filter(
         (r) =>
           r.githubUsername?.toLowerCase() === githubUsername.toLowerCase() &&
           r.engineVersion === GITHUB_ENGINE_VERSION,
       );
+    
+    // Phase 6: Filter out private repos not in allowlist (and legacy repos without isPrivate field)
+    const repos = filterEvidenceForAggregate(allRepos, privateReposAllowlist);
+    
+    const skippedCount = allRepos.length - repos.length;
+    if (skippedCount > 0) {
+      console.log(`
+╔════════════════════════════════════════════════════════════════
+║ 🔒 PRIVATE REPO FILTERING (Phase 6)
+║ Total repos: ${allRepos.length}
+║ Authorized: ${repos.length}
+║ Skipped (private not in allowlist): ${skippedCount}
+╚════════════════════════════════════════════════════════════════
+      `);
+    }
 
     if (repos.length === 0) {
       return NextResponse.json({ error: "no_repos_analyzed" }, { status: 404 });

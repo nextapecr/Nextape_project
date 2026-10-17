@@ -274,7 +274,7 @@ export default function RoadmapPage() {
             key={role.id}
             onClick={() => handleRoleChange(role.id)}
             className={cn(
-              "px-5 py-2.5 rounded-2xl text-[11px] font-bold uppercase tracking-widest transition-colors",
+              "lift px-5 py-2.5 rounded-2xl text-[11px] font-bold uppercase tracking-widest",
               targetRole === role.id
                 ? "bg-black text-white"
                 : "bg-white text-gray-500 border border-gray-100 hover:text-black"
