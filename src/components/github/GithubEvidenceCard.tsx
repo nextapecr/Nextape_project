@@ -736,11 +736,20 @@ function ProfileResult({
       {profile.aiFeedback ? (
         <div className="bg-gray-50 rounded-[2rem] p-8 space-y-6">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-brand-purple" />
+            {profile.aiFeedback.source === 'deterministic' ? (
+              <CheckCircle2 className="h-4 w-4 text-brand-purple" />
+            ) : (
+              <Sparkles className="h-4 w-4 text-brand-purple" />
+            )}
             <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-              Lectura del evaluador
+              {profile.aiFeedback.source === 'deterministic' ? 'Análisis técnico' : 'Lectura del evaluador'}
             </span>
           </div>
+          {profile.aiFeedback.source === 'deterministic' && (
+            <p className="text-xs text-gray-500 -mt-2">
+              Análisis automático basado en métricas de código (generado sin IA)
+            </p>
+          )}
           <p className="text-sm font-medium leading-relaxed text-gray-700">{profile.aiFeedback.feedback}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <FeedbackList title="Fortalezas" items={profile.aiFeedback.strengths} tone="green" />
