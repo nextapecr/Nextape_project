@@ -3,7 +3,14 @@
  *
  * REGLA DE ORO DE ARQUITECTURA: La IA NUNCA recibe código fuente ni AST.
  * Solo interpreta métricas numéricas ya calculadas por el motor determinístico (Capa 2).
- * Presupuesto de output: ~400 tokens con reasoning_effort='low' para control de costos.
+ * 
+ * PRESUPUESTOS:
+ * - Output: ~400 tokens con reasoning_effort='low' para control de costos
+ * - Tiempo: Sin timeout explícito. La función depende del timeout por defecto de Genkit/fetch.
+ *   Típicamente: ~30-60s en Node.js/Vercel. Con 250K TPM y 500 tok/s (120B), una respuesta
+ *   de 400 tokens toma ~0.8s más latencia de red (~1-2s total en condiciones normales).
+ *   NOTA: No se implementa Promise.race porque no cancela el fetch subyacente (la petición
+ *   HTTP sigue ejecutándose en el servidor). El fallback determinístico maneja timeouts.
  *
  * ARQUITECTURA: 2026-12-XX
  * Modelo primario: openai/gpt-oss-120b (500 tok/s, 250K TPM, reasoning_effort='low')
