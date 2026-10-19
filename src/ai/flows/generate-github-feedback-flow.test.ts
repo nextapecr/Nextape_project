@@ -62,18 +62,21 @@ describe('generateGithubFeedback', () => {
       expect(result.source).toBe('deterministic');
     });
 
-    it('ROJO: without catch block, AI failure throws', async () => {
-      // Este test documenta el comportamiento ANTES del catch
-      // Verificamos que generateJsonWithFallback SÍ puede lanzar
+    it('ROJO/VERDE: without catch block, AI failure throws', async () => {
+      // Este test demuestra que el catch es necesario
+      // PASO 1: Simular un error de la IA
       const { generateJsonWithFallback } = await import('@/ai/generate');
       const mockError = new Error('AI exploded');
       vi.mocked(generateJsonWithFallback).mockRejectedValueOnce(mockError);
 
-      // Con el catch implementado, NO lanza (VERDE)
-      await expect(generateGithubFeedback(mockInput)).resolves.toBeDefined();
+      // PASO 2: Con el catch implementado, NO lanza → retorna deterministic
+      const result = await generateGithubFeedback(mockInput);
+      expect(result.source).toBe('deterministic');
+      expect(result.feedback).toBeTruthy();
       
-      // Para demostrar ROJO: si quitáramos el try/catch, esto lanzaría:
-      // await expect(generateGithubFeedback(mockInput)).rejects.toThrow('AI exploded');
+      // NOTA: Si se quitara el try/catch del código, este test fallaría con:
+      // "Error: AI exploded" (UnhandledPromiseRejection)
+      // Demostración manual: comentar try/catch → ver test fallar → restaurar
     });
   });
 
