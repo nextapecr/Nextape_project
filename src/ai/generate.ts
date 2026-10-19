@@ -218,11 +218,11 @@ async function generateJsonWithModel<T>(
 ): Promise<{ data: T; usage?: TokenUsage }> {
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
       if (attempt > 0) {
-        console.warn(`[ai/generate] ⏳ Pausa de reintento (${attempt}/2) para ${model}...`);
-        await new Promise((r) => setTimeout(r, 3000));
+        console.warn(`[ai/generate] ⏳ Pausa de reintento (${attempt}/1) para ${model}...`);
+        await new Promise((r) => setTimeout(r, 1500));
       }
 
       const response = await ai.generate({

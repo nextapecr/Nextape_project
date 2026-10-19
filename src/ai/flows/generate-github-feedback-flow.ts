@@ -92,6 +92,9 @@ function generateDeterministicFeedback(input: GenerateGithubFeedbackInput): Gene
   };
 }
 
+/** Timeout de 8 segundos para garantizar respuesta antes del límite de serverless (10s) */
+const AI_FEEDBACK_TIMEOUT_MS = 8000;
+
 export async function generateGithubFeedback(
   input: GenerateGithubFeedbackInput,
 ): Promise<GenerateGithubFeedbackOutput> {
@@ -125,7 +128,8 @@ REGLAS STRICTAS:
 - Sin fences de markdown extra si es posible, responde solo con el JSON.`;
 
   try {
-    const { data, model, usage } = await generateJsonWithFallback(
+    // Promise.race: timeout de 8s para garantizar respuesta antes del límite serverless (10s)
+    const aiPromise = generateJsonWithFallback(
       prompt,
       GenerateGithubFeedbackOutputSchema,
       {
@@ -134,6 +138,12 @@ REGLAS STRICTAS:
         includeReasoning: false, // No necesitamos ver el proceso de razonamiento
       },
     );
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('AI_TIMEOUT')), AI_FEEDBACK_TIMEOUT_MS)
+    );
+
+    const { data, model, usage } = await Promise.race([aiPromise, timeoutPromise]);
 
     // Logging de métricas para medición de costos
     console.log(`[generateGithubFeedback] ✅ Generado con modelo: Groq ${model.toUpperCase()}`);
@@ -156,9 +166,17 @@ REGLAS STRICTAS:
     // Fallback determinístico: cuando todos los modelos fallan (429, timeout, JSON inválido),
     // construimos un feedback estructurado a partir de los scores ya calculados.
     // Marcado con source: "deterministic" para que la UI pueda distinguirlo.
+    
+    // Registrar clase de error sin PII ni mensaje completo
+    const errorType = err instanceof Error ? err.constructor.name : typeof err;
+    const errorStatus = (err as { status?: number; statusCode?: number }).status 
+      ?? (err as { status?: number; statusCode?: number }).statusCode
+      ?? 'unknown';
+    const isTimeout = err instanceof Error && err.message === 'AI_TIMEOUT';
+    
     console.error(
-      '[generateGithubFeedback] ⚠️ Ambos modelos (Groq 120B + 20B) fallaron, activando fallback determinístico:',
-      err instanceof Error ? err.message : err,
+      '[generateGithubFeedback] ⚠️ IA no disponible, activando fallback determinístico:',
+      { errorType, errorStatus, isTimeout }
     );
     
     return generateDeterministicFeedback(input);
