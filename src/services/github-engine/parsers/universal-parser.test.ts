@@ -102,3 +102,32 @@ describe('UserService Test', () => {
     expect(Array.isArray(result.skillScores.topWeaknesses)).toBe(true);
   });
 });
+
+describe("universalParser: soporte Python", () => {
+  it.skipIf(process.platform === "win32")("parsea código Python y falla si gramática no disponible (Linux-only)", () => {
+    // En Linux: si la gramática de Python no está disponible, el test DEBE fallar explícitamente
+    // Sin try/catch que oculte el problema
+    const pythonCode = `
+def greet(name: str) -> str:
+    """Returns a greeting message."""
+    return f"Hello, {name}!"
+
+def fibonacci(n: int) -> int:
+    if n <= 1:
+        return n
+    return fibonacci(n - 1) + fibonacci(n - 2)
+
+class Calculator:
+    def add(self, a: int, b: int) -> int:
+        return a + b
+`;
+
+    const ast = universalParser.parse(pythonCode, "math.py");
+
+    // Assertions: si la gramática no está disponible, parse() lanzará error
+    // y el test fallará (comportamiento deseado en Linux)
+    expect(ast.language).toBe(EXTENSION_MAP[".py"]);
+    expect(ast.root).toBeDefined();
+    expect(ast.root.type).toBeTruthy();
+  });
+});
