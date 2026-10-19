@@ -45,8 +45,8 @@ async function main() {
   console.log('─'.repeat(80));
   
   // Mostrar configuración
-  const primaryModel = process.env.GROQ_TIMELINE_MODEL_PRIMARY || 'meta-llama/llama-prompt-guard-2-86m';
-  const fallbackModel = process.env.GROQ_TIMELINE_MODEL_FALLBACK || 'openai/gpt-oss-120b';
+  const primaryModel = process.env.GROQ_TIMELINE_MODEL_PRIMARY || 'openai/gpt-oss-120b';
+  const fallbackModel = process.env.GROQ_TIMELINE_MODEL_FALLBACK || 'openai/gpt-oss-20b';
   
   console.log('📋 CONFIGURACIÓN:');
   console.log(`   Primario : ${primaryModel}`);

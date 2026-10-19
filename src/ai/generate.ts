@@ -86,11 +86,11 @@ export function isProviderUnavailableError(err: unknown): boolean {
 }
 
 /**
- * Genera JSON con el modelo primario (Llama 86M) y, si falla con rate limit, reintenta con el backup (GPT-OSS 120B).
+ * Genera JSON con el modelo primario (GPT-OSS 120B) y, si falla con rate limit, reintenta con el backup (GPT-OSS 20B).
  *
  * Los modelos se configuran desde variables de entorno:
- * - GROQ_TIMELINE_MODEL_PRIMARY (default: meta-llama/llama-prompt-guard-2-86m)
- * - GROQ_TIMELINE_MODEL_FALLBACK (default: openai/gpt-oss-120b)
+ * - GROQ_TIMELINE_MODEL_PRIMARY (default: openai/gpt-oss-120b)
+ * - GROQ_TIMELINE_MODEL_FALLBACK (default: openai/gpt-oss-20b)
  *
  * Cada modelo tiene límites INDEPENDIENTES en Groq (no comparten el pool de tokens/requests).
  * Una vez detectado el rate limit en la corrida actual, las llamadas subsiguientes
@@ -106,10 +106,10 @@ export async function generateJsonWithFallback<T>(
   options: GenerateJsonOptions = {},
 ): Promise<{ data: T; model: 'primary' | 'fallback'; usage?: TokenUsage }> {
   // Modelos configurables desde .env.local
-  // Primario: Llama 86M (14.4K RPD, 500K TPD) - excelente para JSON estructurado
-  // Fallback: GPT-OSS 120B (1K RPD, 200K TPD) - backup robusto con arquitectura GPT
-  const MODEL_PRIMARY = process.env.GROQ_TIMELINE_MODEL_PRIMARY || 'meta-llama/llama-prompt-guard-2-86m';
-  const MODEL_FALLBACK = process.env.GROQ_TIMELINE_MODEL_FALLBACK || 'openai/gpt-oss-120b';
+  // Primario: GPT-OSS 120B (1K RPD, 200K TPD) - modelo principal (origin/main default)
+  // Fallback: GPT-OSS 20B (8K RPM, 200K TPD) - backup robusto
+  const MODEL_PRIMARY = process.env.GROQ_TIMELINE_MODEL_PRIMARY || 'openai/gpt-oss-120b';
+  const MODEL_FALLBACK = process.env.GROQ_TIMELINE_MODEL_FALLBACK || 'openai/gpt-oss-20b';
 
   // Si ya sabemos que el modelo primario no está disponible, usar fallback directamente
   if (isGroq120bUnavailable) {
