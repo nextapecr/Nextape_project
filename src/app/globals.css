@@ -80,3 +80,36 @@
 .shadow-apple-lg {
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
 }
+/* ── Animaciones de hover ("se agranda un poquito") ──────────────────────────────────────────
+   `.lift`    → botones, chips y tarjetas pequeñas: crece un 3 % al pasar el mouse y se hunde al
+                presionar.
+   `.lift-sm` → bloques grandes (tarjetas anchas, ítems del menú lateral): crece un 1,5 %.
+   Solo en dispositivos con mouse real (`hover: hover`): en móvil el hover se queda "pegado" tras
+   tocar. Y se desactiva si el usuario pidió menos movimiento en su sistema (accesibilidad).
+   Va fuera de @layer para ganar a utilidades como `transition-colors` sin perder esas
+   transiciones de color. */
+.lift,
+.lift-sm {
+  transition-property: transform, box-shadow, background-color, border-color, color, opacity;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .lift:hover {
+    transform: scale(1.03);
+  }
+  .lift-sm:hover {
+    transform: scale(1.015);
+  }
+  .lift:hover.shadow-apple,
+  .lift-sm:hover.shadow-apple {
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.07), 0 10px 10px -5px rgba(0, 0, 0, 0.03);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lift:active {
+    transform: scale(0.97);
+  }
+}

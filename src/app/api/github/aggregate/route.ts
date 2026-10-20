@@ -9,6 +9,7 @@ import {
   GITHUB_USERNAME_PATTERN,
 } from "@/services/github-engine/evidence-keys";
 import { generateGithubFeedback } from "@/ai/flows/generate-github-feedback-flow";
+import { filterEvidenceForAggregate } from "@/lib/server/github-authorization";
 import type {
   EngineMetrics,
   GithubAggregateResponse,
@@ -89,17 +90,41 @@ export async function POST(req: NextRequest) {
     const profileRef = adminDb().collection("github_evidence").doc(uid);
     // Defensa en profundidad: limita a 100 repos aunque /api/github/repos ya poda a ese máximo.
     // Protege contra race conditions o fallos en la poda upstream.
-    const [snap, previousSnap] = await Promise.all([
-      profileRef.collection("repos").limit(100).get(),
+    const [snap, previousSnap, userSnap] = await Promise.all([
+      profileRef.collection("repos").orderBy("analyzedAt", "desc").limit(100).get(),
       profileRef.get(),
+      adminDb().collection("users").doc(uid).get(),
     ]);
-    const repos = snap.docs
+    
+    if (snap.size === 100) {
+      console.warn('[github/aggregate] ⚠️ Query returned exactly 100 repos (limit reached) - older repos may be excluded');
+    }
+    
+    // Phase 6: Get user's private repos allowlist for filtering
+    const privateReposAllowlist = (userSnap.data()?.privateReposAllowlist as string[]) ?? [];
+    
+    const allRepos = snap.docs
       .map((doc) => doc.data() as GithubRepoEvidence)
       .filter(
         (r) =>
           r.githubUsername?.toLowerCase() === githubUsername.toLowerCase() &&
           r.engineVersion === GITHUB_ENGINE_VERSION,
       );
+    
+    // Phase 6: Filter out private repos not in allowlist (and legacy repos without isPrivate field)
+    const repos = filterEvidenceForAggregate(allRepos, privateReposAllowlist);
+    
+    const skippedCount = allRepos.length - repos.length;
+    if (skippedCount > 0) {
+      console.log(`
+╔════════════════════════════════════════════════════════════════
+║ 🔒 PRIVATE REPO FILTERING (Phase 6)
+║ Total repos: ${allRepos.length}
+║ Authorized: ${repos.length}
+║ Skipped (private not in allowlist): ${skippedCount}
+╚════════════════════════════════════════════════════════════════
+      `);
+    }
 
     if (repos.length === 0) {
       return NextResponse.json({ error: "no_repos_analyzed" }, { status: 404 });
@@ -126,7 +151,8 @@ export async function POST(req: NextRequest) {
         ? previous.aiFeedback
         : null;
 
-    const [aiFeedback, identity] = await Promise.all([
+    // Promise.allSettled: un fallo en la IA o identity no debe impedir guardar los scores
+    const [aiFeedbackResult, identityResult] = await Promise.allSettled([
       reusableFeedback ??
       generateGithubFeedback({
         architecture: scores.architecture,
@@ -139,6 +165,22 @@ export async function POST(req: NextRequest) {
       }),
       resolveIdentity(uid, githubUsername),
     ]);
+
+    const aiFeedback = aiFeedbackResult.status === 'fulfilled' ? aiFeedbackResult.value : null;
+    const identity = identityResult.status === 'fulfilled' 
+      ? identityResult.value 
+      : { verified: false, method: null, linkedLogin: null };
+
+    if (aiFeedbackResult.status === 'rejected') {
+      console.error('[github/aggregate] ⚠️ generateGithubFeedback falló, guardando sin feedback:', 
+        aiFeedbackResult.reason instanceof Error ? aiFeedbackResult.reason.message : aiFeedbackResult.reason
+      );
+    }
+    if (identityResult.status === 'rejected') {
+      console.warn('[github/aggregate] ⚠️ resolveIdentity falló, guardando con identity no verificado:', 
+        identityResult.reason instanceof Error ? identityResult.reason.message : identityResult.reason
+      );
+    }
 
     const withCode = repos.filter((r) => r.skillScores.hasASTData && (r.filesAnalyzed ?? 0) > 0);
 

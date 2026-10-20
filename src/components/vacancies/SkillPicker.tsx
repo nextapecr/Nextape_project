@@ -86,7 +86,7 @@ export function SkillPicker({
               disabled={!selected && (!hasBank || value.length >= MAX_JOB_SKILLS)}
               title={hasBank ? undefined : "Aún no hay preguntas para esta tecnología"}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors",
+                "lift inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold",
                 "disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue",
                 selected
                   ? "bg-brand-blue text-white"

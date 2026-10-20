@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     
     const [allRepos, existing] = await Promise.all([
       GithubSignalsService.getCollaborativeRepos(userToken), // Phase 3: OAuth obligatorio
-      reposRef.get(),
+      reposRef.limit(100).get(),
     ]);
 
     if (allRepos.length === 0) {

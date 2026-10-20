@@ -65,7 +65,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         const isActive = pathname === item.href;
         return (
           <Link key={item.name} href={item.href} onClick={onClick}>
-            <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${isActive ? "bg-brand-blue text-white shadow-md shadow-brand-blue/20" : "text-gray-500 hover:bg-gray-100"}`}>
+            <div className={`lift-sm flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium ${isActive ? "bg-brand-blue text-white shadow-md shadow-brand-blue/20" : "text-gray-500 hover:bg-gray-100"}`}>
               <item.icon className={`h-5 w-5 ${isActive ? "text-white" : "text-gray-400"}`} />
               {item.name}
             </div>
@@ -84,7 +84,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-[#F5F5F7] font-body text-foreground">
       <aside className="hidden md:flex flex-col w-72 fixed top-0 bottom-0 bg-white/70 backdrop-blur-xl border-r border-gray-200 z-50">
         <div className="p-8">
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/" aria-label="Nextape, ir al inicio" className="lift inline-flex items-center gap-2 rounded-xl">
             <div className="w-8 h-8 bg-brand-blue rounded-xl flex items-center justify-center">
               <div className="w-3 h-3 bg-white rounded-full" />
             </div>
@@ -112,7 +112,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <header className="md:hidden fixed top-0 w-full bg-white/80 backdrop-blur-xl border-b border-gray-200 z-40 p-4 flex justify-between items-center h-16">
-        <Link href="/" className="text-xl font-bold tracking-tight text-black italic">Nextape.</Link>
+        <Link href="/" aria-label="Nextape, ir al inicio" className="lift text-xl font-bold tracking-tight text-black italic">Nextape.</Link>
         <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full bg-gray-100 h-10 w-10">
@@ -122,7 +122,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <SheetContent side="left" className="w-80 border-none p-0 bg-white">
             <SheetHeader className="p-8 border-b border-gray-50">
               <SheetTitle className="text-left flex items-center gap-2 text-black italic font-bold">
-                 Nextape.
+                 <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className="lift">
+                   Nextape.
+                 </Link>
               </SheetTitle>
             </SheetHeader>
             <div className="p-6 overflow-y-auto h-full pb-20">
