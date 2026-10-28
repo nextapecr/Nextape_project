@@ -118,11 +118,9 @@ export async function generateJsonWithFallback<T>(
     if (!rateLimited && !isProviderUnavailableError(err)) throw err;
 
     isGroq120bUnavailable = true;
-    console.warn(
-      rateLimited
-        ? '[ai/generate] ⚠️ Groq 120B rate limit alcanzado — cambiando a 20B para esta sesión...'
-        : `[ai/generate] ⚠️ Groq 120B no disponible (${err instanceof Error ? err.message.slice(0, 120) : err}) — cambiando a 20B para esta sesión...`,
-    );
+    const detail = err instanceof Error ? err.message.slice(0, 120) : String(err);
+    const why = rateLimited ? 'rate limit alcanzado' : `no disponible (${detail})`;
+    console.warn(`[ai/generate] ⚠️ Groq 120B ${why} — cambiando a 20B para esta sesión...`);
 
     const result = await generateJsonWithModel(prompt, schema, MODEL_20B, options);
     return { ...result, model: '20b' };
@@ -141,10 +139,22 @@ export async function generateJsonWithFallback<T>(
  *   2. Eliminar trailing commas antes de `}` o `]`.
  *   3. Eliminar comentarios de línea (`// …`).
  */
+/** Contenido del primer bloque ``` (o ```json), o `null` si no hay un bloque cerrado. */
+function extractFencedBlock(raw: string): string | null {
+  const open = raw.indexOf('```');
+  if (open === -1) return null;
+  let start = open + 3;
+  if (raw.slice(start, start + 4).toLowerCase() === 'json') start += 4;
+  const close = raw.indexOf('```', start);
+  if (close === -1) return null;
+  return raw.slice(start, close);
+}
+
 function extractJson(raw: string): string {
   // 1. Si hay un bloque ```json … ```, extraerlo.
-  const fenceMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)```/i);
-  const body = fenceMatch ? fenceMatch[1] : raw;
+  //    Con indexOf en vez de una regex con `[\s\S]*?`: la salida del modelo puede ser larga y esa
+  //    regex retrocede de forma superlineal si el bloque no cierra.
+  const body = extractFencedBlock(raw) ?? raw;
 
   // 2. Localizar el primer '{' y el último '}' (el objeto raíz).
   const start = body.indexOf('{');
@@ -157,7 +167,7 @@ function extractJson(raw: string): string {
 
   // 3. Quitar comentarios de bloque (/* … */) y de línea (// …).
   json = json.replace(/\/\*[\s\S]*?\*\//g, '');
-  json = json.replace(/^\s*\/\/.*$/gm, '');
+  json = json.replace(/^[ \t]*\/\/.*$/gm, '');
 
   // 4. Quitar trailing commas: `,` seguida de `}` o `]` (con espacios/saltos de línea opcionales).
   // Nota: Los modelos grandes generan JSON largo con múltiples trailing commas - necesitamos

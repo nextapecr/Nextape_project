@@ -29,7 +29,7 @@ export interface ParsedAST {
 }
 
 /**
- * Interfaz que todo parser de lenguaje debe implementar.
+ * Interfaz que cada parser de lenguaje debe implementar.
  * La modularidad del motor depende de esta abstracción: el orquestador
  * llama a `canParse()` para seleccionar el parser correcto, luego a `parse()`.
  */

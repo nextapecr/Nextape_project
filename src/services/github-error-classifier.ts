@@ -10,7 +10,7 @@
  * - Only public GitHub usernames and repo names
  */
 
-import type { Firestore, Timestamp } from 'firebase-admin/firestore';
+import type { Firestore } from 'firebase-admin/firestore';
 import {
   GithubErrorCode,
   GithubAnalysisStage,
@@ -183,7 +183,7 @@ export function classifyGithubError(
  * Used when status is embedded in message but not as property.
  */
 function extractHttpStatus(message: string): number | undefined {
-  const match = message.match(/\b(4\d{2}|5\d{2})\b/);
+  const match = /\b(4\d{2}|5\d{2})\b/.exec(message);
   return match ? parseInt(match[1], 10) : undefined;
 }
 
@@ -276,6 +276,7 @@ export function createErrorResponse(
  */
 export function generateAnalysisId(uid: string): string {
   const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2, 8);
+  // Solo para distinguir análisis en logs; no es un secreto ni un token.
+  const random = Math.random().toString(36).substring(2, 8); // NOSONAR typescript:S2245
   return `${uid}_${timestamp}_${random}`;
 }

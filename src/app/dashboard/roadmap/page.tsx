@@ -23,11 +23,10 @@ import { RoadmapService } from "@/services/roadmap.service";
 import { computeRoadmap } from "@/lib/roadmap-engine";
 import { LEVELS, LEVEL_LABELS } from "@/lib/levels";
 import {
-  TARGET_ROLES,
   type TargetRole,
   type SeniorityLevel,
 } from "@/services/github-engine/role-mapping/role-weights";
-import type { RoadmapItem, RoadmapRoute, Skill, ScoreSource } from "@/types/roadmap.types";
+import type { RoadmapItem, ScoreSource } from "@/types/roadmap.types";
 import { practiceTechnologyForSkill, technologyLabel } from "@/lib/skill-technology-map";
 import { onAuthStateChanged, User } from "firebase/auth";
 
@@ -549,11 +548,11 @@ function SectionTitle({
   icon: Icon,
   label,
   count,
-}: {
+}: Readonly<{
   icon: typeof Zap;
   label: string;
   count: number;
-}) {
+}>) {
   return (
     <div className="flex items-center gap-3">
       <Icon className="h-4 w-4 text-gray-300" />
@@ -572,11 +571,11 @@ function LevelLadder({
   current,
   target,
   masteryThreshold,
-}: {
+}: Readonly<{
   current: SeniorityLevel;
   target: SeniorityLevel;
   masteryThreshold: number | null;
-}) {
+}>) {
   const currentIdx = LEVELS.indexOf(current);
   const targetIdx = LEVELS.indexOf(target);
 
@@ -600,25 +599,24 @@ function LevelLadder({
                     !isCurrent && !isTarget && "bg-gray-50 border-gray-100 text-gray-300"
                   )}
                 >
-                  {isPassed ? (
-                    <Check className="h-4 w-4" />
-                  ) : isTarget ? (
-                    <Flag className="h-4 w-4" />
-                  ) : (
-                    <span className="text-xs font-black">{idx + 1}</span>
-                  )}
+                  {isPassed && <Check className="h-4 w-4" />}
+                  {!isPassed && isTarget && <Flag className="h-4 w-4" />}
+                  {!isPassed && !isTarget && <span className="text-xs font-black">{idx + 1}</span>}
                 </div>
                 <div className="text-center space-y-0.5">
                   <p
                     className={cn(
                       "text-xs font-bold",
-                      isCurrent ? "text-black" : isTarget ? "text-brand-blue" : "text-gray-400"
+                      isCurrent && "text-black",
+                      !isCurrent && isTarget && "text-brand-blue",
+                      !isCurrent && !isTarget && "text-gray-400"
                     )}
                   >
                     {LEVEL_LABELS[level]}
                   </p>
                   <p className="text-[9px] font-black uppercase tracking-widest text-gray-300 h-3">
-                    {isCurrent ? "Estás aquí" : isTarget ? "Meta" : ""}
+                    {isCurrent && "Estás aquí"}
+                    {!isCurrent && isTarget && "Meta"}
                   </p>
                 </div>
               </div>
@@ -643,7 +641,7 @@ function LevelLadder({
 }
 
 /** Score actual frente al objetivo, en una barra compacta. */
-function ScoreGap({ item }: { item: RoadmapItem }) {
+function ScoreGap({ item }: Readonly<{ item: RoadmapItem }>) {
   return (
     <div className="w-32 shrink-0 space-y-1.5">
       <div className="flex justify-between text-[10px] font-bold">

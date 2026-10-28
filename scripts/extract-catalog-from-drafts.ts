@@ -81,7 +81,7 @@ function parseSkillWeights(content: string): Record<string, number> {
     }
     if (inBlock && line.includes("```")) break;
     if (inBlock && line.includes(":") && line.includes("0.")) {
-      const match = line.match(/["']([a-z-]+)["']:\s*(0\.\d+)/);
+      const match = /["']([a-z-]+)["']:\s*(0\.\d+)/.exec(line);
       if (match) {
         weights[match[1]] = parseFloat(match[2]);
       }
@@ -92,16 +92,20 @@ function parseSkillWeights(content: string): Record<string, number> {
 }
 
 function parseRouteMetadata(content: string): Partial<RouteDef> {
-  const metaMatch = content.match(/```typescript\s*{\s*id:\s*"([^"]+)",\s*targetRole:\s*"([^"]+)",\s*fromLevel:\s*"([^"]+)",\s*toLevel:\s*"([^"]+)",\s*displayName:\s*"([^"]+)"/);
-  if (!metaMatch) return {};
-  
-  return {
-    id: metaMatch[1],
-    targetRole: metaMatch[2],
-    fromLevel: metaMatch[3],
-    toLevel: metaMatch[4],
-    displayName: metaMatch[5],
+  // Primer bloque ```typescript { … } del borrador; cada campo se lee por separado (una sola regex
+  // con los 5 campos era demasiado compleja de mantener).
+  const block = /```typescript\s*\{([^`]*)/.exec(content)?.[1];
+  if (!block) return {};
+  const field = (name: string) => new RegExp(String.raw`${name}:\s*"([^"]+)"`).exec(block)?.[1];
+  const meta = {
+    id: field("id"),
+    targetRole: field("targetRole"),
+    fromLevel: field("fromLevel"),
+    toLevel: field("toLevel"),
+    displayName: field("displayName"),
   };
+  if (Object.values(meta).some((v) => v === undefined)) return {};
+  return meta as Partial<RouteDef>;
 }
 
 // Skills ya existentes en backend_junior_to_mid (NO duplicar)

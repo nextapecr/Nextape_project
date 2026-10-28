@@ -48,7 +48,7 @@ function main() {
     return;
   }
 
-  const languages = [...new Set(Object.values(EXTENSION_MAP))].sort();
+  const languages = [...new Set(Object.values(EXTENSION_MAP))].sort((a, b) => a.localeCompare(b));
   let ok = 0;
   const failed: string[] = [];
 

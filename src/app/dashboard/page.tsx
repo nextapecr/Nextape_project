@@ -74,7 +74,7 @@ export default function DashboardPage() {
             ...prev,
             dnaIntegrity: avgScore,
             assessmentsCount: attemptsSnap.size,
-            jobsMatchCount: matches.filter(m => m.score > 70).length
+            jobsMatchCount: countStrongMatches(matches)
           }));
           setTopMatches(matches.slice(0, 2));
         }
@@ -271,4 +271,9 @@ export default function DashboardPage() {
       </div>
     </div>
   );
+}
+
+/** Vacantes con más de 70 % de compatibilidad. */
+function countStrongMatches(matches: ReadonlyArray<{ score: number }>): number {
+  return matches.filter((m) => m.score > 70).length;
 }

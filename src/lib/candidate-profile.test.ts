@@ -38,7 +38,7 @@ describe("normalizeCandidateProfile", () => {
         yearsOfExperience: "999",
         selfLevel: "god",
         workModes: ["remote", "remote", "moon"],
-        linkedinUrl: "javascript:alert(1)",
+        linkedinUrl: "javascript:alert(1)", // NOSONAR typescript:S1523 — se prueba que se RECHAZA
         portfolioUrl: "mi-sitio.dev",
         technologies: ["React", "react", ""],
         work: [{ company: "", role: "" }, { company: "Acme", role: "Dev", start: "1800", current: true, end: "2020" }],
@@ -82,7 +82,7 @@ describe("fechas y enlaces", () => {
 
   it("solo http(s)", () => {
     expect(normalizeUrl("linkedin.com/in/vernon")).toBe("https://linkedin.com/in/vernon");
-    expect(normalizeUrl("http://a.dev")).toBe("http://a.dev/");
+    expect(normalizeUrl("http://a.dev")).toBe("http://a.dev/"); // NOSONAR typescript:S5332 — http se acepta y se prueba
     expect(normalizeUrl("data:text/html,hola")).toBe("");
     expect(normalizeUrl("")).toBe("");
   });

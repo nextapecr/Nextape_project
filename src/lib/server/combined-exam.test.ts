@@ -70,7 +70,7 @@ describe("composeCombinedExam", () => {
   });
 
   it("sin teoría sembrada, todo es de tecnologías", () => {
-    const { "software-engineering_junior": _, ...noTheory } = bank;
+    const noTheory = Object.fromEntries(Object.entries(bank).filter(([k]) => k !== "software-engineering_junior"));
     const exam = composeCombinedExam({ technologies: ["react"], level: "junior", bank: noTheory, examSize: 20 });
     expect(exam.theoryLevel).toBeNull();
     expect(count(exam.questions)).toEqual({ react: 20 });

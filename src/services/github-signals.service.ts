@@ -114,18 +114,15 @@ export function selectRepresentativeFiles(
     }))
     .sort((a, b) => b.bytes - a.bytes);
 
+  // Por rondas: el archivo más grande de cada grupo, luego el segundo de cada uno, etc.
   const picked: RepoTreeEntry[] = [];
-  for (let round = 0; picked.length < max; round++) {
-    let tookAny = false;
+  const rounds = Math.max(0, ...ordered.map((g) => g.items.length));
+  for (let round = 0; round < rounds && picked.length < max; round++) {
     for (const group of ordered) {
       if (picked.length >= max) break;
       const item = group.items[round];
-      if (item) {
-        picked.push(item);
-        tookAny = true;
-      }
+      if (item) picked.push(item);
     }
-    if (!tookAny) break;
   }
   
   return picked;

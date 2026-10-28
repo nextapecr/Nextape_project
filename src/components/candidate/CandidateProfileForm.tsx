@@ -36,7 +36,7 @@ const STEP_META: Record<ProfileStep, { title: string; subtitle: string; icon: ty
 const fieldClass = "bg-gray-50 border-none h-12 rounded-xl px-4 focus-visible:ring-1";
 const labelClass = "text-[10px] font-bold uppercase tracking-widest text-gray-400 ml-1";
 
-function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+function Field({ label, children, hint }: Readonly<{ label: string; children: React.ReactNode; hint?: string }>) {
   return (
     <div className="space-y-2">
       <Label className={labelClass}>{label}</Label>
@@ -51,12 +51,12 @@ function OptionSelect<T extends readonly { id: string; label: string }[]>({
   options,
   onChange,
   placeholder = "Elige una opción",
-}: {
+}: Readonly<{
   value: string;
   options: T;
   onChange: (v: T[number]["id"]) => void;
   placeholder?: string;
-}) {
+}>) {
   return (
     <Select value={value || undefined} onValueChange={(v) => onChange(v as T[number]["id"])}>
       <SelectTrigger className={fieldClass}>
@@ -73,7 +73,7 @@ function OptionSelect<T extends readonly { id: string; label: string }[]>({
   );
 }
 
-function Chip({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
+function Chip({ selected, onClick, children }: Readonly<{ selected: boolean; onClick: () => void; children: React.ReactNode }>) {
   return (
     <button
       type="button"
@@ -102,7 +102,7 @@ export function CandidateProfileForm({
   savedTechnologies = [],
   dnaScores = {},
   bankAvailable,
-}: {
+}: Readonly<{
   initial: CandidateProfile;
   saving: boolean;
   onSave: (profile: CandidateProfile) => void;
@@ -113,7 +113,7 @@ export function CandidateProfileForm({
   dnaScores?: Record<string, number>;
   /** Tecnologías con banco de preguntas (`/api/line/catalog`). `undefined` = aún cargando. */
   bankAvailable?: Record<string, string[]>;
-}) {
+}>) {
   const [p, setP] = useState<CandidateProfile>(initial);
   const [stepIndex, setStepIndex] = useState(0);
   const [showErrors, setShowErrors] = useState(false);
@@ -144,8 +144,10 @@ export function CandidateProfileForm({
     setStepIndex((i) => Math.max(0, i - 1));
   };
 
-  const toggleIn = <T extends string>(list: T[], value: T, max = Infinity): T[] =>
-    list.includes(value) ? list.filter((v) => v !== value) : list.length < max ? [...list, value] : list;
+  const toggleIn = <T extends string>(list: T[], value: T, max = Infinity): T[] => {
+    if (list.includes(value)) return list.filter((v) => v !== value);
+    return list.length < max ? [...list, value] : list;
+  };
 
   const updateAt = <K extends "work" | "education" | "languages">(
     key: K,
@@ -457,13 +459,13 @@ export function CandidateProfileForm({
             <ArrowLeft className="h-4 w-4" /> Atrás
           </Button>
           <Button type="button" onClick={next} disabled={saving} className="bg-black text-white hover:bg-black/90 rounded-2xl h-12 px-8 font-bold uppercase tracking-widest text-xs">
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : isLast ? (
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {!saving && isLast && (
               <>
                 Guardar perfil <Check className="h-4 w-4" />
               </>
-            ) : (
+            )}
+            {!saving && !isLast && (
               <>
                 Siguiente <ArrowRight className="h-4 w-4" />
               </>

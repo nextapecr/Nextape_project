@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
-import { Github, Mail, Loader2 } from "lucide-react";
+import { Mail, Loader2 } from "lucide-react";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 import { useRouter } from "next/navigation";
 import { 
   signInWithGoogle, 
@@ -21,7 +22,7 @@ import { Timestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-export function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export function AuthModal({ isOpen, onClose }: Readonly<{ isOpen: boolean; onClose: () => void }>) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [accountType, setAccountType] = useState<"developer" | "recruiter">("developer");
   const [email, setEmail] = useState("");
@@ -175,7 +176,8 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
             disabled={loading}
             className="w-full h-12 sm:h-14 text-base sm:text-lg font-bold rounded-2xl bg-black text-white hover:bg-black/90 shadow-apple transition-all uppercase tracking-widest"
           >
-            {loading ? <Loader2 className="animate-spin h-5 w-5" /> : (mode === "login" ? "Acceder" : "Crear Perfil")}
+            {loading && <Loader2 className="animate-spin h-5 w-5" />}
+            {!loading && (mode === "login" ? "Acceder" : "Crear Perfil")}
           </Button>
 
           <div className="relative py-2 sm:py-4">
@@ -189,7 +191,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
 
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <Button onClick={() => handleSocialAuth('github')} type="button" variant="outline" className="border-gray-100 rounded-2xl h-12 sm:h-14 font-bold hover:bg-gray-50 text-xs sm:text-sm">
-              <Github className="mr-2 h-4 w-4" /> Github
+              <GithubIcon className="mr-2 h-4 w-4" /> Github
             </Button>
             <Button onClick={() => handleSocialAuth('google')} type="button" variant="outline" className="border-gray-100 rounded-2xl h-12 sm:h-14 font-bold hover:bg-gray-50 text-xs sm:text-sm">
               <Mail className="mr-2 h-4 w-4" /> Google

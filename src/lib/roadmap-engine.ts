@@ -100,7 +100,7 @@ function resolveScore(
 ): { score: number | null; source: ScoreSource; technologies?: string[] } {
   // 1. The LINE — evidencia directa (id de la skill) o de las tecnologías que la evidencian.
   //    Antes solo se buscaba `dna[skill.id]`, y los ids del catálogo ("react-fundamentals") nunca
-  //    coinciden con los del DNA ("react"): el roadmap ignoraba casi todo The LINE (H6).
+  //    coinciden con los del DNA ("react"): el roadmap ignoraba casi por completo The LINE (H6).
   const line = lineEvidenceForSkill(skill.id, dna);
   if (line) {
     return { score: line.score, source: "line", technologies: line.technologies };
@@ -109,7 +109,7 @@ function resolveScore(
   // 2. GitHub Engine — proxy por dimensión
   if (skill.githubDimension !== null && githubScores) {
     const proxyScore = githubScores[skill.githubDimension];
-    if (proxyScore !== null && proxyScore !== undefined) {
+    if (typeof proxyScore === "number") {
       return { score: proxyScore, source: "github" };
     }
   }

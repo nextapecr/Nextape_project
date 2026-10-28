@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Fingerprint, Zap, Loader2, User as UserIcon, Github, ArrowRight, Briefcase, Pencil } from "lucide-react";
+import { Fingerprint, Zap, Loader2, User as UserIcon, ArrowRight, Briefcase, Pencil } from "lucide-react";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 import { SkillsService } from "@/services/skills.service";
 import { UserService } from "@/services/users.service";
 import { UserProfile } from "@/types/user.types";
@@ -185,7 +186,7 @@ export default function ProfilePage() {
            <Link href="/dashboard/github" className="block">
              <div className="lift-sm bg-white p-8 rounded-[2.5rem] shadow-apple border border-gray-50 hover:shadow-apple-lg space-y-4">
                <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center">
-                 <Github className="h-6 w-6 text-white" />
+                 <GithubIcon className="h-6 w-6 text-white" />
                </div>
                <h3 className="text-xl font-bold italic">Evidencia de GitHub.</h3>
                <p className="text-xs text-gray-400 font-medium leading-relaxed">

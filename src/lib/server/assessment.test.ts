@@ -318,7 +318,7 @@ describe("pickRandomQuestions", () => {
       Array.from({ length: 30 }, () =>
         pickRandomQuestions(pool, 5)
           .map((p) => p.id)
-          .sort()
+          .sort((a, b) => a.localeCompare(b))
           .join("|")
       )
     );
@@ -428,7 +428,7 @@ describe("shuffleQuestionOptions", () => {
       case "code_output":
         return q.options[q.correctIndex];
       case "multi_select":
-        return q.correctIndexes.map((i) => q.options[i]).sort();
+        return q.correctIndexes.map((i) => q.options[i]).sort((a, b) => a.localeCompare(b));
       case "ordering":
         return q.correctOrder.map((i) => q.items[i]);
       case "true_false":

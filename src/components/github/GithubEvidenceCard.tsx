@@ -1,17 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Github,
-  Loader2,
-  Lock,
-  RefreshCw,
-  ShieldCheck,
-  ShieldQuestion,
-  Sparkles,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Lock, RefreshCw, ShieldCheck, ShieldQuestion, Sparkles } from "lucide-react";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { apiPost, ApiError } from "@/lib/api";
@@ -84,8 +75,9 @@ interface FailedRepoInfo {
 /** Extrae el usuario de una URL de GitHub (`https://github.com/foo` → `foo`). */
 export function parseGithubUsername(value: string | undefined | null): string {
   if (!value) return "";
-  const trimmed = value.trim().replace(/\/+$/, "");
-  const match = trimmed.match(/github\.com\/([^/?#]+)/i);
+  let trimmed = value.trim();
+  while (trimmed.endsWith("/")) trimmed = trimmed.slice(0, -1);
+  const match = /github\.com\/([^/?#]+)/i.exec(trimmed);
   return (match ? match[1] : trimmed).trim();
 }
 
@@ -156,7 +148,7 @@ const ERROR_MESSAGES: Record<string, (user: string) => string> = {
   rate_limited: () => "Has lanzado demasiados análisis en poco tiempo. Espera unos minutos y vuelve a intentarlo.",
 };
 
-export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?: string }) {
+export function GithubEvidenceCard({ uid, githubUrl }: Readonly<{ uid: string; githubUrl?: string }>) {
   const [profile, setProfile] = useState<ProfileView | null>(null);
   const [loading, setLoading] = useState(true);
   const [run, setRun] = useState<RunState | null>(null);
@@ -201,12 +193,7 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
       // Trigger re-check of OAuth status
       window.location.reload();
     } catch (err) {
-      const code =
-        err && typeof err === "object" && "code" in err
-          ? String((err as { code: unknown }).code)
-          : err instanceof Error
-            ? err.message
-            : "";
+      const code = errorCodeOf(err);
       
       if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
         // User closed popup, no error needed
@@ -336,7 +323,6 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
       if (failed.length > 0) {
         // Count retryable vs permanent failures
         const retryableCount = failed.filter(f => f.retryable).length;
-        const permanentCount = failed.length - retryableCount;
         
         const shown = failed.slice(0, 3).map(f => {
           const icon = f.retryable ? '🔄' : '❌';
@@ -391,7 +377,7 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
           <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center">
-            <Github className="h-6 w-6 text-white" />
+            <GithubIcon className="h-6 w-6 text-white" />
           </div>
           <h2 className="text-2xl font-bold italic">Evidencia de GitHub.</h2>
           <p className="text-sm text-gray-400 font-medium leading-relaxed max-w-md">
@@ -432,7 +418,7 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
               </>
             ) : (
               <>
-                <Github className="mr-2 h-4 w-4" />
+                <GithubIcon className="mr-2 h-4 w-4" />
                 Conectar con GitHub
               </>
             )}
@@ -548,16 +534,18 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
         className="w-full h-14 bg-black text-white rounded-2xl font-bold uppercase tracking-widest text-[11px] shadow-apple disabled:opacity-40 disabled:cursor-not-allowed"
         title={!hasOAuth ? "Conecta tu cuenta de GitHub primero" : undefined}
       >
-        {running ? (
+        {running && (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analizando repositorios
           </>
-        ) : !hasOAuth ? (
+        )}
+        {!running && !hasOAuth && (
           <>
             <ShieldQuestion className="mr-2 h-4 w-4" />
             Conecta GitHub para analizar
           </>
-        ) : (
+        )}
+        {!running && hasOAuth && (
           <>
             <RefreshCw className="mr-2 h-4 w-4" />
             {profile ? "Volver a analizar mi GitHub" : "Analizar todos mis repositorios"}
@@ -565,17 +553,19 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
         )}
       </Button>
 
-      {loading ? (
+      {loading && (
         <div className="flex justify-center py-6">
           <Loader2 className="h-5 w-5 animate-spin text-gray-300" />
         </div>
-      ) : profile ? (
+      )}
+      {!loading && profile && (
         <ProfileResult
           profile={profile}
           busy={running || connecting}
           onVerify={verifyWithGithub}
         />
-      ) : (
+      )}
+      {!loading && !profile && (
         <p className="text-xs text-gray-400 text-center font-medium">Aún no has analizado tu GitHub.</p>
       )}
     </div>
@@ -586,11 +576,11 @@ function ProfileResult({
   profile,
   busy,
   onVerify,
-}: {
+}: Readonly<{
   profile: ProfileView;
   busy: boolean;
   onVerify: () => void;
-}) {
+}>) {
   const s = profile.skillScores;
   const totalBytes = Object.values(profile.languagesBytes).reduce((n, v) => n + v, 0);
   const languages = Object.entries(profile.languagesBytes)
@@ -618,14 +608,16 @@ function ProfileResult({
           <Badge className="bg-brand-green/10 text-brand-green border-none rounded-full py-1.5 px-4 text-[9px] font-bold uppercase tracking-widest">
             <ShieldCheck className="h-3 w-3 mr-1.5" /> Cuenta verificada con GitHub
           </Badge>
-        ) : profile.identity ? (
-          <Badge
-            title="Inicia sesión con GitHub para vincular esta cuenta a tu perfil"
-            className="bg-gray-100 text-gray-500 border-none rounded-full py-1.5 px-4 text-[9px] font-bold uppercase tracking-widest"
-          >
-            <ShieldQuestion className="h-3 w-3 mr-1.5" /> Cuenta sin verificar
-          </Badge>
-        ) : null}
+        ) : (
+          profile.identity && (
+            <Badge
+              title="Inicia sesión con GitHub para vincular esta cuenta a tu perfil"
+              className="bg-gray-100 text-gray-500 border-none rounded-full py-1.5 px-4 text-[9px] font-bold uppercase tracking-widest"
+            >
+              <ShieldQuestion className="h-3 w-3 mr-1.5" /> Cuenta sin verificar
+            </Badge>
+          )
+        )}
         {!s.hasASTData && (
           <Badge className="bg-brand-orange/10 text-brand-orange border-none rounded-full py-1.5 px-4 text-[9px] font-bold uppercase tracking-widest">
             <AlertTriangle className="h-3 w-3 mr-1.5" /> Sin código analizable
@@ -730,11 +722,11 @@ function ScoreTile({
   label,
   value,
   highlight = false,
-}: {
+}: Readonly<{
   label: string;
   value: number | null;
   highlight?: boolean;
-}) {
+}>) {
   return (
     <div className={`rounded-2xl p-5 ${highlight ? "bg-brand-blue text-white" : "bg-gray-50"}`}>
       <span
@@ -758,7 +750,7 @@ function ScoreTile({
   );
 }
 
-function FeedbackList({ title, items, tone }: { title: string; items: string[]; tone: "green" | "orange" }) {
+function FeedbackList({ title, items, tone }: Readonly<{ title: string; items: string[]; tone: "green" | "orange" }>) {
   if (items.length === 0) return null;
   const dot = tone === "green" ? "bg-brand-green" : "bg-brand-orange";
   return (
@@ -774,4 +766,11 @@ function FeedbackList({ title, items, tone }: { title: string; items: string[]; 
       </ul>
     </div>
   );
+}
+
+/** `code` de un error de la API o de Firebase, o el mensaje de un `Error`. */
+function errorCodeOf(err: unknown): string {
+  if (err && typeof err === "object" && "code" in err) return String((err as { code: unknown }).code);
+  if (err instanceof Error) return err.message;
+  return "";
 }

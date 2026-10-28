@@ -53,7 +53,7 @@ describe("límite de intentos", () => {
 
 describe("tiempo límite", () => {
   it("30 minutos en práctica o si la vacante no lo fija", () => {
-    expect(timeLimitMinutesFor(undefined)).toBe(30);
+    expect(timeLimitMinutesFor()).toBe(30);
     expect(timeLimitMinutesFor(null)).toBe(30);
     expect(timeLimitMinutesFor("45")).toBe(30);
     expect(timeLimitMinutesFor(0)).toBe(30);

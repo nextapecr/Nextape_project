@@ -11,7 +11,6 @@ import {
 } from "@/services/github-engine/evidence-keys";
 import { consumeRateLimit, GITHUB_RATE_LIMITS, rateLimitedResponse } from "@/lib/server/rate-limit";
 import {
-  classifyGithubError,
   logGithubError,
   createErrorResponse,
   generateAnalysisId,
@@ -24,7 +23,7 @@ export const runtime = "nodejs";
  * POST /api/github/evaluate
  * Analiza UN repositorio de la cuenta y guarda el resultado en `github_evidence/{uid}/repos/{repoId}`.
  *
- * Antes este endpoint analizaba un único repositorio —el más reciente— y ese resultado era todo el
+ * Antes este endpoint analizaba un único repositorio —el más reciente— y ese resultado era el
  * perfil. Ahora es una pieza del análisis completo: el cliente lo llama una vez por repositorio
  * (cada llamada cabe en el tiempo de una Netlify Function) y al final `/api/github/aggregate`
  * combina todos. No llama a IA: la lectura de IA se hace una sola vez sobre el agregado.

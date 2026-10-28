@@ -164,7 +164,7 @@ export function technologiesByCategory(): { category: TechCategory; items: Techn
  *
  * El id canónico es la clave bajo la que The LINE acredita el score en el DNA. Si una vacante pide
  * "Next.js" y la práctica guarda "nextjs", el match nunca los casaba: el candidato tenía el score
- * pero la vacante no lo veía. Resolver aquí mantiene una sola clave en todo el sistema.
+ * pero la vacante no lo veía. Resolver aquí mantiene una sola clave en el sistema entero.
  */
 const TECHNOLOGY_ALIASES: Record<string, string> = {
   "react.js": "react",

@@ -24,8 +24,9 @@ export function calculateMatch(
   for (const skill of jobSkills) {
     const canonical = canonicalSkillKey(skill);
     const lower = skill.trim().toLowerCase();
-    const score = userScores[canonical] ?? userScores[lower];
-    if (score !== undefined) {
+    // Sin noUncheckedIndexedAccess, TS tipa el índice como `number`; en runtime puede faltar.
+    const score: number | undefined = userScores[canonical] ?? userScores[lower];
+    if (typeof score === "number") {
       totalScore += score;
       foundSkills++;
     }

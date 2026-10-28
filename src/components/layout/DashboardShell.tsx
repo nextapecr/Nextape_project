@@ -15,8 +15,8 @@ import {
   User,
   PlusCircle,
   Users,
-  Github
 } from "lucide-react";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { signOut, onAuthStateChanged } from "firebase/auth";
@@ -24,7 +24,7 @@ import { auth } from "@/lib/firebase/client";
 import { UserService } from "@/services/users.service";
 import { UserProfile } from "@/types/user.types";
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -43,7 +43,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     { name: "Panel", icon: LayoutDashboard, href: "/dashboard" },
     { name: "The LINE", icon: Terminal, href: "/dashboard/line" },
     { name: "CORE", icon: Fingerprint, href: "/dashboard/core" },
-    { name: "GitHub", icon: Github, href: "/dashboard/github" },
+    { name: "GitHub", icon: GithubIcon, href: "/dashboard/github" },
     { name: "Roadmap", icon: Map, href: "/dashboard/roadmap" },
     { name: "Empleos", icon: Briefcase, href: "/dashboard/jobs" },
     { name: "Compatibilidad", icon: Target, href: "/dashboard/compatibility" },

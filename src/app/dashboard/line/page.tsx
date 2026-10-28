@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { findTechnology } from "@/lib/technologies";
 import { cn } from "@/lib/utils";
 import { LEVEL_LABELS } from "@/lib/levels";
-import { Terminal, Cpu, Loader2, CheckCircle2, AlertCircle, Github, Timer } from "lucide-react";
+import { Terminal, Cpu, Loader2, CheckCircle2, AlertCircle, Timer } from "lucide-react";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 import { apiPost, apiGet, ApiError } from "@/lib/api";
 import { JobService } from "@/services/jobs.service";
 import { QuestionCard, QuestionTypeBadge } from "@/components/line/QuestionCard";
@@ -33,7 +34,8 @@ function formatWait(ms: number): string {
   const totalMin = Math.max(1, Math.ceil(ms / 60000));
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
-  return h > 0 ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
+  if (h === 0) return `${m} min`;
+  return m ? `${h} h ${m} min` : `${h} h`;
 }
 
 interface CombinedInfo {
@@ -130,16 +132,7 @@ function LineContent() {
   }, []);
   const waitMs = !jobId && retryAt ? Math.max(0, retryAt - now) : 0;
   /** Sin vacante, hace falta nivel en el perfil y al menos una tecnología con preguntas (o teoría). */
-  const setupMissing: "profile" | "technologies" | "bank" | null =
-    jobId || !combined
-      ? null
-      : !combined.level
-        ? "profile"
-        : combined.technologies.length === 0
-          ? "technologies"
-          : combined.covered.length === 0 && !combined.theoryAvailable
-            ? "bank"
-            : null;
+  const setupMissing = jobId ? null : missingSetup(combined);
 
   /**
    * Bloquea el scroll del documento mientras el examen ocupa la pantalla.
@@ -198,7 +191,7 @@ function LineContent() {
       console.error("Simulation failed to start:", err);
       // `pool_not_seeded` = esa tecnología/nivel aún no está en el banco precargado. Es un caso
       // esperado y accionable, no un fallo genérico: lo resuelve `npm run seed:questions`.
-      const code = err instanceof ApiError ? err.code : err instanceof Error ? err.message : "";
+      const code = errorCode(err);
       if (code === "rate_limited") {
         const wait = err instanceof ApiError && err.retryAfterSeconds ? err.retryAfterSeconds * 1000 : 0;
         if (!jobId && wait) setRetryAt(Date.now() + wait);
@@ -209,7 +202,7 @@ function LineContent() {
         setStatus("idle");
         return;
       }
-      // Cada motivo tiene su mensaje: antes todo lo que no fuera "sin banco" se mostraba como un
+      // Cada motivo tiene su mensaje: antes cualquier error que no fuera "sin banco" se mostraba como un
       // error de conexión, también cuando el problema era la vacante.
       const messages: Record<string, string> = {
         pool_not_seeded: "Todavía no hay preguntas para tus tecnologías. Agrega otra en tu perfil o vuelve más tarde.",
@@ -434,7 +427,7 @@ function LineContent() {
 
               {!jobId && examInfo && (
                 <div className="flex items-start gap-3 bg-gray-50 p-4 rounded-2xl text-xs font-medium text-gray-500">
-                  <Github className="h-4 w-4 shrink-0 mt-0.5 text-gray-400" />
+                  <GithubIcon className="h-4 w-4 shrink-0 mt-0.5 text-gray-400" />
                   <p className="leading-relaxed">
                     Tu prueba tendrá <span className="font-bold text-black">{examInfo.examSize} preguntas</span>.{" "}
                     {examInfo.hasGithub ? (
@@ -559,4 +552,20 @@ export default function LinePage() {
       <LineContent />
     </Suspense>
   );
+}
+
+/** Qué le falta al candidato para hacer la prueba combinada, o `null` si está listo. */
+function missingSetup(combined: CombinedInfo | null): "profile" | "technologies" | "bank" | null {
+  if (!combined) return null;
+  if (!combined.level) return "profile";
+  if (combined.technologies.length === 0) return "technologies";
+  if (combined.covered.length === 0 && !combined.theoryAvailable) return "bank";
+  return null;
+}
+
+/** Código de error de la API (`ApiError.code`) o el mensaje de un `Error`. */
+function errorCode(err: unknown): string {
+  if (err instanceof ApiError) return err.code;
+  if (err instanceof Error) return err.message;
+  return "";
 }

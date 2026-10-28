@@ -10,9 +10,6 @@
 import './load-env';
 import type { GenerateGithubFeedbackInput } from '@/ai/flows/generate-github-feedback-flow';
 
-// Importar la función directamente desde el archivo (aunque sea privada)
-// En producción esto lo manejará el catch del generateGithubFeedback
-import { generateGithubFeedback } from '@/ai/flows/generate-github-feedback-flow';
 
 console.log('═'.repeat(80));
 console.log('🧪 TEST DIRECTO DEL FALLBACK DETERMINÍSTICO');

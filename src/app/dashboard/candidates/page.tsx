@@ -237,12 +237,7 @@ export default function CandidatesPage() {
                                     ]
                                       .filter((g) => g.items.length > 0)
                                       .map((g) => (
-                                        <div key={g.title} className="space-y-1">
-                                          <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{g.title}</p>
-                                          {g.items.map((item) => (
-                                            <p key={item}>{item}</p>
-                                          ))}
-                                        </div>
+                                        <DetailGroup key={g.title} title={g.title} items={g.items} />
                                       ))}
                                     {(m.candidate.linkedinUrl || m.candidate.portfolioUrl) && (
                                       <div className="flex flex-wrap gap-3">
@@ -307,6 +302,18 @@ export default function CandidatesPage() {
           })}
         </Accordion>
       )}
+    </div>
+  );
+}
+
+/** Un bloque del perfil profesional del candidato (experiencia, estudios…). */
+function DetailGroup({ title, items }: Readonly<{ title: string; items: string[] }>) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{title}</p>
+      {items.map((item) => (
+        <p key={item}>{item}</p>
+      ))}
     </div>
   );
 }

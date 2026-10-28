@@ -14,7 +14,7 @@ export const runtime = "nodejs";
  *   y copia la lista en `candidateProfile.technologies` para mostrarla.
  * - Si quita una tecnología que ya tenía nota, la borra del DNA (`user_skill_scores`, score e
  *   historial). Devuelve qué se perdió para que la UI lo confirme.
- * - Todo en una transacción: o cambian las dos cosas, o ninguna.
+ * - Una sola transacción: o cambian las dos cosas, o ninguna.
  *
  * Body: { technologies: string[] }  (ids del catálogo, máx. MAX_LINE_TECHNOLOGIES)
  */

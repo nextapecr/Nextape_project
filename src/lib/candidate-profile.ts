@@ -183,8 +183,10 @@ function longText(value: unknown, max: number): string {
     .slice(0, max);
 }
 
-function oneOf<T extends readonly { id: string }[]>(value: unknown, options: T): Id<T> | "" {
-  return options.some((o) => o.id === value) ? (value as Id<T>) : "";
+// Devuelve "" (no null) a propósito: es el valor vacío de los <select> del formulario.
+function oneOf<T extends readonly { id: string }[]>(value: unknown, options: T): Id<T> | "" { // NOSONAR typescript:S3800
+  const valid = options.some((o) => o.id === value);
+  return (valid ? value : "") as Id<T> | "";
 }
 
 /** Año ("2023") o año-mes ("2023-05"), entre 1950 y el año que viene. Si no, vacío. */

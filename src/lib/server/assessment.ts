@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { findTechnology } from "@/lib/technologies";
 import type {
   Answer,
@@ -206,7 +207,7 @@ export function gradeQuestion(question: Question, answer: Answer): number {
       if (correct.size === 0) return 0;
       const hits = answer.filter((a) => correct.has(a)).length;
       const misses = answer.length - hits;
-      // Restar los fallos evita que marcarlo todo garantice la puntuación máxima.
+      // Restar los fallos evita que marcar todas las opciones garantice la puntuación máxima.
       return Math.max(0, (hits - misses) / correct.size);
     }
 
@@ -227,7 +228,7 @@ export interface GradeResult {
 
 /**
  * Corrige las respuestas contra la clave. `answers[i]` corresponde a `questions[i]`.
- * Score por tag = media de crédito obtenido en ese tag. Global = media de todo el examen.
+ * Score por tag = media de crédito obtenido en ese tag. Global = media del examen completo.
  */
 export function gradeAnswers(questions: Question[], answers: Answer[]): GradeResult {
   const perTag: Record<string, { earned: number; total: number }> = {};
@@ -258,7 +259,8 @@ export function gradeAnswers(questions: Question[], answers: Answer[]): GradeRes
 export function shuffle<T>(items: T[]): T[] {
   const out = [...items];
   for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    // CSPRNG: con Math.random un atacante que observe sorteos podría predecir los siguientes.
+    const j = randomInt(i + 1);
     [out[i], out[j]] = [out[j], out[i]];
   }
   return out;

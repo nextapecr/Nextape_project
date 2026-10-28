@@ -38,7 +38,7 @@ export default function Home() {
           : "bg-transparent py-6"
       )}>
         <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
-          {/* El logo vuelve al inicio. Ya en "/", sube arriba del todo y quita el #ancla de la URL. */}
+          {/* El logo vuelve al inicio. Ya en "/", sube hasta arriba y quita el #ancla de la URL. */}
           <Link
             href="/"
             aria-label="Nextape, ir al inicio"

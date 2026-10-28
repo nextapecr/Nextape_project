@@ -4,7 +4,7 @@ import { parseGithubUsername } from "./GithubEvidenceCard";
 describe("parseGithubUsername", () => {
   it("extrae el usuario de una URL de GitHub", () => {
     expect(parseGithubUsername("https://github.com/facebook")).toBe("facebook");
-    expect(parseGithubUsername("http://github.com/torvalds/")).toBe("torvalds");
+    expect(parseGithubUsername("http://github.com/torvalds/")).toBe("torvalds"); // NOSONAR typescript:S5332 — prueba de entrada con http
     expect(parseGithubUsername("github.com/vercel")).toBe("vercel");
   });
 

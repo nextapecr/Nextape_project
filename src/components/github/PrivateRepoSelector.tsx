@@ -18,7 +18,7 @@ interface PrivateRepoSelectorProps {
  * - Repos privados: solo analizados si el usuario los marca
  * - Ninguno viene premarcado por defecto
  */
-export function PrivateRepoSelector({ uid, onSelectionUpdated }: PrivateRepoSelectorProps) {
+export function PrivateRepoSelector({ uid, onSelectionUpdated }: Readonly<PrivateRepoSelectorProps>) {
   const [allRepos, setAllRepos] = useState<GithubRepoListItem[]>([]);
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
