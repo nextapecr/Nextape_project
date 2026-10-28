@@ -106,7 +106,9 @@ describe('UserService Test', () => {
 describe("universalParser: soporte Python", () => {
   it.skipIf(process.platform === "win32")("parsea código Python y falla si gramática no disponible (Linux-only)", () => {
     // En Linux: si la gramática de Python no está disponible, el test DEBE fallar explícitamente
-    // Sin try/catch que oculte el problema
+    // Sin try/catch que oculte el problema.
+    // La gramática de Python no viene en el paquete: hay que bajarla antes con
+    // `npm run grammars:predownload` (CI lo hace). Sin red ni descarga previa, este test falla.
     const pythonCode = `
 def greet(name: str) -> str:
     """Returns a greeting message."""

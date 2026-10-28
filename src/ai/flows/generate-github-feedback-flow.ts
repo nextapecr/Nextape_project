@@ -6,20 +6,20 @@
  * 
  * PRESUPUESTOS:
  * - Output: ~400 tokens con reasoning_effort='low' para control de costos
- * - Tiempo: Sin timeout explícito. La función depende del timeout por defecto de Genkit/fetch.
- *   Típicamente: ~30-60s en Node.js/Vercel. Con 250K TPM y 500 tok/s (120B), una respuesta
- *   de 400 tokens toma ~0.8s más latencia de red (~1-2s total en condiciones normales).
- *   NOTA: No se implementa Promise.race porque no cancela el fetch subyacente (la petición
- *   HTTP sigue ejecutándose en el servidor). El fallback determinístico maneja timeouts.
+ * - Tiempo: tope de 8 s (AI_FEEDBACK_TIMEOUT_MS) con Promise.race, para responder antes del
+ *   límite de la Netlify Function. Si se agota, se usa el feedback determinístico.
+ *   Limitación conocida: Promise.race no cancela la petición HTTP a Groq, que sigue en segundo
+ *   plano hasta terminar (consume cupo aunque su resultado ya no se use).
  *
- * ARQUITECTURA: 2026-12-XX
- * Modelo primario: openai/gpt-oss-120b (500 tok/s, 250K TPM, reasoning_effort='low')
- * Fallback automático: openai/gpt-oss-20b (1000 tok/s, 250K TPM) ante 429 o timeout
- * Fallback determinístico: Construye feedback estructurado desde skillScores cuando IA falla
+ * MODELOS (ver docs/GROQ_TIMELINE_MODELS.md):
+ * - Primario: openai/gpt-oss-120b (GROQ_TIMELINE_MODEL_PRIMARY), reasoning_effort='low'
+ * - Respaldo automático: openai/gpt-oss-20b (GROQ_TIMELINE_MODEL_FALLBACK) ante 429/401/403/404
+ * - Respaldo determinístico: feedback estructurado desde skillScores cuando la IA falla o tarda
+ * - Plan gratuito de Groq: 8 000 tokens/min y 200 000 tokens/día por modelo.
  * 
  * HISTORIAL:
  * - 2026-08-21: Migrado desde Mistral AI (bloqueado por rate limit 0 req/min)
- * - 2026-12-XX: Actualizado a GPT-OSS con control de costos y fallback determinístico
+ * - 2026-10: GPT-OSS con control de costos, fallback determinístico y tope de 8 s
  */
 
 import { z } from 'zod';
@@ -139,11 +139,15 @@ REGLAS STRICTAS:
       },
     );
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('AI_TIMEOUT')), AI_FEEDBACK_TIMEOUT_MS)
-    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('AI_TIMEOUT')), AI_FEEDBACK_TIMEOUT_MS);
+    });
 
-    const { data, model, usage } = await Promise.race([aiPromise, timeoutPromise]);
+    // `finally` limpia el temporizador: si la IA responde antes, no queda vivo 8 s más.
+    const { data, model, usage } = await Promise.race([aiPromise, timeoutPromise]).finally(() =>
+      clearTimeout(timer),
+    );
 
     // Logging de métricas para medición de costos
     console.log(`[generateGithubFeedback] ✅ Generado con modelo: Groq ${model.toUpperCase()}`);

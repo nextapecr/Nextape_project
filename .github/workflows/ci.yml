@@ -27,6 +27,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # El test de Python del motor de GitHub necesita su gramática de tree-sitter, que no viene en el
+      # paquete y se descarga. Se baja aquí, de forma explícita, en vez de dentro del test.
+      - name: Pre-descargar gramáticas de tree-sitter
+        run: npm run grammars:predownload
+
       - name: Test
         run: npm test
 
