@@ -17,7 +17,8 @@ import {
   generateAnalysisId,
 } from "@/services/github-error-classifier";
 import type { GithubRepoEvaluateResponse, GithubRepoEvidence } from "@/types/github.types";
-import { validateRepoRef, authorizeRepo } from "@/lib/server/github-authorization";
+import { validateRepoRef } from "@/lib/server/github-authorization";
+import { readPrivateReposAllowlist } from "@/lib/server/github-allowlist";
 import { evaluateRepoFlow, type EvaluateFlowDeps } from "@/lib/server/evaluate-flow";
 
 export const runtime = "nodejs";
@@ -82,16 +83,12 @@ export async function POST(req: NextRequest) {
     const userToken = await getGithubToken(uid);
     
     // Delegate to evaluateRepoFlow with real dependencies
-    const deps: EvaluateFlowDeps = {
+    const deps: EvaluateFlowDeps<GithubRepoEvidence, GithubRepoEvaluateResponse> = {
       fetchRepoMetadata: async (owner: string, repo: string) => {
         return await GithubSignalsService.getRepoMetadata(owner, repo, userToken || undefined);
       },
       
-      getUserAllowlist: async (uid: string) => {
-        const userDocRef = adminDb().collection("users").doc(uid);
-        const userDoc = await userDocRef.get();
-        return (userDoc.data()?.privateReposAllowlist as string[]) ?? [];
-      },
+      getUserAllowlist: (uid: string) => readPrivateReposAllowlist(adminDb(), uid),
       
       checkCache: async (uid: string, repoFullName: string) => {
         const docRef = adminDb()
@@ -121,19 +118,17 @@ export async function POST(req: NextRequest) {
         return { hit: false };
       },
       
-      consumeRateLimit: async (uid: string) => {
-        const limit = await consumeRateLimit(adminDb(), "github_evaluate", uid, GITHUB_RATE_LIMITS.evaluate);
-        return { allowed: limit.allowed };
-      },
+      consumeRateLimit: (uid: string) =>
+        consumeRateLimit(adminDb(), "github_evaluate", uid, GITHUB_RATE_LIMITS.evaluate),
       
-      writeEvidence: async (uid: string, repoFullName: string, data: unknown) => {
+      writeEvidence: async (uid: string, repoFullName: string, evidence: GithubRepoEvidence) => {
         const docRef = adminDb()
           .collection("github_evidence")
           .doc(uid)
           .collection("repos")
           .doc(repoDocId(repoFullName));
         
-        await docRef.set(data as GithubRepoEvidence);
+        await docRef.set(evidence);
       },
       
       analyzeRepo: async (owner: string, repo: string) => {
@@ -243,11 +238,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(result.data);
       
       case 'rate_limited':
-        const limit = await consumeRateLimit(adminDb(), "github_evaluate", uid, GITHUB_RATE_LIMITS.evaluate);
-        return rateLimitedResponse(limit);
+        // Antes se volvía a llamar a consumeRateLimit solo para armar la respuesta (otra
+        // transacción en Firestore). El flujo ya trae cuánto falta.
+        return rateLimitedResponse({
+          allowed: false,
+          state: { windowStart: 0, count: 0 },
+          retryAfterMs: result.retryAfterMs,
+        });
       
       case 'success':
-        return NextResponse.json((result.data as { response: unknown }).response);
+        return NextResponse.json(result.data);
     }
   } catch (err) {
     // Classify and log error for diagnosis

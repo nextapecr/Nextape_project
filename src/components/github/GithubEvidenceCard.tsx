@@ -283,6 +283,8 @@ export function GithubEvidenceCard({ uid, githubUrl: _githubUrl }: { uid: string
       const pending = repos.filter((r) => !r.analyzed);
       const failed: FailedRepoInfo[] = [];
       let done = repos.length - pending.length;
+      /** Repos privados que no están en la lista autorizada (403). No son fallos. */
+      let skipped = 0;
       // Con el límite por usuario agotado, cada llamada restante fallaría igual: se para.
       let rateLimited = false;
       setRun({ total: repos.length, done, current: null, failed });
@@ -298,6 +300,7 @@ export function GithubEvidenceCard({ uid, githubUrl: _githubUrl }: { uid: string
             // Private repo not authorized: count as skipped, not as failure
             if (err.code === "private_repo_not_authorized") {
               // Don't add to failed list, just skip silently
+              skipped += 1;
               done += 1;
               setRun((prev) => (prev ? { ...prev, done } : prev));
               return;
@@ -353,21 +356,21 @@ export function GithubEvidenceCard({ uid, githubUrl: _githubUrl }: { uid: string
       });
       setProfile(fromAggregate(aggregate, user));
 
-      // Calculate how many repos were skipped (not authorized private repos)
-      const skipped = repos.length - done;
-      
+      // Avisos. Se arman en una variable local: leer `notice` aquí daría el valor de ANTES de
+      // este análisis (estado de React), y el segundo aviso pisaba al primero.
+      // Antes `skipped` se calculaba como `repos.length - done`, que siempre daba 0 porque los
+      // omitidos también suman a `done`: el aviso nunca aparecía.
+      const notices: string[] = [];
       if (totalRepos > repos.length) {
-        setNotice(`Se analizaron tus ${repos.length} repositorios con actividad más reciente (de ${totalRepos}).`);
+        notices.push(`Se analizaron tus ${repos.length} repositorios con actividad más reciente (de ${totalRepos}).`);
       }
-      
-      // Show notice about skipped private repos (without listing them)
       if (skipped > 0) {
-        setNotice(
-          (notice ? notice + " " : "") +
-          `${skipped} ${skipped === 1 ? 'repositorio privado fue omitido' : 'repositorios privados fueron omitidos'} ` +
-          `(no están en tu allowlist). `
+        notices.push(
+          `${skipped} ${skipped === 1 ? "repositorio privado fue omitido" : "repositorios privados fueron omitidos"} ` +
+            "porque no lo autorizaste en la lista de repos privados.",
         );
       }
+      if (notices.length > 0) setNotice(notices.join(" "));
       
       if (failed.length > 0) {
         // Count retryable vs permanent failures

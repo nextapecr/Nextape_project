@@ -10,6 +10,7 @@ import {
 } from "@/services/github-engine/evidence-keys";
 import { generateGithubFeedback } from "@/ai/flows/generate-github-feedback-flow";
 import { filterEvidenceForAggregate } from "@/lib/server/github-authorization";
+import { readPrivateReposAllowlist } from "@/lib/server/github-allowlist";
 import type {
   EngineMetrics,
   GithubAggregateResponse,
@@ -90,18 +91,16 @@ export async function POST(req: NextRequest) {
     const profileRef = adminDb().collection("github_evidence").doc(uid);
     // Defensa en profundidad: limita a 100 repos aunque /api/github/repos ya poda a ese máximo.
     // Protege contra race conditions o fallos en la poda upstream.
-    const [snap, previousSnap, userSnap] = await Promise.all([
+    const [snap, previousSnap, privateReposAllowlist] = await Promise.all([
       profileRef.collection("repos").orderBy("analyzedAt", "desc").limit(100).get(),
       profileRef.get(),
-      adminDb().collection("users").doc(uid).get(),
+      // Fuente única de la lista de repos privados autorizados (ver github-allowlist.ts).
+      readPrivateReposAllowlist(adminDb(), uid),
     ]);
     
     if (snap.size === 100) {
       console.warn('[github/aggregate] ⚠️ Query returned exactly 100 repos (limit reached) - older repos may be excluded');
     }
-    
-    // Phase 6: Get user's private repos allowlist for filtering
-    const privateReposAllowlist = (userSnap.data()?.privateReposAllowlist as string[]) ?? [];
     
     const allRepos = snap.docs
       .map((doc) => doc.data() as GithubRepoEvidence)
