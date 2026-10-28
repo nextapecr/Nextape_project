@@ -37,35 +37,35 @@ const DRAFT_FILES = [
   "09-mobile_mid_to_senior.md",
 ];
 
+/** Una fila `| \`id\` | nombre | categoría | dimensión | prerequisitos |` → skill, o `null`. */
+function parseSkillRow(line: string): SkillDef | null {
+  if (!line.startsWith("|") || line.includes("----")) return null;
+  const cols = line.split("|").map((c) => c.trim()).filter(Boolean);
+  if (cols.length < 5 || !cols[0].startsWith("`")) return null;
+  const prerequisites = cols[4]
+    .split(",")
+    .map((p) => p.trim().replace(/[[\]`]/g, ""))
+    .filter((p) => p && p !== "(raíz)" && p !== "[]");
+  return {
+    id: cols[0].replace(/`/g, ""),
+    name: cols[1],
+    category: cols[2],
+    githubDimension: cols[3] === "null" ? null : cols[3],
+    prerequisites,
+  };
+}
+
 function parseMarkdownTable(content: string, startMarker: string): SkillDef[] {
-  const skills: SkillDef[] = [];
   const lines = content.split("\n");
-  
-  let inTable = false;
-  for (const line of lines) {
-    if (line.includes(startMarker)) {
-      inTable = true;
-      continue;
-    }
-    if (inTable && line.startsWith("|") && !line.includes("----")) {
-      const cols = line.split("|").map((c) => c.trim()).filter(Boolean);
-      if (cols.length >= 5 && cols[0].startsWith("`")) {
-        const id = cols[0].replace(/`/g, "");
-        const name = cols[1];
-        const category = cols[2];
-        const githubDim = cols[3] === "null" ? null : cols[3];
-        const prereqStr = cols[4];
-        const prerequisites = prereqStr
-          .split(",")
-          .map((p) => p.trim().replace(/[\[\]`]/g, ""))
-          .filter((p) => p && p !== "(raíz)" && p !== "[]");
-        
-        skills.push({ id, name, category, githubDimension: githubDim, prerequisites });
-      }
-    }
-    if (inTable && line.trim() === "") break;
+  const start = lines.findIndex((line) => line.includes(startMarker));
+  if (start === -1) return [];
+
+  const skills: SkillDef[] = [];
+  for (const line of lines.slice(start + 1)) {
+    const skill = parseSkillRow(line);
+    if (skill) skills.push(skill);
+    if (line.trim() === "") break;
   }
-  
   return skills;
 }
 

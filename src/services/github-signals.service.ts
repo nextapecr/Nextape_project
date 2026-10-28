@@ -83,6 +83,70 @@ export function languageForPath(path: string): string | null {
   return ext ? EXTENSION_MAP[ext] : null;
 }
 
+/** Último SHA y número de commits de los últimos 90 días (0 y "" si la petición falló). */
+async function readRecentCommits(res: Response, fullName: string) {
+  if (!res.ok) {
+    console.warn(`[github-signals] /commits falló para ${fullName} (status ${res.status})`);
+    return { lastCommitSHA: "", commitFrequency90d: 0 };
+  }
+  const commits = await res.json();
+  if (!Array.isArray(commits) || commits.length === 0) return { lastCommitSHA: "", commitFrequency90d: 0 };
+  return { lastCommitSHA: String(commits[0].sha ?? ""), commitFrequency90d: commits.length };
+}
+
+/** Árbol recursivo del repositorio (`[]` si la petición falló). */
+async function readTree(res: Response, fullName: string): Promise<RepoTreeEntry[]> {
+  if (!res.ok) {
+    console.warn(`[github-signals] /git/trees falló para ${fullName} (status ${res.status})`);
+    return [];
+  }
+  const data = await res.json();
+  return Array.isArray(data.tree) ? data.tree : [];
+}
+
+/** Lenguaje del archivo si es candidato a análisis (código, tamaño razonable, fuera de vendor…). */
+function candidateLanguage(item: RepoTreeEntry): string | null {
+  if (item.type !== "blob") return null;
+  const lower = item.path.toLowerCase();
+  if (EXCLUDED_PATH_PARTS.some((part) => lower.includes(part))) return null;
+  const size = item.size ?? 0;
+  if (size < MIN_FILE_BYTES || size > MAX_FILE_BYTES) return null;
+  return languageForPath(item.path);
+}
+
+/**
+ * Convenciones de test de los lenguajes soportados, no solo las de JavaScript: sin esto un
+ * repositorio de Python (test_*.py, tests/) o de Go (_test.go) salía siempre "sin tests".
+ */
+const TEST_PATH_PARTS = [".test.", ".spec.", "__tests__/", "/tests/", "/test/"];
+const TEST_PATH_PREFIXES = ["tests/", "test/"];
+const TEST_PATH_SUFFIXES = ["_test.go", "_test.py", "test.java", "tests.cs", "_spec.rb"];
+const CI_FILES = new Set([".gitlab-ci.yml", ".circleci/config.yml", "jenkinsfile", "azure-pipelines.yml"]);
+const README_FILES = new Set(["readme.md", "readme", "readme.rst"]);
+
+function isTestPath(p: string): boolean {
+  return (
+    TEST_PATH_PARTS.some((part) => p.includes(part)) ||
+    TEST_PATH_PREFIXES.some((prefix) => p.startsWith(prefix)) ||
+    TEST_PATH_SUFFIXES.some((suffix) => p.endsWith(suffix)) ||
+    /(^|\/)test_[^/]+\.py$/.test(p)
+  );
+}
+
+/** Tests, CI y README a partir del árbol del repositorio (rutas en minúsculas). */
+export function treeSignals(tree: RepoTreeEntry[]) {
+  let hasTests = false;
+  let hasCI = false;
+  let readme: RepoTreeEntry | undefined;
+  for (const item of tree) {
+    const p = item.path.toLowerCase();
+    hasTests ||= isTestPath(p);
+    hasCI ||= p.startsWith(".github/workflows/") || CI_FILES.has(p);
+    if (README_FILES.has(p)) readme = item;
+  }
+  return { hasTests, hasCI, hasReadme: readme !== undefined, readmeLength: readme?.size ?? 0 };
+}
+
 /**
  * Elige archivos representativos de un repositorio, repartidos ENTRE LENGUAJES.
  *
@@ -97,14 +161,8 @@ export function selectRepresentativeFiles(
 ): RepoTreeEntry[] {
   const groups = new Map<string, RepoTreeEntry[]>();
   for (const item of tree) {
-    if (item.type !== "blob") continue;
-    const lower = item.path.toLowerCase();
-    if (EXCLUDED_PATH_PARTS.some((part) => lower.includes(part))) continue;
-    const size = item.size ?? 0;
-    if (size < MIN_FILE_BYTES || size > MAX_FILE_BYTES) continue;
-    const language = languageForPath(item.path);
-    if (!language) continue;
-    groups.set(language, [...(groups.get(language) ?? []), item]);
+    const language = candidateLanguage(item);
+    if (language) groups.set(language, [...(groups.get(language) ?? []), item]);
   }
 
   const ordered = [...groups.values()]
@@ -385,17 +443,9 @@ export const GithubSignalsService = {
     if (langRes.ok) languages = await langRes.json();
     else console.warn(`[github-signals] /languages falló para ${owner}/${repo} (status ${langRes.status})`);
 
-    let lastCommitSHA = "";
-    let commitFrequency90d = 0;
-    if (commitsRes.ok) {
-      const commits = await commitsRes.json();
-      if (Array.isArray(commits) && commits.length > 0) {
-        lastCommitSHA = commits[0].sha ?? "";
-        commitFrequency90d = commits.length;
-      }
-    } else {
-      console.warn(`[github-signals] /commits falló para ${owner}/${repo} (status ${commitsRes.status})`);
-    }
+    const recent = await readRecentCommits(commitsRes, `${owner}/${repo}`);
+    const { commitFrequency90d } = recent;
+    let { lastCommitSHA } = recent;
 
     // Sin commits en 90 días no hay SHA reciente: se toma la cabeza de la rama por defecto para
     // que la caché por SHA también funcione en repositorios inactivos.
@@ -407,58 +457,13 @@ export const GithubSignalsService = {
       if (branchRes.ok) lastCommitSHA = (await branchRes.json())?.commit?.sha ?? "";
     }
 
-    let tree: RepoTreeEntry[] = [];
     const treeRes = await fetch(
       `${GITHUB_API_BASE}/repos/${owner}/${repo}/git/trees/${lastCommitSHA || "HEAD"}?recursive=1`,
       { headers },
     );
-    if (treeRes.ok) {
-      const data = await treeRes.json();
-      tree = Array.isArray(data.tree) ? data.tree : [];
-    } else {
-      console.warn(`[github-signals] /git/trees falló para ${owner}/${repo} (status ${treeRes.status})`);
-    }
+    const tree = await readTree(treeRes, `${owner}/${repo}`);
 
-    let hasTests = false;
-    let hasCI = false;
-    let hasReadme = false;
-    let readmeLength = 0;
-
-    for (const item of tree) {
-      const p = item.path.toLowerCase();
-      // Convenciones de test de los lenguajes soportados, no solo las de JavaScript: sin esto un
-      // repositorio de Python (test_*.py, tests/) o de Go (_test.go) salía siempre "sin tests".
-      if (
-        p.includes(".test.") ||
-        p.includes(".spec.") ||
-        p.includes("__tests__/") ||
-        p.startsWith("tests/") ||
-        p.startsWith("test/") ||
-        p.includes("/tests/") ||
-        p.includes("/test/") ||
-        p.endsWith("_test.go") ||
-        p.endsWith("_test.py") ||
-        /(^|\/)test_[^/]+\.py$/.test(p) ||
-        p.endsWith("test.java") ||
-        p.endsWith("tests.cs") ||
-        p.endsWith("_spec.rb")
-      ) {
-        hasTests = true;
-      }
-      if (
-        p.startsWith(".github/workflows/") ||
-        p === ".gitlab-ci.yml" ||
-        p === ".circleci/config.yml" ||
-        p === "jenkinsfile" ||
-        p === "azure-pipelines.yml"
-      ) {
-        hasCI = true;
-      }
-      if (p === "readme.md" || p === "readme" || p === "readme.rst") {
-        hasReadme = true;
-        readmeLength = item.size ?? 0;
-      }
-    }
+    const { hasTests, hasCI, hasReadme, readmeLength } = treeSignals(tree);
 
     return {
       signals: {

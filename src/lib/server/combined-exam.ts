@@ -67,6 +67,38 @@ function firstAvailable(bank: Record<string, Question[]>, key: string, level: st
   return null;
 }
 
+type Source = { key: string; level: string; pool: Question[] };
+
+/** Cuota inicial: teoría acotada a su banco y reparto por turnos entre tecnologías con banco. */
+function initialQuotas(sources: Source[], theory: Source | null, plan: { theory: number; technologies: number }) {
+  const quota = new Map<string, number>();
+  if (theory) quota.set(theory.key, Math.min(plan.theory, theory.pool.length));
+  if (sources.length === 0) return quota;
+  for (let i = 0; i < plan.technologies; i++) {
+    const s = sources[i % sources.length];
+    quota.set(s.key, (quota.get(s.key) ?? 0) + 1);
+  }
+  for (const s of sources) quota.set(s.key, Math.min(quota.get(s.key) ?? 0, s.pool.length));
+  return quota;
+}
+
+/**
+ * Lo que no entró (teoría ausente, bancos pequeños) se reparte de a una entre quien tenga capacidad,
+ * en el orden de `all` (tecnologías primero, teoría al final), hasta llenar el examen.
+ */
+function fillRemaining(quota: Map<string, number>, all: Source[], examSize: number) {
+  let assigned = [...quota.values()].reduce((a, b) => a + b, 0);
+  const hasRoom = (s: Source) => (quota.get(s.key) ?? 0) < s.pool.length;
+  while (assigned < examSize && all.some(hasRoom)) {
+    for (const s of all) {
+      if (assigned >= examSize) break;
+      if (!hasRoom(s)) continue;
+      quota.set(s.key, (quota.get(s.key) ?? 0) + 1);
+      assigned++;
+    }
+  }
+}
+
 /**
  * Arma la prueba combinada.
  *
@@ -92,68 +124,32 @@ export function composeCombinedExam({
   recency?: (q: Question) => number | undefined;
 }): CombinedExam {
   const coverage: Record<string, string | null> = {};
-  const sources: { key: string; level: string; pool: Question[] }[] = [];
-
+  const sources: Source[] = [];
   for (const tech of technologies) {
     const found = firstAvailable(bank, tech, level);
     coverage[tech] = found?.level ?? null;
     if (found) sources.push({ key: tech, ...found });
   }
-  const theory = firstAvailable(bank, THEORY_TECHNOLOGY_ID, level);
+  const theoryFound = firstAvailable(bank, THEORY_TECHNOLOGY_ID, level);
+  const theory: Source | null = theoryFound ? { key: THEORY_TECHNOLOGY_ID, ...theoryFound } : null;
+  const all = theory ? [...sources, theory] : sources;
 
-  const plan = planCombinedExam(examSize);
-  const quota = new Map<string, number>();
-  const capacity = (key: string) =>
-    key === THEORY_TECHNOLOGY_ID ? theory?.pool.length ?? 0 : sources.find((s) => s.key === key)?.pool.length ?? 0;
+  const quota = initialQuotas(sources, theory, planCombinedExam(examSize));
+  fillRemaining(quota, all, examSize);
 
-  // 1) Cuota inicial: teoría y reparto por turnos entre tecnologías con banco.
-  if (theory) quota.set(THEORY_TECHNOLOGY_ID, Math.min(plan.theory, theory.pool.length));
-  for (let i = 0; i < plan.technologies && sources.length > 0; i++) {
-    const s = sources[i % sources.length];
-    quota.set(s.key, (quota.get(s.key) ?? 0) + 1);
-  }
-  for (const s of sources) quota.set(s.key, Math.min(quota.get(s.key) ?? 0, s.pool.length));
-
-  // 2) Lo que no entró (teoría ausente, bancos pequeños) se reparte entre quien tenga capacidad,
-  //    primero entre tecnologías y por último a la teoría.
-  const keys = [...sources.map((s) => s.key), ...(theory ? [THEORY_TECHNOLOGY_ID] : [])];
-  let assigned = [...quota.values()].reduce((a, b) => a + b, 0);
-  let progress = true;
-  while (assigned < examSize && progress) {
-    progress = false;
-    for (const key of keys) {
-      if (assigned >= examSize) break;
-      if ((quota.get(key) ?? 0) < capacity(key)) {
-        quota.set(key, (quota.get(key) ?? 0) + 1);
-        assigned++;
-        progress = true;
-      }
-    }
-  }
-
-  // 3) Sorteo estratificado dentro de cada banco, priorizando lo que el usuario no vio.
+  // Sorteo estratificado dentro de cada banco, priorizando lo que el usuario no vio.
   const questions: Question[] = [];
   const skillLevels: Record<string, string> = {};
-  for (const s of sources) {
+  for (const s of all) {
     const n = quota.get(s.key) ?? 0;
     if (n === 0) continue;
     skillLevels[s.key] = s.level;
     questions.push(...pickRandomQuestions(s.pool, n, recency).map((q) => ({ ...q, tag: s.key })));
   }
-  if (theory && (quota.get(THEORY_TECHNOLOGY_ID) ?? 0) > 0) {
-    skillLevels[THEORY_TECHNOLOGY_ID] = theory.level;
-    questions.push(
-      ...pickRandomQuestions(theory.pool, quota.get(THEORY_TECHNOLOGY_ID)!, recency).map((q) => ({
-        ...q,
-        tag: THEORY_TECHNOLOGY_ID,
-      })),
-    );
-  }
 
   // Orden aleatorio y ids únicos dentro de la prueba.
-  const shuffled = shuffle(questions);
   return {
-    questions: shuffled.map((q, i) => ({ ...q, id: `${q.tag}-${i}` })),
+    questions: shuffle(questions).map((q, i) => ({ ...q, id: `${q.tag}-${i}` })),
     skillLevels,
     coverage,
     theoryLevel: theory?.level ?? null,

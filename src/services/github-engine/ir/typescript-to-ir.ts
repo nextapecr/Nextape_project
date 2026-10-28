@@ -83,6 +83,16 @@ function extractName(node: ASTNode): string {
 // Cálculo de complejidad ciclomática
 // ─────────────────────────────────────────────────────────
 
+/** Punto de decisión: if/for/case/ternario…, y `&&`/`||`/`??` (no cualquier binary_expression). */
+function isDecisionPoint(node: ASTNode): boolean {
+  if (!COMPLEXITY_NODES.has(node.type)) return false;
+  if (node.type !== 'binary_expression') return true;
+  const op = node.children.find(
+    (c) => c.type === 'binary_operator' || c.type === '&&' || c.type === '||' || c.type === '??',
+  );
+  return op !== undefined && COMPLEXITY_OPERATORS.has(op.text);
+}
+
 /**
  * Calcula la complejidad ciclomática de un nodo función.
  * Fórmula simplificada: 1 + número de puntos de decisión.
@@ -94,15 +104,7 @@ function calcCyclomaticComplexity(fnNode: ASTNode): number {
   while (queue.length) {
     const node = queue.shift()!;
 
-    if (COMPLEXITY_NODES.has(node.type)) {
-      // Para binary_expression solo contamos si el operador es &&, ||, ??
-      if (node.type === 'binary_expression') {
-        const op = node.children.find((c) => c.type === 'binary_operator' || c.type === '&&' || c.type === '||' || c.type === '??');
-        if (op && COMPLEXITY_OPERATORS.has(op.text)) count++;
-      } else {
-        count++;
-      }
-    }
+    if (isDecisionPoint(node)) count++;
 
     // No entrar recursivamente a funciones anidadas (tendrían su propia complejidad)
     if (!FUNCTION_NODES.has(node.type)) {

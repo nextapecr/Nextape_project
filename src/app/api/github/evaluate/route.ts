@@ -40,27 +40,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "invalid_json" }, { status: 400 });
 
-  const githubUsername = typeof body.githubUsername === "string" ? body.githubUsername.trim() : "";
-  const repoName = typeof body.repoName === "string" ? body.repoName.trim() : "";
-  if (!GITHUB_USERNAME_PATTERN.test(githubUsername)) {
-    return NextResponse.json({ error: "invalid_github_username" }, { status: 400 });
-  }
-  if (!repoName) return NextResponse.json({ error: "missing_repo" }, { status: 400 });
+  const target = parseRepoTarget(body);
+  if (target instanceof NextResponse) return target;
+  const { githubUsername, owner, repo, fullName } = target;
 
-  const [ownerPart, namePart] = repoName.includes("/")
-    ? repoName.split("/", 2)
-    : [githubUsername, repoName];
-
-  // Phase 3: Ya no validamos que el repo sea del usuario autenticado — puede ser colaborativo.
-  // El análisis se filtra por commits del usuario, sin importar quién es el owner del repo.
-  if (repoName.split("/").length > 2 || !GITHUB_REPO_NAME_PATTERN.test(namePart ?? "")) {
-    return NextResponse.json({ error: "invalid_repo_name" }, { status: 400 });
-  }
-
-  const owner = ownerPart;
-  const repo = namePart;
-  const fullName = `${owner}/${repo}`;
-  
   // Generate unique analysis ID for error correlation
   const analysisId = generateAnalysisId(uid);
 
@@ -75,44 +58,9 @@ export async function POST(req: NextRequest) {
     const existingSnap = await docRef.get();
     const existing = existingSnap.data() as GithubRepoEvidence | undefined;
 
-    // Si existe análisis previo con la versión actual del motor, verificar si el SHA cambió
-    if (existing && existing.engineVersion === GITHUB_ENGINE_VERSION && existing.lastCommitSHA) {
-      // Phase 5: Obtener SHA actual con llamada ligera (1 commit)
-      const userToken = await getGithubToken(uid);
-      const currentSHA = await GithubSignalsService.getLatestCommitSHA(owner, repo, userToken || undefined);
-      
-      if (currentSHA && currentSHA === existing.lastCommitSHA) {
-        // SHA no cambió: devolver cache sin consumir rate limit ni llamar a GitHub API
-        console.log(`
-╔════════════════════════════════════════════════════════════════
-║ 🎯 CACHE HIT (Phase 5)
-║ Repo: ${fullName}
-║ SHA: ${currentSHA.slice(0, 7)} (sin cambios)
-║ ✅ NO se ejecuta motor
-║ ✅ NO se llama a GitHub API completa
-║ ✅ NO se consume rate limit
-╚════════════════════════════════════════════════════════════════
-        `);
-        const cached: GithubRepoEvaluateResponse = {
-          cached: true,
-          fullName,
-          skillScores: existing.skillScores,
-          filesAnalyzed: existing.filesAnalyzed ?? 0,
-          parsedLanguages: existing.parsedLanguages ?? {},
-        };
-        return NextResponse.json(cached);
-      }
-      
-      console.log(`
-╔════════════════════════════════════════════════════════════════
-║ 🔄 CACHE MISS (Phase 5)
-║ Repo: ${fullName}
-║ SHA anterior: ${existing.lastCommitSHA.slice(0, 7)}
-║ SHA actual: ${currentSHA?.slice(0, 7) || 'unknown'}
-║ ⚙️  Ejecutando análisis completo...
-╚════════════════════════════════════════════════════════════════
-      `);
-    }
+    // Si existe análisis previo con la versión actual del motor y el SHA no cambió, se devuelve lo guardado.
+    const cached = await freshCachedAnalysis(uid, existing, owner, repo);
+    if (cached) return NextResponse.json(cached);
 
     // Cada análisis gasta ~5 peticiones del GITHUB_TOKEN compartido por toda la plataforma.
     const limit = await consumeRateLimit(adminDb(), "github_evaluate", uid, GITHUB_RATE_LIMITS.evaluate);
@@ -121,9 +69,11 @@ export async function POST(req: NextRequest) {
     // Phase 3: Obtener token OAuth del usuario para filtrar commits
     const userToken = await getGithubToken(uid);
 
-    const [{ signals, tree, pushedAt, isPrivate }] = await Promise.all([
-      GithubSignalsService.getRepoSnapshot(owner, repo, userToken || undefined),
-    ]);
+    const { signals, tree, pushedAt, isPrivate } = await GithubSignalsService.getRepoSnapshot(
+      owner,
+      repo,
+      userToken || undefined,
+    );
 
     // Phase 3: Obtener commits del usuario en este repo
     const userCommits = await GithubSignalsService.getUserCommitsInRepo(
@@ -183,20 +133,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(response);
   } catch (err) {
     // Classify and log error for diagnosis
-    let stage: 'get_repo_info' | 'get_tree' | 'get_user_commits' | 'fetch_file' | 'parse_files' | 'save_evidence' | 'unknown' = 'unknown';
-    
-    // Determine stage from error type
-    if (err instanceof GithubApiError) {
-      stage = err.stage as any;
-    } else if (err instanceof Error) {
-      const msg = err.message.toLowerCase();
-      if (msg.includes('firestore') || msg.includes('firebase')) {
-        stage = 'save_evidence';
-      } else if (msg.includes('parse') || msg.includes('syntax')) {
-        stage = 'parse_files';
-      }
-    }
-    
+    const stage = errorStage(err);
+
     // Log error to Firestore for diagnosis
     await logGithubError(
       adminDb(),
@@ -224,4 +162,68 @@ export async function POST(req: NextRequest) {
     
     return NextResponse.json(response, { status: httpStatus });
   }
+}
+
+type AnalysisStage = Parameters<typeof createErrorResponse>[1];
+
+/** Valida el body y separa owner/repo ("repo" u "owner/repo"). */
+function parseRepoTarget(body: Record<string, unknown>):
+  | { githubUsername: string; owner: string; repo: string; fullName: string }
+  | NextResponse {
+  const githubUsername = typeof body.githubUsername === "string" ? body.githubUsername.trim() : "";
+  const repoName = typeof body.repoName === "string" ? body.repoName.trim() : "";
+  if (!GITHUB_USERNAME_PATTERN.test(githubUsername)) {
+    return NextResponse.json({ error: "invalid_github_username" }, { status: 400 });
+  }
+  if (!repoName) return NextResponse.json({ error: "missing_repo" }, { status: 400 });
+
+  const [owner, repo] = repoName.includes("/") ? repoName.split("/", 2) : [githubUsername, repoName];
+
+  // Phase 3: Ya no validamos que el repo sea del usuario autenticado — puede ser colaborativo.
+  // El análisis se filtra por commits del usuario, sin importar quién es el owner del repo.
+  if (repoName.split("/").length > 2 || !GITHUB_REPO_NAME_PATTERN.test(repo ?? "")) {
+    return NextResponse.json({ error: "invalid_repo_name" }, { status: 400 });
+  }
+  return { githubUsername, owner, repo, fullName: `${owner}/${repo}` };
+}
+
+/**
+ * Phase 5: si hay un análisis con la versión actual del motor y el último commit no cambió, lo
+ * devuelve sin consumir rate limit ni descargar el repo (1 llamada ligera para leer el SHA).
+ */
+async function freshCachedAnalysis(
+  uid: string,
+  existing: GithubRepoEvidence | undefined,
+  owner: string,
+  repo: string,
+): Promise<GithubRepoEvaluateResponse | null> {
+  if (!existing || existing.engineVersion !== GITHUB_ENGINE_VERSION || !existing.lastCommitSHA) return null;
+  const fullName = `${owner}/${repo}`;
+  const userToken = await getGithubToken(uid);
+  const currentSHA = await GithubSignalsService.getLatestCommitSHA(owner, repo, userToken || undefined);
+
+  if (currentSHA && currentSHA === existing.lastCommitSHA) {
+    console.log(`[github/evaluate] cache hit ${fullName} @ ${currentSHA.slice(0, 7)}: sin análisis ni rate limit`);
+    return {
+      cached: true,
+      fullName,
+      skillScores: existing.skillScores,
+      filesAnalyzed: existing.filesAnalyzed ?? 0,
+      parsedLanguages: existing.parsedLanguages ?? {},
+    };
+  }
+  console.log(
+    `[github/evaluate] cache miss ${fullName}: ${existing.lastCommitSHA.slice(0, 7)} → ${currentSHA?.slice(0, 7) || "unknown"}`,
+  );
+  return null;
+}
+
+/** Etapa del análisis en la que falló, para clasificar el error. */
+function errorStage(err: unknown): AnalysisStage {
+  if (err instanceof GithubApiError) return err.stage as AnalysisStage;
+  if (!(err instanceof Error)) return "unknown";
+  const msg = err.message.toLowerCase();
+  if (msg.includes("firestore") || msg.includes("firebase")) return "save_evidence";
+  if (msg.includes("parse") || msg.includes("syntax")) return "parse_files";
+  return "unknown";
 }

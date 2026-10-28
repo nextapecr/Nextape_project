@@ -270,6 +270,34 @@ jobs:
 
 ---
 
+## 🧾 Última auditoría (2026-10-28, rama `test-vernon`)
+
+SonarCloud no era accesible desde el entorno de la auditoría, así que se corrieron **las mismas reglas
+de TypeScript** con el plugin oficial de SonarSource para ESLint (`eslint-plugin-sonarjs@3`, perfil
+`recommended`), sin añadirlo al proyecto:
+
+```bash
+npm i --no-save eslint-plugin-sonarjs@3
+npx eslint -c sonar.eslint.tmp.mjs --no-config-lookup .   # config temporal con sonarjs.configs.recommended
+```
+
+**236 hallazgos → 0 en `src/`** (quedan 6 de complejidad en scripts, ver `docs/TECH_DEBT.md`).
+Lo más relevante:
+- **Seguridad:** token de SonarCloud escrito en `sonar-scan.ps1` y en este documento (quitado; **revocarlo**,
+  sigue en el historial). Regex con backtracking superlineal sobre salida del modelo (`src/ai/generate.ts`).
+  Sorteo de preguntas con `crypto.randomInt` en vez de `Math.random`.
+- **Bugs:** comparaciones siempre verdaderas por tipos, `sort()` que mutaba el array de entrada, contador de
+  bucle mal ubicado.
+- **Tests:** `oauth/revoke/route.test.ts` probaba constantes copiadas (pasaba aunque el handler cambiara);
+  ahora prueba `src/lib/server/github-revoke.ts`, la lógica real extraída del handler.
+- **Deprecaciones:** `React.ElementRef` → `ComponentRef`; icono `Github` de lucide → `GithubIcon` (simple-icons).
+
+Revisados como seguros y marcados con `// NOSONAR <regla> — motivo` (SonarQube los respeta; el plugin de
+ESLint no): sha1 de huella de pregunta (`line-policy.ts`), `Math.random` decorativo y de ids de log, y
+literales `http://`/`javascript:` en tests que prueban justamente su manejo.
+
+---
+
 ## ✅ Checklist de Setup
 
 - [ ] SonarScanner descargado y descomprimido

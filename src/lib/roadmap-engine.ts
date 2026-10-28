@@ -182,57 +182,47 @@ function kahnSort(
   _dominated: Set<string> // ya no se usa para el sort, solo para status
 ): string[] {
   const skillSet = new Set(skillIds);
+  const byPriority = (a: string, b: string) => (priorityMap.get(b) ?? 0) - (priorityMap.get(a) ?? 0);
 
-  // Calcular in-degree basado en TODOS los prerequisitos que estén en la ruta
-  // (no excluimos dominados — eso era el bug)
+  // Prerequisitos que están en la ruta: TODOS, también los dominados (excluirlos era el bug).
+  const routePrereqs = new Map<string, string[]>();
+  for (const id of skillIds) routePrereqs.set(id, (prereqMap.get(id) ?? []).filter((p) => skillSet.has(p)));
+
   const inDegree = new Map<string, number>();
-  for (const id of skillIds) {
-    const prereqs = (prereqMap.get(id) ?? []).filter((p) => skillSet.has(p));
-    inDegree.set(id, prereqs.length);
-  }
+  for (const id of skillIds) inDegree.set(id, routePrereqs.get(id)!.length);
 
-  // Nivel topológico de cada skill (profundidad en el grafo)
+  // Nivel topológico de cada skill (profundidad en el grafo). Nivel 0: sin prerequisitos en la ruta.
   const topoLevel = new Map<string, number>();
-
-  // Cola inicial: skills sin prerequisitos en la ruta (nivel 0)
-  let queue: string[] = skillIds.filter((id) => inDegree.get(id)! === 0);
+  let queue: string[] = skillIds.filter((id) => inDegree.get(id) === 0);
   for (const id of queue) topoLevel.set(id, 0);
 
   // BFS por niveles de Kahn — calcula el nivel topológico de cada skill
   const processed = new Set<string>();
   const bfsOrder: string[] = [];
 
+  /** Baja el in-degree de las skills que dependen de `current`; devuelve las que quedan libres. */
+  const releaseDependents = (current: string): string[] => {
+    const released: string[] = [];
+    const nextLevel = topoLevel.get(current)! + 1;
+    for (const candidate of skillIds) {
+      if (processed.has(candidate) || !routePrereqs.get(candidate)!.includes(current)) continue;
+      topoLevel.set(candidate, Math.max(topoLevel.get(candidate) ?? 0, nextLevel));
+      const remaining = inDegree.get(candidate)! - 1;
+      inDegree.set(candidate, remaining);
+      if (remaining === 0) released.push(candidate);
+    }
+    return released;
+  };
+
   while (queue.length > 0) {
     const nextQueue: string[] = [];
-
     // Ordenar por rawPriority DESC dentro del mismo nivel
-    queue.sort((a, b) => (priorityMap.get(b) ?? 0) - (priorityMap.get(a) ?? 0));
-
-    for (const current of queue) {
+    for (const current of [...queue].sort(byPriority)) {
       if (processed.has(current)) continue;
       processed.add(current);
       bfsOrder.push(current);
-
-      const currentLevel = topoLevel.get(current)!;
-
-      // Para cada skill T que tiene 'current' como prerequisito
-      for (const candidate of skillIds) {
-        if (processed.has(candidate)) continue;
-        const prereqs = (prereqMap.get(candidate) ?? []).filter((p) => skillSet.has(p));
-        if (!prereqs.includes(current)) continue;
-
-        // Actualizar el nivel topológico de T: es al menos currentLevel + 1
-        const prevLevel = topoLevel.get(candidate) ?? 0;
-        topoLevel.set(candidate, Math.max(prevLevel, currentLevel + 1));
-
-        // Decrementar in-degree
-        inDegree.set(candidate, inDegree.get(candidate)! - 1);
-        if (inDegree.get(candidate)! === 0) {
-          nextQueue.push(candidate);
-        }
-      }
+      nextQueue.push(...releaseDependents(current));
     }
-
     queue = nextQueue;
   }
 
@@ -245,11 +235,7 @@ function kahnSort(
   }
 
   // Ordenar resultado final: nivel topológico PRIMARIO, rawPriority DESC SECUNDARIO
-  bfsOrder.sort((a, b) => {
-    const levelDiff = (topoLevel.get(a) ?? 0) - (topoLevel.get(b) ?? 0);
-    if (levelDiff !== 0) return levelDiff;
-    return (priorityMap.get(b) ?? 0) - (priorityMap.get(a) ?? 0);
-  });
+  bfsOrder.sort((a, b) => (topoLevel.get(a) ?? 0) - (topoLevel.get(b) ?? 0) || byPriority(a, b));
 
   return bfsOrder;
 }
