@@ -16,15 +16,17 @@ agentes de IA + humanos). Mantener actualizada cuando cambie el código.
 | [BACKEND_AI.md](./BACKEND_AI.md) | Servicios, route handlers y flows de Genkit con Groq (GPT-OSS). Frontera cliente/servidor. |
 | [FRONTEND.md](./FRONTEND.md) | Rutas, layout/navegación, sistema de diseño, estado, código muerto, bugs de UI. |
 | [TECH_DEBT.md](./TECH_DEBT.md) | Backlog consolidado de inconsistencias/bugs por prioridad (🔴🟠🟡). |
-| [PRODUCTION_READINESS.md](./PRODUCTION_READINESS.md) | Checklist por fases para llevar a producción. |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | **Despliegue en Netlify + Firebase**: variables de entorno, service account, reglas, checklist. Paso a paso. |
-| [CHANGELOG_FIXES.md](./CHANGELOG_FIXES.md) | Registro de las correcciones aplicadas (rama `fix/system-hardening`). |
-| [blueprint.md](./blueprint.md) | Blueprint original del equipo (**visión/intención**). ⚠️ Difiere del código en varios puntos; el código manda. |
+| [GROQ_TIMELINE_MODELS.md](./GROQ_TIMELINE_MODELS.md) | Qué modelos de Groq usa la IA, cómo funciona el respaldo y cómo cambiarlos. |
+| [SONARQUBE_SETUP.md](./SONARQUBE_SETUP.md) | Análisis estático con SonarQube. |
+
+> Documentos históricos borrados en 2026-10 (`HANDOFF.md`, `CHANGELOG_FIXES.md`, `PRODUCTION_READINESS.md`,
+> `blueprint.md`, `roadmap-drafts/`): siguen disponibles en el historial de Git.
 
 ## Cómo usar esta documentación
 
-- **Fuente de verdad = el código.** Los docs describen el estado real; donde el código y el
-  `blueprint.md` discrepan, se marca con ⚠️ y se registra en `TECH_DEBT.md`.
+- **Fuente de verdad = el código.** Los docs describen el estado real; donde algo no coincide, se marca
+  con ⚠️ y se registra en `TECH_DEBT.md`.
 - Los **agentes especializados** (`.claude/agents/`) y las **reglas absolutas** (`/CLAUDE.md`) se apoyan
   en estos documentos. Si cambias arquitectura, datos o seguridad, **actualiza el doc correspondiente**.
 - Antes de un cambio grande: lee ARCHITECTURE + el doc del área + los ítems relevantes de TECH_DEBT.

@@ -66,7 +66,7 @@ src/lib/            api.ts (apiPost con ID token) · match.ts · grading.ts · s
 src/hooks/          use-auth-user (useAuthUser), use-toast, use-mobile
 src/types/          Tipos canónicos *.types.ts (index.ts = barrel). PublicQuestion = sin correctIndex
 src/ai/             genkit.ts + flows/ (generate-assessment, generate-roadmap) — 'use server'
-docs/               Documentación del sistema (ver docs/README.md y CHANGELOG_FIXES.md)
+docs/               Documentación del sistema (índice en docs/README.md; estado real en docs/CONTEXT.md)
 firestore.rules · storage.rules   Seguridad — cambiar aquí toda regla de acceso
 ```
 
@@ -111,8 +111,9 @@ Estas reglas son **vinculantes**. Si una tarea requiere romper una, **detente y 
     escribir datos de forma confiable, usa Admin SDK en servidor, no el Web SDK del cliente.
 13. **Proveedor IA = Groq, y solo Groq.** Nunca Gemini, Anthropic, NVIDIA ni Mistral (descartados en
     `docs/DECISIONS.md`; `src/ai/mistral.ts` es código muerto que nadie importa).
-    - `genkitx-groq`, `GROQ_API_KEY`/`GROQ_MODEL`, centralizado en `src/ai/genkit.ts`. Por defecto
-      `gpt-oss-120b`; `generateJsonWithFallback` (`src/ai/generate.ts`) pasa a `gpt-oss-20b` si el 120B falla.
+    - `genkitx-groq` con `GROQ_API_KEY`. Toda la IA pasa por `generateJsonWithFallback` (`src/ai/generate.ts`):
+      primario `gpt-oss-120b` y respaldo `gpt-oss-20b`, configurables con `GROQ_TIMELINE_MODEL_PRIMARY` /
+      `_FALLBACK` (`GROQ_MODEL` no cambia los flujos). Detalle: `docs/GROQ_TIMELINE_MODELS.md`.
     - El feedback del análisis de GitHub **recibe únicamente números, nunca código**, y si la IA falla se
       genera un feedback determinístico. No cambies eso.
     Genera JSON con `generateJson` (esquema tolerante → normalización → esquema estricto Zod).
@@ -166,8 +167,8 @@ Ya construido: capa de confianza en servidor (DNA/scoring), banco de preguntas p
 55 tecnologías), **motor de GitHub** (AST con tree-sitter, 21 lenguajes), **roadmap determinista v2**
 (112 skills / 10 rutas), cierre del loop reclutador (`candidate_matches`), rate limiting y CI.
 
-**Estado verificado (2026-10-14, rama `test-vernon`, Linux + Node 22 como CI):** `typecheck` limpio ·
-`lint` 0 errores / 50 warnings · `test` 224 pasan, 25 *skipped* (los de reglas necesitan el emulador y **CI no
+**Estado verificado (2026-10-28, rama `testKai`, Linux + Node 22 como CI):** `typecheck` limpio ·
+`lint` 0 errores / 30 warnings · `test` 269 pasan, 25 *skipped* (los de reglas necesitan el emulador y **CI no
 lo arranca**) · `build` OK con Next.js 15.5.27. En Windows, `typecheck` puede fallar si los bindings nativos de
 `tree-sitter` no se instalaron; en CI pasa.
 
