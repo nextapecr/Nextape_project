@@ -40,12 +40,16 @@ Write-Host "✅ SonarScanner instalado en: $env:SONAR_SCANNER_HOME"
 
 **⚠️ IMPORTANTE:** El token es **secreto**, no lo compartas ni lo subas a git.
 
+Genera el tuyo en SonarCloud → *My Account → Security → Generate Tokens*. Este documento y
+`sonar-scan.ps1` tenían un token real escrito (2026-10-07 → 2026-10-28); se quitó, pero sigue en el
+historial de git: **ese token debe revocarse** en SonarCloud.
+
 ```powershell
 # Temporal (solo sesión actual de PowerShell)
-$env:SONAR_TOKEN = "f99c95a1a30829d7da97d4512d9e240b68f571fa"
+$env:SONAR_TOKEN = "<tu-token-de-sonarcloud>"
 
 # Permanente (recomendado, persiste entre sesiones)
-[System.Environment]::SetEnvironmentVariable('SONAR_TOKEN','f99c95a1a30829d7da97d4512d9e240b68f571fa','User')
+[System.Environment]::SetEnvironmentVariable('SONAR_TOKEN','<tu-token-de-sonarcloud>','User')
 ```
 
 **Verificar:**
@@ -187,7 +191,7 @@ $env:PATH = "$env:SONAR_SCANNER_HOME\bin;$env:PATH"
 $env:SONAR_TOKEN
 
 # Si está vacío o incorrecto, configurarlo:
-$env:SONAR_TOKEN = "f99c95a1a30829d7da97d4512d9e240b68f571fa"
+$env:SONAR_TOKEN = "<tu-token-de-sonarcloud>"
 ```
 
 ### ❌ "Project key already exists"
@@ -253,7 +257,7 @@ jobs:
 
 **Configurar secreto:**
 1. Ve a Settings → Secrets → Actions
-2. Agrega `SONAR_TOKEN` con el valor `f99c95a1a30829d7da97d4512d9e240b68f571fa`
+2. Agrega `SONAR_TOKEN` con el valor `<tu-token-de-sonarcloud>`
 
 ---
 
