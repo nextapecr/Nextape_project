@@ -64,6 +64,7 @@ describe("CandidateProfileForm", () => {
     const full: CandidateProfile = {
       ...aboutDone(),
       education: [{ institution: "UCR", program: "Computación", level: "bachelor", status: "in-progress", year: "2027" }],
+      technologies: ["react"],
     };
     const { onSave } = renderForm(full);
     next(); // about → work (sin trabajos: permitido)

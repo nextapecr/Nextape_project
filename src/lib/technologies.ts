@@ -126,7 +126,22 @@ export const TECHNOLOGIES: Technology[] = [
   { id: "microservices", label: "Microservicios", category: "architecture" },
   { id: "architecture", label: "Arquitectura de sistemas", category: "architecture" },
   { id: "security", label: "Seguridad (OWASP)", category: "architecture" },
+  // Teoría transversal: no es una tecnología que el candidato elija. Va en TODAS las pruebas
+  // combinadas de The LINE (30 %), sea cual sea su stack. Ver THEORY_TECHNOLOGY_ID.
+  { id: "software-engineering", label: "Ingeniería de software (SOLID, patrones, arquitectura)", category: "architecture" },
 ];
+
+/**
+ * Id del banco de teoría de ingeniería de software: principios SOLID, patrones de diseño, arquitectura
+ * (capas, hexagonal, microservicios vs. monolito), clean code, acoplamiento y cohesión, testing.
+ * Se siembra como cualquier otra tecnología (`npm run seed:questions -- --only=software-engineering`).
+ */
+export const THEORY_TECHNOLOGY_ID = "software-engineering";
+
+/** Tecnologías que el candidato puede elegir para que se le evalúen (todas menos la teoría). */
+export function selectableTechnologies(): Technology[] {
+  return TECHNOLOGIES.filter((t) => t.id !== THEORY_TECHNOLOGY_ID);
+}
 
 const BY_ID = new Map(TECHNOLOGIES.map((t) => [t.id, t]));
 

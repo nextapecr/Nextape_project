@@ -54,6 +54,20 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
     await assertFails(getDoc(doc(bob, "user_skill_scores/alice")));
   });
 
+  it("el usuario edita su perfil pero NO sus tecnologías de The LINE (server-only)", async () => {
+    const carla = testEnv.authenticatedContext("carla").firestore();
+    // Crear el perfil con lineTechnologies: denegado.
+    await assertFails(setDoc(doc(carla, "users/carla"), { uid: "carla", role: "developer", lineTechnologies: ["react"] }));
+    await assertSucceeds(setDoc(doc(carla, "users/carla"), { uid: "carla", role: "developer" }));
+    // Editar el perfil profesional: permitido.
+    await assertSucceeds(updateDoc(doc(carla, "users/carla"), { candidateProfile: { headline: "Dev" } }));
+    // Tocar lineTechnologies (p. ej. quitar python sin perder sus puntos): denegado.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "users/carla"), { lineTechnologies: ["python"] });
+    });
+    await assertFails(updateDoc(doc(carla, "users/carla"), { lineTechnologies: [] }));
+  });
+
   it("nadie puede leer sesiones ni claves de respuestas (server-only)", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
     await assertFails(getDoc(doc(alice, "line_sessions/s1")));

@@ -30,7 +30,7 @@ Helpers: `isAuthenticated()`, `isOwner(userId)`.
 
 | Colección | read | write | Estado / Riesgo |
 |---|---|---|---|
-| `users/{uid}` | owner | owner | ⚠️ Un reclutador **no puede leer** perfiles de candidatos (el blueprint asume lectura pública para reclutadores). Pendiente de decisión de producto. |
+| `users/{uid}` | owner | owner, **salvo `lineTechnologies`** (solo servidor, vía `/api/profile/technologies`) | ⚠️ Un reclutador **no puede leer** perfiles de candidatos (el blueprint asume lectura pública para reclutadores). Pendiente de decisión de producto. |
 | `user_skill_scores/{uid}` | owner | **`if false`** | ✅ **(B2)** El DNA es de solo lectura para el cliente; lo escribe el servidor con Admin SDK (`/api/line/submit`). Ya no es falsificable. |
 | `user_roadmaps/{uid}` | owner | owner | OK para datos privados. |
 | `assessment_attempts/{id}` | **owner** | **`if false`** | ✅ **(B8/B2)** Lista solo del dueño; creación solo en servidor (Admin). |

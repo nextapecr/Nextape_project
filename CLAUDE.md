@@ -11,7 +11,9 @@ Plataforma de **evaluación técnica con IA** que construye el "DNA técnico ver
 Roles: `developer` y `recruiter`.
 - **The LINE**: examen técnico **determinista**. Las preguntas se **precargan** con IA en
   `line_question_pools/{tech}_{nivel}` (`npm run seed:questions`); en runtime **NO se llama al modelo**,
-  solo se sortean. 55 tecnologías × 3 niveles (`junior|mid|senior`), 5 tipos de pregunta.
+  solo se sortean. 55 tecnologías + teoría (`software-engineering`) × 3 niveles, 5 tipos de pregunta.
+  **Prueba combinada:** 70 % de las tecnologías del perfil (`users.lineTechnologies`, solo servidor, máx. 6)
+  + 30 % teoría, al nivel declarado. Quitar una tecnología borra sus puntos (`/api/profile/technologies`).
   **Es la única fuente del DNA.**
 - **CORE**: identidad técnica persistida (scores por skill) en Firestore.
 - **GitHub**: analiza el código real de tus repos con **tree-sitter (AST)** y produce 5 dimensiones de

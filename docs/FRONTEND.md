@@ -17,13 +17,13 @@
 | Ruta | Rol | Descripción | Escribe |
 |---|---|---|---|
 | `/dashboard` | ambos | Panel bifurcado por `role` (métricas DNA / vacantes) | — |
-| `/dashboard/line` | developer | **The LINE**: simulación IA, quiz, scoring | `user_skill_scores` |
+| `/dashboard/line` | developer | **The LINE**: prueba combinada (tecnologías del perfil + teoría de ingeniería de software, al nivel declarado). Sin selectores: muestra qué se evaluará y enlaza al perfil para cambiarlo | `user_skill_scores` |
 | `/dashboard/core` | developer | **CORE**: DNA técnico (barras) + grade S/A+/A/B/C | — |
 | `/dashboard/roadmap` | developer | Roadmap IA (pasos, prioridad) | `user_roadmaps` |
 | `/dashboard/jobs` | developer | Vacantes + match% + búsqueda | — |
 | `/dashboard/compatibility` | developer | "Rank index" /10 (decorativo en parte) | — |
 | `/dashboard/profile` | developer | Perfil **solo lectura** + DNA + perfil profesional (enlace a editar) | — |
-| `/dashboard/onboarding` | developer | Cuestionario del candidato en 4 pasos (sobre ti, experiencia, estudios, extras). Se abre tras registrarse como candidato; el panel avisa si falta | `users.candidateProfile` |
+| `/dashboard/onboarding` | developer | Cuestionario del candidato en 4 pasos (sobre ti, experiencia, estudios, extras). El paso 4 elige las tecnologías que evalúa The LINE (máx. 6) y avisa qué puntos se pierden al quitar una. Se abre tras registrarse como candidato; el panel avisa si falta | `users.candidateProfile` + `POST /api/profile/technologies` |
 | `/dashboard/candidates` | recruiter | Candidatos por vacante (métricas + estado del ranking) + "Ver perfil profesional" de cada uno | — |
 | `/dashboard/vacancies` | recruiter | Listado de vacantes propias | — |
 | `/dashboard/vacancies/new` | recruiter | Crear vacante + generar prueba IA | `jobs` ✅ (reglas corregidas) |

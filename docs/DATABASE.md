@@ -28,9 +28,13 @@ Tipo canónico: [`UserProfile`](../src/types/user.types.ts) (`src/types/user.typ
 | `githubUrl` | string? | opcional, no se captura hoy en el registro |
 | `role` | `"developer" \| "recruiter"` | define la navegación del dashboard |
 | `candidateProfile` | `CandidateProfile`? | Solo `developer`. Cuestionario de `/dashboard/onboarding`: titular, años de experiencia, nivel declarado, ubicación, modalidad, disponibilidad, `work[]` (empresa, puesto, desde/hasta, descripción; máx. 10), `education[]` (tipo, institución, programa, estado, año; máx. 6), certificaciones, tecnologías, idiomas, LinkedIn/portafolio, qué busca y `completedAt` (ms). Tipo y límites en [`candidate-profile.ts`](../src/lib/candidate-profile.ts) |
+| `lineTechnologies` | string[]? | **Solo servidor.** Tecnologías que The LINE le evalúa (ids canónicos, máx. 6, sin la teoría). La escribe `POST /api/profile/technologies`; `candidateProfile.technologies` es una copia para mostrar |
 | `createdAt` | Timestamp | |
 | `updatedAt` | Timestamp? | |
 
+- **Regla:** el dueño lee/escribe su documento, **salvo `lineTechnologies`** (`create` no puede traerlo,
+  `update` no puede tocarlo: `diff().affectedKeys()`). Así nadie se agrega tecnologías sin pasar por el
+  endpoint, que es el que borra los puntos del DNA de las que se quitan.
 - Escrito por `UserService.saveUser` (`setDoc` con `merge:true`) en el registro (`AuthModal`).
 - `candidateProfile` lo escribe `UserService.saveCandidateProfile`, **siempre normalizado** con
   `normalizeCandidateProfile` (recorta textos, descarta opciones inválidas, solo URLs http/https). Como la

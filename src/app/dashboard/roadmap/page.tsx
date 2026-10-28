@@ -91,10 +91,15 @@ export default function RoadmapPage() {
    * enviar al usuario a una combinación sin preguntas sería peor que no ofrecer nada.
    */
   const [practicable, setPracticable] = useState<Record<string, string[]>>({});
+  /** Tecnologías que The LINE le evalúa al usuario (su perfil). Solo esas se pueden practicar. */
+  const [lineTechs, setLineTechs] = useState<string[]>([]);
 
   useEffect(() => {
-    apiGet<{ available: Record<string, string[]> }>("/api/line/catalog")
-      .then((res) => setPracticable(res.available))
+    apiGet<{ available: Record<string, string[]>; combined?: { technologies: string[] } }>("/api/line/catalog")
+      .then((res) => {
+        setPracticable(res.available);
+        setLineTechs(res.combined?.technologies ?? []);
+      })
       .catch(() => setPracticable({}));
   }, []);
 
@@ -233,10 +238,11 @@ export default function RoadmapPage() {
     // tecnología relacionada que sí tenga preguntas (p. ej. react-fundamentals → React).
     const tech = practiceTechnologyForSkill(item.skillId, practicable);
     if (tech) {
-      return {
-        label: tech === item.skillId ? "Practicar en The LINE" : `Practicar ${technologyLabel(tech)} en The LINE`,
-        href: `/dashboard/line?technology=${encodeURIComponent(tech)}`,
-      };
+      // The LINE ya no deja elegir tecnología: evalúa las del perfil. Si esta no está, se ofrece
+      // agregarla al perfil (máx. 6) en vez de un enlace que no la va a evaluar.
+      return lineTechs.includes(tech)
+        ? { label: "Evaluar en The LINE", href: "/dashboard/line" }
+        : { label: `Agregar ${technologyLabel(tech)} a tu perfil`, href: "/dashboard/onboarding" };
     }
     if (item.scoreSource === "github") {
       return { label: "Reforzar en GitHub", href: "/dashboard/github" };

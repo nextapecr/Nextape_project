@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { CATEGORY_LABELS, technologiesByCategory } from "@/lib/technologies";
+import { CATEGORY_LABELS, THEORY_TECHNOLOGY_ID, findTechnology, technologiesByCategory } from "@/lib/technologies";
 import {
   AVAILABILITY,
   EDUCATION_LEVELS,
@@ -99,11 +99,20 @@ export function CandidateProfileForm({
   saving,
   onSave,
   onSkip,
+  savedTechnologies = [],
+  dnaScores = {},
+  bankAvailable,
 }: {
   initial: CandidateProfile;
   saving: boolean;
   onSave: (profile: CandidateProfile) => void;
   onSkip?: () => void;
+  /** Tecnologías que The LINE le evalúa HOY (antes de guardar). Para avisar de lo que se pierde. */
+  savedTechnologies?: string[];
+  /** DNA actual: nota por tecnología. */
+  dnaScores?: Record<string, number>;
+  /** Tecnologías con banco de preguntas (`/api/line/catalog`). `undefined` = aún cargando. */
+  bankAvailable?: Record<string, string[]>;
 }) {
   const [p, setP] = useState<CandidateProfile>(initial);
   const [stepIndex, setStepIndex] = useState(0);
@@ -147,7 +156,14 @@ export function CandidateProfileForm({
   const removeAt = (key: "work" | "education" | "languages" | "certifications", index: number) =>
     setP((prev) => ({ ...prev, [key]: (prev[key] as unknown[]).filter((_, i) => i !== index) }));
 
-  const groups = technologiesByCategory();
+  // La teoría de ingeniería de software no se elige: va en todas las pruebas.
+  const groups = technologiesByCategory()
+    .map((g) => ({ ...g, items: g.items.filter((t) => t.id !== THEORY_TECHNOLOGY_ID) }))
+    .filter((g) => g.items.length > 0);
+  /** Quitadas respecto a lo guardado y que ya tienen nota: se borran del DNA al guardar. */
+  const losing = savedTechnologies
+    .filter((t) => !p.technologies.includes(t) && typeof dnaScores[t] === "number")
+    .map((t) => ({ id: t, label: findTechnology(t)?.label ?? t, score: dnaScores[t] }));
 
   return (
     <div className="max-w-3xl mx-auto space-y-10">
@@ -342,7 +358,10 @@ export function CandidateProfileForm({
 
         {step === "extras" && (
           <div className="space-y-8">
-            <Field label={`Tecnologías que usas (${p.technologies.length}/${LIMITS.technologies})`} hint="Lo que declaras aquí no suma a tu DNA: para eso está The LINE.">
+            <Field
+              label={`Tecnologías que te evaluará The LINE * (${p.technologies.length}/${LIMITS.technologies})`}
+              hint="Cada prueba mezcla preguntas de estas tecnologías (70 %) con teoría de ingeniería de software: SOLID, patrones y arquitectura (30 %). Puedes cambiarlas después, pero si quitas una que ya evaluaste, pierdes esos puntos."
+            >
               <div className="flex flex-wrap gap-2 pb-2">
                 {groups.map(({ category }) => (
                   <Chip key={category} selected={techCategory === category} onClick={() => setTechCategory(techCategory === category ? null : category)}>
@@ -361,12 +380,29 @@ export function CandidateProfileForm({
                       onClick={() => set("technologies", toggleIn(p.technologies, t.id, LIMITS.technologies))}
                     >
                       {t.label}
+                      {bankAvailable && !bankAvailable[t.id]?.length && (
+                        <span className="text-[9px] font-bold uppercase tracking-widest opacity-60">· sin preguntas aún</span>
+                      )}
                     </Chip>
                   ))}
                 {!techCategory && p.technologies.length === 0 && (
                   <p className="text-sm text-gray-400">Elige una categoría para ver sus tecnologías.</p>
                 )}
               </div>
+              {losing.length > 0 && (
+                <div role="alert" className="mt-3 bg-brand-red/5 text-brand-red rounded-2xl p-4 text-sm font-medium">
+                  Al guardar se borrarán de tu DNA los puntos de{" "}
+                  {losing.map((l, i) => (
+                    <span key={l.id}>
+                      <span className="font-bold">
+                        {l.label} ({l.score}%)
+                      </span>
+                      {i < losing.length - 1 ? ", " : ""}
+                    </span>
+                  ))}
+                  . Si vuelves a agregarla, empiezas de cero.
+                </div>
+              )}
             </Field>
 
             <Field label="Idiomas">

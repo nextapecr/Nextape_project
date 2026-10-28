@@ -146,7 +146,7 @@ export default function ProfilePage() {
                     { title: "Estudios", items: summary.education, empty: "Sin estudios declarados." },
                     { title: "Certificaciones", items: candidate.certifications, empty: "" },
                     { title: "Idiomas", items: summary.languages, empty: "" },
-                    { title: "Tecnologías que usa", items: candidate.technologies.map((t) => findTechnology(t)?.label ?? t), empty: "" },
+                    { title: "Tecnologías que evalúa The LINE", items: (profile?.lineTechnologies ?? candidate.technologies).map((t) => findTechnology(t)?.label ?? t), empty: "" },
                   ]
                     .filter((g) => g.items.length > 0 || g.empty)
                     .map((g) => (

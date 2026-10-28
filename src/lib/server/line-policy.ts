@@ -34,15 +34,19 @@ export function attemptRule(hours = attemptCooldownHours()): RateLimitRule | nul
   return { limit: 1, windowMs: hours * HOUR_MS };
 }
 
-/** Prefijo de los contadores de práctica en `api_rate_limits` (lo lee `/api/line/catalog`). */
+/** Prefijo de los contadores de práctica por tecnología (modo anterior a la prueba combinada). */
 export const PRACTICE_SCOPE_PREFIX = "line_practice_";
 
+/** Contador de la prueba combinada: 1 cada 24 h, sea cual sea el stack del candidato. */
+export const COMBINED_SCOPE = "line_combined";
+
 /**
- * Ámbito del límite. Práctica: por tecnología/especialidad, **sin importar el nivel** (si no,
- * bastaría con cambiar de nivel para repetir). Vacante: por vacante.
+ * Ámbito del límite. Vacante: por vacante. Prueba combinada (The LINE general desde 2026-10):
+ * uno solo por usuario. `subject` queda para el modo anterior por tecnología.
  */
-export function attemptScope({ jobId, subject }: { jobId?: string; subject?: string }): string {
+export function attemptScope({ jobId, subject, combined }: { jobId?: string; subject?: string; combined?: boolean }): string {
   if (jobId) return `line_job_${jobId}`;
+  if (combined) return COMBINED_SCOPE;
   return `${PRACTICE_SCOPE_PREFIX}${subject ?? "unknown"}`;
 }
 

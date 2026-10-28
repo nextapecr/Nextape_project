@@ -109,7 +109,10 @@ export interface CandidateProfile {
   education: Education[];
   /** Cursos o certificaciones, uno por entrada. */
   certifications: string[];
-  /** Ids del catálogo de The LINE (`src/lib/technologies.ts`). */
+  /**
+   * Ids del catálogo de The LINE (`src/lib/technologies.ts`). COPIA de `users.lineTechnologies`
+   * para mostrar: la fuente de verdad es ese campo server-only (ver `src/lib/line-technologies.ts`).
+   */
   technologies: string[];
   languages: LanguageSkill[];
   linkedinUrl: string;
@@ -126,7 +129,8 @@ export const LIMITS = {
   work: 10,
   education: 6,
   certifications: 10,
-  technologies: 20,
+  /** Igual que MAX_LINE_TECHNOLOGIES: son las que evalúa The LINE. */
+  technologies: 6,
   languages: 6,
   shortText: 120,
   longText: 600,
@@ -317,6 +321,8 @@ export function stepErrors(step: ProfileStep, p: CandidateProfile): string[] {
       });
       break;
     case "extras":
+      if (p.technologies.length === 0) errors.push("Elige al menos una tecnología para que The LINE te evalúe.");
+      if (p.technologies.length > LIMITS.technologies) errors.push(`Elige como máximo ${LIMITS.technologies} tecnologías.`);
       break;
   }
   return errors;

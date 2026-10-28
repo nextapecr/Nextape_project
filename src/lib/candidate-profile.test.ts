@@ -26,6 +26,7 @@ const complete = (): CandidateProfile => ({
     { company: "Beta", role: "Practicante", start: "2021", end: "2022", current: false, description: "" },
   ],
   education: [{ institution: "UCR", program: "Computación", level: "bachelor", status: "in-progress", year: "2027" }],
+  technologies: ["react"],
   completedAt: 1,
 });
 

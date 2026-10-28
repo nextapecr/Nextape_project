@@ -13,6 +13,12 @@ export interface UserProfile {
    * propio usuario; normalizarlo siempre con `normalizeCandidateProfile` antes de usarlo.
    */
   candidateProfile?: CandidateProfile;
+  /**
+   * Tecnologías que The LINE le evalúa (ids canónicos, máx. 6). SOLO servidor: la escribe
+   * `POST /api/profile/technologies` (las reglas bloquean el campo al cliente). Quitar una borra
+   * sus puntos del DNA.
+   */
+  lineTechnologies?: string[];
   createdAt: FirestoreTimestamp;
   updatedAt?: FirestoreTimestamp;
 }
