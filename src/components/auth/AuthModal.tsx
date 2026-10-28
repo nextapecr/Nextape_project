@@ -53,7 +53,8 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
       
       toast({ title: mode === "login" ? "Acceso correcto" : "Cuenta creada con éxito" });
       onClose();
-      router.push("/dashboard");
+      // Un candidato recién registrado pasa primero por el cuestionario de perfil profesional.
+      router.push(mode === "register" && accountType === "developer" ? "/dashboard/onboarding" : "/dashboard");
     } catch (error: any) {
       console.error("Auth error:", error);
       toast({
@@ -73,6 +74,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
       const user = result.user;
       
       const existing = await UserService.getUser(user.uid);
+      const isNewDeveloper = !existing && accountType === "developer";
       if (!existing) {
         await UserService.saveUser(user.uid, {
           uid: user.uid,
@@ -84,7 +86,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
         });
       }
       onClose();
-      router.push("/dashboard");
+      router.push(isNewDeveloper ? "/dashboard/onboarding" : "/dashboard");
     } catch (error: any) {
       toast({
         title: "Error",

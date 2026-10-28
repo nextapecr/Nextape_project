@@ -8,6 +8,7 @@ import {
 } from "@/lib/server/assessment";
 import { applyAttemptToDna, isSubmissionLate, levelWeight } from "@/lib/server/line-policy";
 import { calculateMatch } from "@/lib/match";
+import { summarizeCandidate } from "@/lib/candidate-profile";
 import { canonicalSkillKey } from "@/lib/technologies";
 import type { Answer, Question } from "@/types/question.types";
 
@@ -149,6 +150,10 @@ export async function POST(req: NextRequest) {
           const requiredSkills: string[] = Array.isArray(job.requiredSkills) ? job.requiredSkills : [];
           const userSnap = await adminDb().collection("users").doc(uid).get();
           const candidateName: string = userSnap.data()?.displayName || "Candidato";
+          // Resumen del perfil profesional (experiencia, estudios…) para la empresa. Postular es
+          // consentir compartirlo, igual que el resultado. Sin email ni teléfono. Se actualiza en
+          // cada intento, así la empresa ve el perfil vigente.
+          const candidate = summarizeCandidate(userSnap.data()?.candidateProfile);
 
           // Snapshot de los scores del candidato en las skills que pide la vacante.
           const skillsSnapshot: Record<string, number> = {};
@@ -180,6 +185,7 @@ export async function POST(req: NextRequest) {
                 jobId,
                 jobTitle: job.title ?? "",
                 candidateName,
+                candidate,
                 score: bestScore,
                 matchPercent,
                 skills: skillsSnapshot,

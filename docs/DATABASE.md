@@ -27,10 +27,15 @@ Tipo canónico: [`UserProfile`](../src/types/user.types.ts) (`src/types/user.typ
 | `photoURL` | string? | opcional (login social) |
 | `githubUrl` | string? | opcional, no se captura hoy en el registro |
 | `role` | `"developer" \| "recruiter"` | define la navegación del dashboard |
+| `candidateProfile` | `CandidateProfile`? | Solo `developer`. Cuestionario de `/dashboard/onboarding`: titular, años de experiencia, nivel declarado, ubicación, modalidad, disponibilidad, `work[]` (empresa, puesto, desde/hasta, descripción; máx. 10), `education[]` (tipo, institución, programa, estado, año; máx. 6), certificaciones, tecnologías, idiomas, LinkedIn/portafolio, qué busca y `completedAt` (ms). Tipo y límites en [`candidate-profile.ts`](../src/lib/candidate-profile.ts) |
 | `createdAt` | Timestamp | |
 | `updatedAt` | Timestamp? | |
 
 - Escrito por `UserService.saveUser` (`setDoc` con `merge:true`) en el registro (`AuthModal`).
+- `candidateProfile` lo escribe `UserService.saveCandidateProfile`, **siempre normalizado** con
+  `normalizeCandidateProfile` (recorta textos, descarta opciones inválidas, solo URLs http/https). Como la
+  regla deja al dueño escribir su documento, quien lee el campo debe volver a normalizarlo. Es **declarado,
+  no verificado**: nunca alimenta el DNA ni el match.
 - ⚠️ Existe un **segundo tipo `UserProfile` incompatible** en `src/types/index.ts`
   (`username`, `grade`, `skills[]`, `core{}`) usado por `CoreService`/`useCore`. No representa
   la colección `users`. Es un modelo legacy. Ver TECH_DEBT.
@@ -131,6 +136,7 @@ Tipo: [`CandidateMatch`](../src/types/job.types.ts). `matchId = ${uid}_${jobId}`
 | `score` | number | Resultado de The LINE (0–100). Se conserva el **mejor** entre intentos. |
 | `matchPercent` | number | Afinidad DNA↔`requiredSkills` (0–100), vía `calculateMatch`. |
 | `skills` | `Record<string, number>` | Snapshot de los scores del candidato en las skills de la vacante. |
+| `candidate` | `CandidateSummary \| null` | Resumen del perfil profesional (`summarizeCandidate`): titular, nivel, años, ubicación, hasta 3 trabajos y 2 estudios, idiomas y enlaces; **sin email ni teléfono**. Lo copia `/api/line/submit` en cada intento; `null` si no completó el cuestionario. |
 | `completedAt` | Timestamp | |
 
 - **Escritor:** `POST /api/line/submit` (Admin SDK) cuando la sesión de The LINE tiene `jobId`: tras calcular

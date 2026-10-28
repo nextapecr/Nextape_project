@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowUpRight, Fingerprint, Target, Users, Loader2, Briefcase, PlusCircle, Activity } from "lucide-react";
+import { ArrowUpRight, Fingerprint, Target, Users, Loader2, Briefcase, PlusCircle, Activity, UserPen } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/firebase/client";
@@ -14,6 +14,7 @@ import { UserService } from "@/services/users.service";
 import { UserProfile } from "@/types/user.types";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { calculateAverageScore } from "@/lib/grading";
+import { isCandidateProfileComplete, normalizeCandidateProfile } from "@/lib/candidate-profile";
 
 export default function DashboardPage() {
   const { user, authLoading } = useAuthUser();
@@ -170,6 +171,26 @@ export default function DashboardPage() {
           ESTADO: CORE SINCRONIZADO
         </div>
       </header>
+
+      {/* Quien se registró antes de existir el cuestionario, o lo dejó para después. */}
+      {!isCandidateProfileComplete(profile?.candidateProfile ? normalizeCandidateProfile(profile.candidateProfile) : null) && (
+        <Link href="/dashboard/onboarding" className="block">
+          <div className="lift-sm flex flex-col sm:flex-row sm:items-center gap-4 bg-gray-950 text-white rounded-[2rem] p-6 md:p-8 shadow-apple-lg">
+            <div className="w-12 h-12 shrink-0 bg-brand-blue/20 rounded-2xl flex items-center justify-center">
+              <UserPen className="h-6 w-6 text-brand-blue" />
+            </div>
+            <div className="flex-grow space-y-1">
+              <p className="text-lg font-bold italic">Completa tu perfil profesional.</p>
+              <p className="text-sm text-gray-400 font-medium">
+                Experiencia, estudios y dónde has trabajado. Las empresas lo ven junto con tu resultado de The LINE.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-brand-blue shrink-0">
+              Completar <ArrowUpRight className="h-4 w-4" />
+            </span>
+          </div>
+        </Link>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         {[

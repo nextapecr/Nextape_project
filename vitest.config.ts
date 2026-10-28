@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 const root = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  // JSX "automatic" como en Next: permite testear componentes .tsx sin `import React`.
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],

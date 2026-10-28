@@ -1,4 +1,5 @@
 import { FirestoreTimestamp } from "./firebase.types";
+import type { CandidateSummary } from "@/lib/candidate-profile";
 
 // Los tipos de pregunta viven en `question.types.ts` (The LINE los usa también fuera del contexto
 // de una vacante). Se reexportan aquí para no romper los imports existentes.
@@ -70,6 +71,11 @@ export interface CandidateMatch {
   jobTitle: string;
   /** Nombre del candidato, denormalizado para el listado. */
   candidateName: string;
+  /**
+   * Resumen del perfil profesional que declaró el candidato (experiencia, estudios, idiomas…), copiado
+   * al postular. `null` si no completó el cuestionario. Ver `src/lib/candidate-profile.ts`.
+   */
+  candidate?: CandidateSummary | null;
   /** Resultado de The LINE para esta vacante (0–100). Se conserva el mejor. */
   score: number;
   /** Afinidad DNA ↔ `requiredSkills` de la vacante (0–100). */

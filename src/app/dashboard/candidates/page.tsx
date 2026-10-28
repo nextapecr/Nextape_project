@@ -202,6 +202,13 @@ export default function CandidatesPage() {
                               <p className="font-bold italic leading-tight truncate">
                                 {m.candidateName}
                               </p>
+                              {m.candidate && (
+                                <p className="text-xs text-gray-500 font-medium truncate">
+                                  {[m.candidate.headline, m.candidate.selfLevel, m.candidate.yearsOfExperience, m.candidate.location]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </p>
+                              )}
                               <div className="flex flex-wrap gap-1.5 pt-1.5">
                                 {Object.entries(m.skills || {}).map(([skill, val]) => (
                                   <Badge
@@ -212,6 +219,50 @@ export default function CandidatesPage() {
                                   </Badge>
                                 ))}
                               </div>
+                              {/* Perfil declarado por el candidato (no verificado): contexto, no score. */}
+                              {m.candidate ? (
+                                <details className="pt-2 group/details">
+                                  <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-widest text-brand-blue w-fit">
+                                    Ver perfil profesional
+                                  </summary>
+                                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-600 font-medium">
+                                    {[
+                                      { title: "Experiencia", items: m.candidate.recentWork },
+                                      { title: "Estudios", items: m.candidate.education },
+                                      { title: "Idiomas", items: m.candidate.languages },
+                                      {
+                                        title: "Disponibilidad",
+                                        items: [m.candidate.availability, m.candidate.workModes.join(" / ")].filter(Boolean),
+                                      },
+                                    ]
+                                      .filter((g) => g.items.length > 0)
+                                      .map((g) => (
+                                        <div key={g.title} className="space-y-1">
+                                          <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{g.title}</p>
+                                          {g.items.map((item) => (
+                                            <p key={item}>{item}</p>
+                                          ))}
+                                        </div>
+                                      ))}
+                                    {(m.candidate.linkedinUrl || m.candidate.portfolioUrl) && (
+                                      <div className="flex flex-wrap gap-3">
+                                        {m.candidate.linkedinUrl && (
+                                          <a href={m.candidate.linkedinUrl} target="_blank" rel="noopener noreferrer nofollow" className="font-bold text-brand-blue hover:underline">
+                                            LinkedIn
+                                          </a>
+                                        )}
+                                        {m.candidate.portfolioUrl && (
+                                          <a href={m.candidate.portfolioUrl} target="_blank" rel="noopener noreferrer nofollow" className="font-bold text-brand-blue hover:underline">
+                                            Portafolio
+                                          </a>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </details>
+                              ) : (
+                                <p className="pt-2 text-[10px] text-gray-400">Sin perfil profesional completado.</p>
+                              )}
                             </div>
                             <div className="text-right shrink-0">
                               <div className="text-2xl font-black italic tracking-tighter text-brand-blue">

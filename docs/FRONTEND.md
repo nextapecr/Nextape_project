@@ -22,8 +22,9 @@
 | `/dashboard/roadmap` | developer | Roadmap IA (pasos, prioridad) | `user_roadmaps` |
 | `/dashboard/jobs` | developer | Vacantes + match% + búsqueda | — |
 | `/dashboard/compatibility` | developer | "Rank index" /10 (decorativo en parte) | — |
-| `/dashboard/profile` | developer | Perfil **solo lectura** + DNA | — |
-| `/dashboard/candidates` | recruiter | Candidatos por vacante (métricas + estado del ranking) | — |
+| `/dashboard/profile` | developer | Perfil **solo lectura** + DNA + perfil profesional (enlace a editar) | — |
+| `/dashboard/onboarding` | developer | Cuestionario del candidato en 4 pasos (sobre ti, experiencia, estudios, extras). Se abre tras registrarse como candidato; el panel avisa si falta | `users.candidateProfile` |
+| `/dashboard/candidates` | recruiter | Candidatos por vacante (métricas + estado del ranking) + "Ver perfil profesional" de cada uno | — |
 | `/dashboard/vacancies` | recruiter | Listado de vacantes propias | — |
 | `/dashboard/vacancies/new` | recruiter | Crear vacante + generar prueba IA | `jobs` ✅ (reglas corregidas) |
 
