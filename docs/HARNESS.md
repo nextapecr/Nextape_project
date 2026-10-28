@@ -135,8 +135,7 @@ capacidad, es la **dilución**: un agente que lee 40 archivos irrelevantes razon
 relevantes.
 
 - **Sí:** la fila correspondiente de [`CONTEXT.md §8`](./CONTEXT.md), `CLAUDE.md §4`, el `.md` del área.
-- **No:** `src/components/ui/**` (3 655 líneas de shadcn), `.open-next/**`, `package-lock.json`,
-  `docs/blueprint.md` (histórico, menciona Gemini).
+- **No:** `src/components/ui/**` (3 655 líneas de shadcn), `.open-next/**`, `package-lock.json`.
 - **Solo si aplica:** `docs/TECH_DEBT.md` antes de "arreglar de paso" cualquier cosa.
 
 ### Cuándo un agente debe parar y preguntar

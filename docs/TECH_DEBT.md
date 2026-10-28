@@ -6,8 +6,6 @@
 
 ## Estado de resolución (rama `fix/system-hardening`)
 
-Ver detalle en [`CHANGELOG_FIXES.md`](./CHANGELOG_FIXES.md).
-
 - ✅ **Resueltos:** **B1, B2, B5, B6, B7, B8**, C1(modelo IA doc), **C3**, **A1, A2, A3, A4, A5, A7**, **R1–R7**,
   y **B3** en su mayoría (proyecto canónico `studio-...` fijado + config por env; falta solo el secreto de
   Gemini en hosting). Además: bugs de landing, botones no-op, hook de auth, util de grading, `ui/calendar`
@@ -52,7 +50,7 @@ Ver detalle en [`CHANGELOG_FIXES.md`](./CHANGELOG_FIXES.md).
 
 | # | Problema | Acción |
 |---|---|---|
-| C1 | ✅ **Resuelto.** Migrado a **Groq** por coste; hoy con GPT-OSS (`gpt-oss-120b` → `gpt-oss-20b`), porque Llama 3.3 salió del plan gratuito. Modelo centralizado en `genkit.ts` (`GROQ_MODEL`). `blueprint.md` (histórico) aún menciona Gemini. |
+| C1 | ✅ **Resuelto.** Migrado a **Groq** por coste; hoy con GPT-OSS (`gpt-oss-120b` → `gpt-oss-20b`), porque Llama 3.3 salió del plan gratuito. Modelos configurables con `GROQ_TIMELINE_MODEL_PRIMARY` / `_FALLBACK` (`src/ai/generate.ts`, ver `docs/GROQ_TIMELINE_MODELS.md`). |
 | C2 | Blueprint dice `users` con lectura pública para reclutadores; la regla es **owner-only** → rompe el journey de reclutador. | Decidir modelo de visibilidad de candidatos y alinear reglas + blueprint. |
 | C3 | Umbrales de "grade" divergen entre `core` y `profile`. | Extraer a una única función util de grading. |
 | C4 | `company` hardcodeado a `"Empresa NEXTAPE"` en toda vacante; telemetría falsa ("12ms/Encrypted"); `totalApplicants:0`; fallbacks de roadmap/stackMap hardcodeados. | Sustituir por datos reales / marcar claramente como demo. |
@@ -83,4 +81,5 @@ Ver detalle en [`CHANGELOG_FIXES.md`](./CHANGELOG_FIXES.md).
 
 - **No modificar** este comportamiento sin acordarlo con el equipo (3 personas). Este archivo es el
   backlog compartido; al resolver un ítem, marcarlo y enlazar el commit/PR.
-- Antes de "ir a producción", priorizar todos los 🔴 y B-items. Ver `docs/PRODUCTION_READINESS.md`.
+- Antes de "ir a producción", priorizar todos los 🔴 y B-items. Estado real del sistema: `docs/CONTEXT.md`;
+  pasos de despliegue: `docs/DEPLOYMENT.md`.

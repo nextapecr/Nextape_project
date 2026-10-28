@@ -2,7 +2,7 @@
 
 > Documento maestro de arquitectura. Para detalle por área ver:
 > [DATABASE](./DATABASE.md) · [SECURITY](./SECURITY.md) · [BACKEND_AI](./BACKEND_AI.md) ·
-> [FRONTEND](./FRONTEND.md) · [TECH_DEBT](./TECH_DEBT.md) · [PRODUCTION_READINESS](./PRODUCTION_READINESS.md).
+> [FRONTEND](./FRONTEND.md) · [TECH_DEBT](./TECH_DEBT.md) · [DEPLOYMENT](./DEPLOYMENT.md) · [CONTEXT](./CONTEXT.md).
 
 ## 1. Qué es NEXTAPE
 
@@ -57,7 +57,7 @@ El cómputo del Roadmap (`src/lib/roadmap-engine.ts`) se ejecuta **directamente 
 ## 4. Estructura de carpetas (`src/`)
 
 > Actualizado tras el saneamiento (`fix/system-hardening`): eliminados `src/features`, las rutas
-> top-level muertas, `dashboard/digital-twin`, el stack 3D y los placeholders sin uso. Ver `CHANGELOG_FIXES.md`.
+> top-level muertas, `dashboard/digital-twin`, el stack 3D y los placeholders sin uso.
 
 ```
 src/
@@ -143,6 +143,5 @@ npm run typecheck    # tsc --noEmit  ← usar para validar tipos (el build los i
 
 ## 8. Estado de madurez
 
-MVP en migración a Next.js 15 + Genkit. **Frontend/UI avanzado**; **backend de confianza inexistente**;
-varias inconsistencias y bloqueadores para producción documentados en
-[TECH_DEBT](./TECH_DEBT.md) y [PRODUCTION_READINESS](./PRODUCTION_READINESS.md).
+El estado real y verificado del sistema está en [CONTEXT](./CONTEXT.md); la deuda conocida, en
+[TECH_DEBT](./TECH_DEBT.md); los pasos de despliegue, en [DEPLOYMENT](./DEPLOYMENT.md).

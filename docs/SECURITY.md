@@ -26,7 +26,7 @@
 
 Helpers: `isAuthenticated()`, `isOwner(userId)`.
 
-> **Actualizado (rama `fix/system-hardening`).** Cambios aplicados marcados con ✅. Ver `CHANGELOG_FIXES.md`.
+> **Actualizado (rama `fix/system-hardening`).** Cambios aplicados marcados con ✅.
 
 | Colección | read | write | Estado / Riesgo |
 |---|---|---|---|
@@ -97,7 +97,7 @@ El valor central de NEXTAPE es el **"DNA técnico verificado"**. La integridad e
 
 > Resultado: el DNA **no es falsificable desde el cliente** y las respuestas correctas nunca salen al
 > navegador. Requisito operativo: credenciales del Admin SDK (ADC o `FIREBASE_SERVICE_ACCOUNT`) y la
-> API key de Groq configuradas en el servidor. Ver `docs/PRODUCTION_READINESS.md`.
+> API key de Groq configuradas en el servidor. Ver `docs/DEPLOYMENT.md`.
 
 ## 6. Checklist de seguridad antes de producción
 

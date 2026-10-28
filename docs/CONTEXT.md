@@ -331,8 +331,9 @@ bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.j
 - Las 18 skills del catálogo MVP están **duplicadas verbatim** entre los dos seeders, sin nota de cuál usar.
 - `src/types/index.ts` **no reexporta** `roadmap.types`, así que `@/types` no alcanza `Skill`/`RoadmapRoute`.
 - El motor de roadmap **no tiene tests unitarios**; solo un script manual contra Firestore de producción.
-- Basura en la raíz: `check-firestore-state.ts`, `migration.sh` (**hace `rm -rf .git`**), `graphify-out/`,
-  `tsconfig.tsbuildinfo` versionado.
+- ✅ (2026-10) Limpieza: se borraron `check-firestore-state.ts`, `migration.sh` (hacía `rm -rf .git`),
+  `graphify-out/`, los scripts de prueba manual de IA y diagnóstico, y los docs históricos (`HANDOFF.md`,
+  `CHANGELOG_FIXES.md`, `PRODUCTION_READINESS.md`, `blueprint.md`, `roadmap-drafts/`). Siguen en el historial de Git.
 
 ---
 
