@@ -1,8 +1,8 @@
 # NEXTAPE — Modelo de Datos (Firestore)
 
 > Fuente de verdad: código real en `src/types/*`, `src/services/*`, `firestore.rules`.
-> Cuando este documento y `docs/blueprint.md` discrepen, **manda el código**. Las discrepancias
-> conocidas están marcadas con ⚠️ y recogidas en `docs/TECH_DEBT.md`.
+> Si este documento y el código discrepan, **manda el código**. Las discrepancias conocidas están
+> marcadas con ⚠️ y recogidas en `docs/TECH_DEBT.md`.
 
 ## 1. Base de datos
 

@@ -156,7 +156,7 @@ const ERROR_MESSAGES: Record<string, (user: string) => string> = {
   rate_limited: () => "Has lanzado demasiados análisis en poco tiempo. Espera unos minutos y vuelve a intentarlo.",
 };
 
-export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?: string }) {
+export function GithubEvidenceCard({ uid, githubUrl: _githubUrl }: { uid: string; githubUrl?: string }) {
   const [profile, setProfile] = useState<ProfileView | null>(null);
   const [loading, setLoading] = useState(true);
   const [run, setRun] = useState<RunState | null>(null);
@@ -283,6 +283,8 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
       const pending = repos.filter((r) => !r.analyzed);
       const failed: FailedRepoInfo[] = [];
       let done = repos.length - pending.length;
+      /** Repos privados que no están en la lista autorizada (403). No son fallos. */
+      let skipped = 0;
       // Con el límite por usuario agotado, cada llamada restante fallaría igual: se para.
       let rateLimited = false;
       setRun({ total: repos.length, done, current: null, failed });
@@ -295,6 +297,30 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
         } catch (err) {
           // Capture detailed error information
           if (err instanceof ApiError) {
+            // Private repo not authorized: count as skipped, not as failure
+            if (err.code === "private_repo_not_authorized") {
+              // Don't add to failed list, just skip silently
+              skipped += 1;
+              done += 1;
+              setRun((prev) => (prev ? { ...prev, done } : prev));
+              return;
+            }
+            
+            // Repo not found or no access: translate to Spanish
+            if (err.code === "repo_not_found_or_no_access") {
+              failed.push({
+                fullName: repo.fullName,
+                errorCode: err.code,
+                message: "Repositorio no encontrado o sin acceso", // Translate to Spanish
+                httpStatus: err.httpStatus,
+                stage: err.stage,
+                retryable: false,
+              });
+              done += 1;
+              setRun((prev) => (prev ? { ...prev, done, failed: [...failed] } : prev));
+              return;
+            }
+            
             if (err.code === "GITHUB_RATE_LIMITED" || err.message === "rate_limited") {
               rateLimited = true;
             }
@@ -330,9 +356,22 @@ export function GithubEvidenceCard({ uid, githubUrl }: { uid: string; githubUrl?
       });
       setProfile(fromAggregate(aggregate, user));
 
+      // Avisos. Se arman en una variable local: leer `notice` aquí daría el valor de ANTES de
+      // este análisis (estado de React), y el segundo aviso pisaba al primero.
+      // Antes `skipped` se calculaba como `repos.length - done`, que siempre daba 0 porque los
+      // omitidos también suman a `done`: el aviso nunca aparecía.
+      const notices: string[] = [];
       if (totalRepos > repos.length) {
-        setNotice(`Se analizaron tus ${repos.length} repositorios con actividad más reciente (de ${totalRepos}).`);
+        notices.push(`Se analizaron tus ${repos.length} repositorios con actividad más reciente (de ${totalRepos}).`);
       }
+      if (skipped > 0) {
+        notices.push(
+          `${skipped} ${skipped === 1 ? "repositorio privado fue omitido" : "repositorios privados fueron omitidos"} ` +
+            "porque no lo autorizaste en la lista de repos privados.",
+        );
+      }
+      if (notices.length > 0) setNotice(notices.join(" "));
+      
       if (failed.length > 0) {
         // Count retryable vs permanent failures
         const retryableCount = failed.filter(f => f.retryable).length;
@@ -700,11 +739,20 @@ function ProfileResult({
       {profile.aiFeedback ? (
         <div className="bg-gray-50 rounded-[2rem] p-8 space-y-6">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-brand-purple" />
+            {profile.aiFeedback.source === 'deterministic' ? (
+              <CheckCircle2 className="h-4 w-4 text-brand-purple" />
+            ) : (
+              <Sparkles className="h-4 w-4 text-brand-purple" />
+            )}
             <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-              Lectura del evaluador
+              {profile.aiFeedback.source === 'deterministic' ? 'Análisis técnico' : 'Lectura del evaluador'}
             </span>
           </div>
+          {profile.aiFeedback.source === 'deterministic' && (
+            <p className="text-xs text-gray-500 -mt-2">
+              Análisis automático basado en métricas de código (generado sin IA)
+            </p>
+          )}
           <p className="text-sm font-medium leading-relaxed text-gray-700">{profile.aiFeedback.feedback}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <FeedbackList title="Fortalezas" items={profile.aiFeedback.strengths} tone="green" />

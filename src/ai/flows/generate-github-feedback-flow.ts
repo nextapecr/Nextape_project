@@ -3,16 +3,23 @@
  *
  * REGLA DE ORO DE ARQUITECTURA: La IA NUNCA recibe código fuente ni AST.
  * Solo interpreta métricas numéricas ya calculadas por el motor determinístico (Capa 2).
- * Presupuesto de output: ~400 tokens con reasoning_effort='low' para control de costos.
+ * 
+ * PRESUPUESTOS:
+ * - Output: ~400 tokens con reasoning_effort='low' para control de costos
+ * - Tiempo: tope de 8 s (AI_FEEDBACK_TIMEOUT_MS) con Promise.race, para responder antes del
+ *   límite de la Netlify Function. Si se agota, se usa el feedback determinístico.
+ *   Limitación conocida: Promise.race no cancela la petición HTTP a Groq, que sigue en segundo
+ *   plano hasta terminar (consume cupo aunque su resultado ya no se use).
  *
- * ARQUITECTURA: 2026-12-XX
- * Modelo primario: openai/gpt-oss-120b (500 tok/s, 250K TPM, reasoning_effort='low')
- * Fallback automático: openai/gpt-oss-20b (1000 tok/s, 250K TPM) ante 429 o timeout
- * Fallback determinístico: Construye feedback estructurado desde skillScores cuando IA falla
+ * MODELOS (ver docs/GROQ_TIMELINE_MODELS.md):
+ * - Primario: openai/gpt-oss-120b (GROQ_TIMELINE_MODEL_PRIMARY), reasoning_effort='low'
+ * - Respaldo automático: openai/gpt-oss-20b (GROQ_TIMELINE_MODEL_FALLBACK) ante 429/401/403/404
+ * - Respaldo determinístico: feedback estructurado desde skillScores cuando la IA falla o tarda
+ * - Plan gratuito de Groq: 8 000 tokens/min y 200 000 tokens/día por modelo.
  * 
  * HISTORIAL:
  * - 2026-08-21: Migrado desde Mistral AI (bloqueado por rate limit 0 req/min)
- * - 2026-12-XX: Actualizado a GPT-OSS con control de costos y fallback determinístico
+ * - 2026-10: GPT-OSS con control de costos, fallback determinístico y tope de 8 s
  */
 
 import { z } from 'zod';
@@ -85,6 +92,9 @@ function generateDeterministicFeedback(input: GenerateGithubFeedbackInput): Gene
   };
 }
 
+/** Timeout de 8 segundos para garantizar respuesta antes del límite de serverless (10s) */
+const AI_FEEDBACK_TIMEOUT_MS = 8000;
+
 export async function generateGithubFeedback(
   input: GenerateGithubFeedbackInput,
 ): Promise<GenerateGithubFeedbackOutput> {
@@ -118,7 +128,8 @@ REGLAS STRICTAS:
 - Sin fences de markdown extra si es posible, responde solo con el JSON.`;
 
   try {
-    const { data, model, usage } = await generateJsonWithFallback(
+    // Promise.race: timeout de 8s para garantizar respuesta antes del límite serverless (10s)
+    const aiPromise = generateJsonWithFallback(
       prompt,
       GenerateGithubFeedbackOutputSchema,
       {
@@ -126,6 +137,16 @@ REGLAS STRICTAS:
         reasoningEffort: 'low', // Fuente: https://console.groq.com/docs/reasoning
         includeReasoning: false, // No necesitamos ver el proceso de razonamiento
       },
+    );
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('AI_TIMEOUT')), AI_FEEDBACK_TIMEOUT_MS);
+    });
+
+    // `finally` limpia el temporizador: si la IA responde antes, no queda vivo 8 s más.
+    const { data, model, usage } = await Promise.race([aiPromise, timeoutPromise]).finally(() =>
+      clearTimeout(timer),
     );
 
     // Logging de métricas para medición de costos
@@ -149,9 +170,17 @@ REGLAS STRICTAS:
     // Fallback determinístico: cuando todos los modelos fallan (429, timeout, JSON inválido),
     // construimos un feedback estructurado a partir de los scores ya calculados.
     // Marcado con source: "deterministic" para que la UI pueda distinguirlo.
+    
+    // Registrar clase de error sin PII ni mensaje completo
+    const errorType = err instanceof Error ? err.constructor.name : typeof err;
+    const errorStatus = (err as { status?: number; statusCode?: number }).status 
+      ?? (err as { status?: number; statusCode?: number }).statusCode
+      ?? 'unknown';
+    const isTimeout = err instanceof Error && err.message === 'AI_TIMEOUT';
+    
     console.error(
-      '[generateGithubFeedback] ⚠️ Ambos modelos (Groq 120B + 20B) fallaron, activando fallback determinístico:',
-      err instanceof Error ? err.message : err,
+      '[generateGithubFeedback] ⚠️ IA no disponible, activando fallback determinístico:',
+      { errorType, errorStatus, isTimeout }
     );
     
     return generateDeterministicFeedback(input);

@@ -77,6 +77,68 @@ const GenerateQuestionsOutputSchema = z.object({
 export type GenerateQuestionsInput = z.infer<typeof GenerateQuestionsInputSchema>;
 export type GenerateQuestionsOutput = z.infer<typeof GenerateQuestionsOutputSchema>;
 
+/**
+ * Construye el prompt de producción para generación de preguntas.
+ * Exportada para benchmarking sin cambiar su comportamiento.
+ */
+export function buildProductionPrompt(input: {
+  count: number;
+  type: QuestionType;
+  stack: string[];
+  level: string;
+  sources?: string[];
+}): string {
+  const stackStr = input.stack.join(', ');
+  const sources = input.sources ?? [];
+  const spec = typeSpec(input.type, input.level);
+
+  const sourcesBlock = sources.length
+    ? `
+FUENTES DE REFERENCIA (documentación oficial y material de ingeniería reconocido):
+${sources.map((s) => `- ${s}`).join('\n')}
+
+Los escenarios deben reflejar el comportamiento y las buenas prácticas REALES que documentan estas
+fuentes (APIs, límites, modos de fallo conocidos), no situaciones inventadas o genéricas.
+Añade a cada pregunta un campo "source" con la URL de la lista que mejor respalde ese escenario.
+`
+    : '';
+
+  return `Eres un Arquitecto de Software Senior en NEXTAPE que evalúa a candidatos de élite.
+
+Responde ÚNICAMENTE con un objeto JSON válido. Sin markdown, sin texto adicional, solo JSON.
+
+Genera EXACTAMENTE ${input.count} desafíos técnicos de nivel ${input.level} centrados en: ${stackStr}.
+${sourcesBlock}
+Estructura EXACTA del JSON:
+{
+  "questions": [
+    {
+      "briefing": "contexto corto de un sistema en producción",
+      "text": "enunciado del problema técnico específico",
+      ${spec.shape},
+      "difficulty": "${input.level}",
+      "tag": "una de las habilidades del stack, en minúsculas"${
+        sources.length ? ',\n      "source": "una URL EXACTA de la lista de fuentes"' : ''
+      }
+    }
+  ]
+}
+
+REGLAS:
+${spec.rules}
+- "difficulty": uno de junior, mid o senior (el más cercano al nivel "${input.level}").
+- "tag": DEBE ser EXACTAMENTE una de estas habilidades (en minúsculas): ${stackStr}. No inventes otras.${
+      sources.length
+        ? '\n- "source": DEBE ser una de las URLs listadas arriba, copiada tal cual. No inventes URLs.'
+        : ''
+    }
+- NO preguntes sintaxis trivial. Plantea problemas reales: fugas de memoria, cuellos de botella,
+  condiciones de carrera, seguridad, deuda técnica.
+- Genera EXACTAMENTE ${input.count} preguntas en el array "questions".
+
+Responde solo con el JSON.`;
+}
+
 export async function generateQuestions(
   input: GenerateQuestionsInput
 ): Promise<GenerateQuestionsOutput> {
@@ -143,7 +205,7 @@ function normalizeTag(tag: string | undefined, stack: string[]): string {
 /* ──────────────────────────────── Prompts por tipo ──────────────────────────────── */
 
 /** Forma JSON y reglas específicas de cada tipo. */
-function typeSpec(type: QuestionType, level: string): { shape: string; rules: string } {
+export function typeSpec(type: QuestionType, _level: string): { shape: string; rules: string } {
   switch (type) {
     case 'multiple_choice':
       return {
@@ -206,63 +268,25 @@ const generateQuestionsFlow = ai.defineFlow(
   async (input) => {
     const count = input.count ?? 5;
     const type = input.type ?? 'multiple_choice';
-    const stack = input.stack.join(', ');
+    const stack = input.stack;
     const sources = input.sources ?? [];
-    const spec = typeSpec(type, input.level);
 
-    // Bloque de anclaje: dirige al modelo hacia el comportamiento realmente documentado de estas
-    // tecnologías en vez de escenarios genéricos, y le pide declarar la fuente asociada.
-    const sourcesBlock = sources.length
-      ? `
-FUENTES DE REFERENCIA (documentación oficial y material de ingeniería reconocido):
-${sources.map((s) => `- ${s}`).join('\n')}
-
-Los escenarios deben reflejar el comportamiento y las buenas prácticas REALES que documentan estas
-fuentes (APIs, límites, modos de fallo conocidos), no situaciones inventadas o genéricas.
-Añade a cada pregunta un campo "source" con la URL de la lista que mejor respalde ese escenario.
-`
-      : '';
-
-    const prompt = `Eres un Arquitecto de Software Senior en NEXTAPE que evalúa a candidatos de élite.
-
-Responde ÚNICAMENTE con un objeto JSON válido. Sin markdown, sin texto adicional, solo JSON.
-
-Genera EXACTAMENTE ${count} desafíos técnicos de nivel ${input.level} centrados en: ${stack}.
-${sourcesBlock}
-Estructura EXACTA del JSON:
-{
-  "questions": [
-    {
-      "briefing": "contexto corto de un sistema en producción",
-      "text": "enunciado del problema técnico específico",
-      ${spec.shape},
-      "difficulty": "${input.level}",
-      "tag": "una de las habilidades del stack, en minúsculas"${
-        sources.length ? ',\n      "source": "una URL EXACTA de la lista de fuentes"' : ''
-      }
-    }
-  ]
-}
-
-REGLAS:
-${spec.rules}
-- "difficulty": uno de junior, mid o senior (el más cercano al nivel "${input.level}").
-- "tag": DEBE ser EXACTAMENTE una de estas habilidades (en minúsculas): ${stack}. No inventes otras.${
-      sources.length
-        ? '\n- "source": DEBE ser una de las URLs listadas arriba, copiada tal cual. No inventes URLs.'
-        : ''
-    }
-- NO preguntes sintaxis trivial. Plantea problemas reales: fugas de memoria, cuellos de botella,
-  condiciones de carrera, seguridad, deuda técnica.
-- Genera EXACTAMENTE ${count} preguntas en el array "questions".
-
-Responde solo con el JSON.`;
+    const prompt = buildProductionPrompt({
+      count,
+      type,
+      stack,
+      level: input.level,
+      sources,
+    });
 
     const LenientOutput = z.object({ questions: z.array(LENIENT_BY_TYPE[type]) });
     console.log(`   ⏳ Generando tipo '${type}' (${count} preguntas)...`);
     const { data: parsed, model } = await generateJsonWithFallback(prompt, LenientOutput);
+    const modelName = model === 'primary' 
+      ? (process.env.GROQ_TIMELINE_MODEL_PRIMARY || 'llama-86m')
+      : (process.env.GROQ_TIMELINE_MODEL_FALLBACK || 'gpt-oss-120b');
     console.log(
-      `   ✅ Completado tipo '${type}': ${parsed.questions.length} preguntas (modelo: Groq ${model.toUpperCase()})`
+      `   ✅ Completado tipo '${type}': ${parsed.questions.length} preguntas (modelo: ${modelName} [${model}])`
     );
 
     // Solo se conserva `source` si es una URL que estaba en la lista: el modelo a veces inventa
