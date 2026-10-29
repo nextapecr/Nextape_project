@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { SkillsService } from "@/services/skills.service";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { getTechnicalGrade } from "@/lib/grading";
+import { SkillBars } from "@/components/dna/SkillBars";
 
 export default function CorePage() {
   const { user, authLoading } = useAuthUser();
@@ -76,24 +77,10 @@ export default function CorePage() {
            </div>
            
            <div className="space-y-10">
-              {skills.length > 0 ? skills.map(skill => (
-                <div key={skill.name} className="space-y-4">
-                  <div className="flex justify-between items-end">
-                    <p className="font-bold text-sm uppercase tracking-widest text-black">{skill.name}</p>
-                    <span className="font-black text-xl text-brand-blue italic">{skill.value}%</span>
-                  </div>
-                  <div className="h-3 rounded-full bg-gray-50 overflow-hidden border border-gray-100">
-                    <div 
-                      className="h-full bg-brand-blue rounded-full transition-all duration-1000 ease-out" 
-                      style={{ width: `${skill.value}%` }}
-                    />
-                  </div>
-                </div>
-              )) : (
-                <div className="py-12 text-center text-gray-400 italic">
-                  Tu DNA técnico está vacío. Completa una simulación en "The LINE" para generar datos.
-                </div>
-              )}
+              <SkillBars
+                skills={skills}
+                emptyText={"Tu DNA técnico está vacío. Completa una simulación en \"The LINE\" para generar datos."}
+              />
            </div>
         </div>
 

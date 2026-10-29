@@ -13,9 +13,8 @@ import type { RoadmapRoute, Skill } from "@/types/roadmap.types";
 
 /** Ids del catálogo del roadmap, leídos del seeder (es la fuente de verdad de `skill_catalog`). */
 function catalogSkillIds(): Set<string> {
-  const src = readFileSync(join(process.cwd(), "scripts/seed-skill-catalog-full.ts"), "utf8");
-  const block = src.slice(src.indexOf("const SKILL_CATALOG"), src.indexOf("const ALL_ROUTES"));
-  return new Set([...block.matchAll(/\bid:\s*"([^"]+)"/g)].map((m) => m[1]));
+  const catalog = JSON.parse(readFileSync(join(process.cwd(), "scripts/data/skill-catalog.json"), "utf8"));
+  return new Set((catalog.skills as { id: string }[]).map((skill) => skill.id));
 }
 
 describe("SKILL_TECHNOLOGY_MAP", () => {

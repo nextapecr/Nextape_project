@@ -1,0 +1,838 @@
+[
+  {
+    "id": "q-react-arch-01",
+    "skill": "react",
+    "level": "senior",
+    "category": "architecture",
+    "tag": "react",
+    "briefing": "Una aplicación React de gran escala experimenta degradación de rendimiento por re-renders masivos en el árbol de componentes.",
+    "text": "¿Cuál es la estrategia arquitectónica óptima para desacoplar el estado global y evitar re-renders innecesarios?",
+    "options": [
+      "Subdividir el estado en contextos atómicos o selectores finos (e.g., Zustand/Jotai) en lugar de un único contexto monolítico",
+      "Envolver todos los componentes del sistema con React.memo y omitir las dependencias de useCallback",
+      "Reemplazar el estado de React con variables globales mutables fuera del ciclo de vida de React",
+      "Consumir todo el estado mediante un custom hook en el root layout sin memorización"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.8,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-nextjs-perf-01",
+    "skill": "nextjs",
+    "level": "senior",
+    "category": "performance",
+    "tag": "nextjs",
+    "briefing": "Un sitio en Next.js (App Router) presenta un tiempo TTFB (Time to First Byte) elevado en rutas dinámicas.",
+    "text": "¿Qué técnica de ingeniería soluciona este cuello de botella permitiendo renderizar la cáscara del UI de inmediato?",
+    "options": [
+      "Implementar Streaming con React Suspense y PPR (Partial Prerendering) para diferir bloques lentos de datos",
+      "Convertir todos los Server Components a Client Components con useEffect",
+      "Aumentar la memoria del servidor de Node.js sin modificar la estrategia de renderizado",
+      "Mover las consultas a la base de datos dentro del middleware de Next.js"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.85,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-ts-type-01",
+    "skill": "typescript",
+    "level": "senior",
+    "category": "refactoring",
+    "tag": "typescript",
+    "briefing": "Un módulo compartido utiliza tipos 'any' excesivos en handlers dinámicos, perdiendo la seguridad de tipos.",
+    "text": "¿Cuál es el enfoque correcto para modelar payloads dinámicos garantizando type-safety en tiempo de compilación?",
+    "options": [
+      "Utilizar Tipos Genéricos Restringidos (Generic Constraints) combinados con Type Guards y 'unknown'",
+      "Castear explícitamente todas las variables con 'as unknown as targetType' en cada invocación",
+      "Desactivar 'strict: true' en tsconfig.json para permitir inferencias implícitas",
+      "Reemplazar las interfaces con declaraciones globales en un archivo ambient d.ts"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.75,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-tailwind-css-01",
+    "skill": "tailwind",
+    "level": "senior",
+    "category": "architecture",
+    "tag": "tailwind",
+    "briefing": "Un sistema de diseño en Tailwind CSS sufre de colisiones de clases dinámicas al componer variantes de componentes.",
+    "text": "¿Cómo se resuelve de forma limpia la especificidad y la fusión de clases dinámicas en TypeScript?",
+    "options": [
+      "Combinar `clsx` (o `clsx/lite`) con `tailwind-merge` para resolver conflictos de utilidades en runtime",
+      "Escribir reglas CSS personalizadas con `!important` para cada variante dinámica",
+      "Concatenar strings de clases utilizando plantillas de texto sin deduplicación",
+      "Inyectar estilos inline directamente en el atributo `style` de React"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.7,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-react-debug-01",
+    "skill": "react",
+    "level": "mid",
+    "category": "debugging",
+    "tag": "react",
+    "briefing": "Un hook personalizado que efectúa peticiones HTTP genera fugas de memoria y llamadas duplicadas al desmontarse el componente.",
+    "text": "¿Qué mecanismo debe incluirse en la función de limpieza del efecto para cancelar la petición pendiente?",
+    "options": [
+      "Instanciar un `AbortController` y ejecutar `controller.abort()` en el retorno del efecto",
+      "Establecer la respuesta HTTP a null antes de desmontar el componente",
+      "Llamar a `window.stop()` dentro del bloque catch de la promesa",
+      "Remover el array de dependencias para que el efecto se ejecute en cada render"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.65,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-node-perf-01",
+    "skill": "node.js",
+    "level": "senior",
+    "category": "performance",
+    "tag": "node.js",
+    "briefing": "Una API REST en Node.js colapsa bajo alta concurrencia debido a operaciones síncronas pesadas que bloquean el Event Loop.",
+    "text": "¿Cuál es la arquitectura recomendada para delegar tareas intensivas en CPU sin congelar el loop principal?",
+    "options": [
+      "Migrar el procesamiento pesado a Worker Threads o una cola de tareas asíncrona (e.g., BullMQ / Redis)",
+      "Incrementar el número de listeners del Event Emitter global en el servidor HTTP",
+      "Envolver el código síncrono en un bloque Promise.resolve()",
+      "Aumentar el valor de ulimit en el sistema operativo del servidor"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.85,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-pg-sec-01",
+    "skill": "postgresql",
+    "level": "senior",
+    "category": "security",
+    "tag": "postgresql",
+    "briefing": "Una consulta SQL crítica presenta problemas de rendimiento e inyección por concatenación dinámica de tablas masivas.",
+    "text": "¿Qué técnica de PostgreSQL garantiza aislamiento de datos, prevención de SQLi y consultas optimizadas?",
+    "options": [
+      "Consultas preparadas con parámetros tipados (`$1, $2`) e índices B-Tree / BRIN adecuados",
+      "Ejecutar `EXECUTE` con cadenas concatenadas previa limpieza con expresiones regulares",
+      "Desactivar las restricciones de clave foránea durante las transacciones",
+      "Otorgar permisos de SUPERUSER al usuario de la aplicación en la base de datos"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.8,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-docker-arch-01",
+    "skill": "docker",
+    "level": "senior",
+    "category": "architecture",
+    "tag": "docker",
+    "briefing": "Una imagen de Docker para una aplicación Node.js pesa más de 1.5 GB y contiene herramientas de compilación no requeridas en producción.",
+    "text": "¿Cómo se optimiza la seguridad y el tamaño de la imagen de producción?",
+    "options": [
+      "Implementar un Multi-Stage Build usando imágenes base Alpine/Distroless y copiando solo artifacts compilados",
+      "Comprimir el directorio node_modules en un archivo zip dentro del contenedor",
+      "Ejecutar `npm install --force` en la capa final de la imagen",
+      "Eliminar el archivo Dockerignore para incluir las variables de entorno locales"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.75,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-redis-arch-01",
+    "skill": "redis",
+    "level": "senior",
+    "category": "performance",
+    "tag": "redis",
+    "briefing": "Un sistema de caché con Redis sufre de 'Cache Stampede' (avalancha de peticiones a la DB) al expirar la clave de mayor tráfico.",
+    "text": "¿Qué patrón de diseño previene que la base de datos colapse al expirar la caché?",
+    "options": [
+      "Implementar Mutex Locking (distribuido) o actualización anticipada asíncrona (Probabilistic Early Expiration)",
+      "Aumentar el TTL de todas las claves a tiempo indeterminado",
+      "Reiniciar el cluster de Redis automáticamente mediante un script de cron",
+      "Desactivar la evicción de claves en redis.conf"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.85,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-k8s-arch-01",
+    "skill": "kubernetes",
+    "level": "senior",
+    "category": "architecture",
+    "tag": "kubernetes",
+    "briefing": "Un deployment en Kubernetes experimenta desbalanceso de carga y reinicios abruptos (`OOMKilled`) bajo picos de demanda.",
+    "text": "¿Cómo se debe configurar la especificación del Pod para garantizar estabilidad en el cluster?",
+    "options": [
+      "Establecer `resources.requests` y `limits` adecuados de CPU/Memory junto con Liveness y Readiness Probes",
+      "Eliminar los límites de memoria para permitir consumo ilimitado del nodo",
+      "Aumentar únicamente la réplica estática sin configurar HPA (Horizontal Pod Autoscaler)",
+      "Ejecutar los contenedores con privilegio `privileged: true`"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.8,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-cicd-sec-01",
+    "skill": "ci-cd",
+    "level": "senior",
+    "category": "security",
+    "tag": "ci-cd",
+    "briefing": "Un pipeline de GitHub Actions necesita desplegar infraestructura en la nube sin exponer credenciales estáticas de larga duración.",
+    "text": "¿Cuál es la práctica de seguridad recomendada para autenticar el pipeline contra el proveedor cloud?",
+    "options": [
+      "Utilizar OIDC (OpenID Connect) federado con roles de IAM efímeros y sin secretos guardados",
+      "Guardar las claves `AWS_ACCESS_KEY_ID` en texto plano dentro del código del workflow",
+      "Permitir el acceso anónimo al API endpoint de despliegue",
+      "Commitear el archivo de credenciales cifrado en el repositorio git"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.85,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-tf-arch-01",
+    "skill": "terraform",
+    "level": "senior",
+    "category": "architecture",
+    "tag": "terraform",
+    "briefing": "Múltiples ingenieros modifican la infraestructura con Terraform simultáneamente, generando colisiones en el estado (`tfstate`).",
+    "text": "¿Cuál es el patrón correcto para gestionar el estado de Terraform en equipos distribuidos?",
+    "options": [
+      "Utilizar un Backend Remoto (e.g. AWS S3 + DynamoDB o Terraform Cloud) con bloqueo de estado (State Locking)",
+      "Guardar el archivo `terraform.tfstate` en la raíz del repositorio de Git",
+      "Desactivar la verificación de cambios antes de ejecutar `terraform apply`",
+      "Ejecutar `terraform refresh` manualmente después de cada cambio en consola"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.8,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-aws-sec-01",
+    "skill": "aws",
+    "level": "senior",
+    "category": "security",
+    "tag": "aws",
+    "briefing": "Una aplicación alojada en EC2 necesita acceder de forma segura a un bucket de S3 sin hardcodear credenciales.",
+    "text": "¿Qué servicio o característica de AWS debe aplicarse a la instancia?",
+    "options": [
+      "Asignar un Rol de IAM de EC2 (Instance Profile) con políticas de mínimo privilegio",
+      "Generar un Access Key de usuario Root y colocarlo en las variables de entorno",
+      "Hacer el bucket de S3 totalmente público para lectura y escritura",
+      "Pasar las credenciales por parámetro en el comando de arranque del servidor"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.75,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-node-stream-01",
+    "skill": "node.js",
+    "level": "mid",
+    "category": "performance",
+    "tag": "node.js",
+    "briefing": "Un servicio Node.js debe procesar ficheros CSV de varios GB y el contenedor muere por falta de memoria.",
+    "text": "¿Cómo se procesa el fichero sin que el consumo de memoria crezca con su tamaño?",
+    "options": [
+      "Leerlo como un Stream y procesarlo por chunks encadenando transformaciones con `pipeline()`",
+      "Usar `fs.readFileSync` y trocear el string resultante en memoria",
+      "Aumentar `--max-old-space-size` hasta que el fichero quepa en el heap",
+      "Cargar el fichero en un array y recorrerlo con `forEach` liberando cada elemento"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.6,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-node-shutdown-01",
+    "skill": "node.js",
+    "level": "senior",
+    "category": "architecture",
+    "tag": "node.js",
+    "briefing": "Durante cada despliegue, los usuarios ven errores 502 porque los pods se reinician cortando peticiones en curso.",
+    "text": "¿Qué debe hacer el proceso al recibir SIGTERM para desplegar sin cortar peticiones?",
+    "options": [
+      "Dejar de aceptar conexiones nuevas, terminar las peticiones en vuelo y cerrar recursos antes de salir (graceful shutdown)",
+      "Llamar a `process.exit(0)` de inmediato para liberar el puerto cuanto antes",
+      "Ignorar SIGTERM y esperar a que el orquestador envíe SIGKILL",
+      "Reiniciar el servidor HTTP en el mismo proceso manteniendo el puerto abierto"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.8,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-express-err-01",
+    "skill": "express",
+    "level": "mid",
+    "category": "debugging",
+    "tag": "express",
+    "briefing": "En una API Express, los errores lanzados dentro de handlers `async` no llegan al middleware de errores y la petición queda colgada.",
+    "text": "¿Cuál es la causa y la solución correcta?",
+    "options": [
+      "Express no captura promesas rechazadas: hay que envolver el handler y pasar el error a `next(err)`",
+      "El middleware de errores debe declararse antes que las rutas para interceptarlas",
+      "Hay que sustituir `async/await` por callbacks en todos los handlers",
+      "Basta con añadir un `try/catch` global con `process.on('uncaughtException')`"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.55,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-nestjs-di-01",
+    "skill": "nestjs",
+    "level": "senior",
+    "category": "performance",
+    "tag": "nestjs",
+    "briefing": "Un servicio NestJS marcado con `scope: Scope.REQUEST` degrada el rendimiento de toda la cadena de dependencias.",
+    "text": "¿Por qué ocurre y cuál es el enfoque correcto?",
+    "options": [
+      "El scope de petición se propaga a quien lo inyecta, instanciando el árbol en cada request: conviene mantener los providers singleton y pasar el contexto como argumento",
+      "Es un bug del contenedor de NestJS que se corrige activando `useFactory`",
+      "Hay que marcar todos los providers como REQUEST para homogeneizar el ciclo de vida",
+      "El problema desaparece registrando el módulo como `@Global()`"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.85,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-django-orm-01",
+    "skill": "django",
+    "level": "mid",
+    "category": "performance",
+    "tag": "django",
+    "briefing": "Un listado en Django hace una consulta por cada fila al acceder a una relación dentro del bucle de plantilla.",
+    "text": "¿Cómo se elimina ese problema de N+1 consultas?",
+    "options": [
+      "Precargar las relaciones con `select_related` (FK) o `prefetch_related` (M2M) en el queryset",
+      "Añadir un índice a la clave primaria de la tabla relacionada",
+      "Convertir el queryset a lista con `list()` antes de renderizar la plantilla",
+      "Activar el modo `DEBUG=False` para que Django agrupe las consultas"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.6,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-fastapi-block-01",
+    "skill": "fastapi",
+    "level": "senior",
+    "category": "performance",
+    "tag": "fastapi",
+    "briefing": "Un endpoint `async def` de FastAPI llama a un cliente de base de datos síncrono y bajo carga la latencia se dispara en TODOS los endpoints.",
+    "text": "¿Cuál es la causa raíz y la corrección adecuada?",
+    "options": [
+      "La llamada bloqueante congela el event loop: hay que usar un cliente asíncrono o declarar el endpoint como `def` para que FastAPI lo ejecute en el threadpool",
+      "Faltan workers de Uvicorn: basta con subir `--workers` hasta que la latencia baje",
+      "Hay que envolver la llamada en `asyncio.create_task` para que no bloquee",
+      "El problema se resuelve aumentando el timeout del cliente de base de datos"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.85,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-spring-tx-01",
+    "skill": "spring",
+    "level": "senior",
+    "category": "debugging",
+    "tag": "spring",
+    "briefing": "Un método anotado con `@Transactional` no abre transacción cuando se le llama desde otro método de la misma clase.",
+    "text": "¿Por qué sucede?",
+    "options": [
+      "La anotación se aplica mediante un proxy: una llamada interna no pasa por él, así que hay que invocarlo desde otro bean o auto-inyectarse",
+      "`@Transactional` solo funciona en métodos que devuelven void",
+      "Falta anotar la clase con `@Repository` para que Spring gestione la transacción",
+      "El nivel de aislamiento por defecto desactiva las transacciones anidadas"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.85,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-go-goroutine-01",
+    "skill": "go",
+    "level": "mid",
+    "category": "debugging",
+    "tag": "go",
+    "briefing": "Un servicio en Go acumula goroutines bloqueadas hasta agotar la memoria: cada petición lanza una goroutine que escribe en un canal sin receptor.",
+    "text": "¿Cuál es la forma idiomática de evitar esa fuga?",
+    "options": [
+      "Propagar un `context` con cancelación y usar `select` con `ctx.Done()` para abandonar la escritura",
+      "Aumentar `GOMAXPROCS` para que el planificador libere las goroutines bloqueadas",
+      "Llamar a `runtime.GC()` periódicamente desde un ticker",
+      "Sustituir el canal por una variable global protegida con `sync.Mutex`"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.7,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-pg-index-01",
+    "skill": "postgresql",
+    "level": "senior",
+    "category": "performance",
+    "tag": "postgresql",
+    "briefing": "Una consulta filtra por `WHERE lower(email) = $1`, existe un índice sobre `email` y `EXPLAIN` sigue mostrando un Seq Scan.",
+    "text": "¿Por qué no se usa el índice?",
+    "options": [
+      "Aplicar una función sobre la columna invalida el índice normal: hace falta un índice de expresión sobre `lower(email)`",
+      "Los índices B-Tree no sirven para columnas de tipo texto",
+      "El planificador ignora los índices cuando la tabla tiene menos de un millón de filas",
+      "Falta ejecutar `REINDEX` después de cada inserción para mantenerlo válido"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.85,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-pg-pool-01",
+    "skill": "postgresql",
+    "level": "senior",
+    "category": "architecture",
+    "tag": "postgresql",
+    "briefing": "Bajo carga, la aplicación agota el pool de conexiones y las peticiones esperan indefinidamente, aunque la CPU de la base está ociosa.",
+    "text": "¿Cuál es la causa más probable y su corrección?",
+    "options": [
+      "Transacciones abiertas durante llamadas externas lentas: acortar el alcance de la transacción y fijar timeouts de adquisición y de sentencia",
+      "El pool es demasiado pequeño: subirlo a varios miles de conexiones resuelve el problema",
+      "Falta ejecutar `VACUUM FULL` para liberar las conexiones muertas",
+      "El pool no debe usarse: conviene abrir una conexión nueva por consulta"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.85,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-pg-tx-01",
+    "skill": "postgresql",
+    "level": "mid",
+    "category": "architecture",
+    "tag": "postgresql",
+    "briefing": "Dos procesos concurrentes leen el stock de un producto, comprueban que hay unidades y lo decrementan. El stock acaba en negativo.",
+    "text": "¿Qué mecanismo evita esa condición de carrera?",
+    "options": [
+      "Bloquear la fila con `SELECT ... FOR UPDATE` dentro de la transacción, o hacer el decremento condicional en una sola sentencia",
+      "Subir el nivel de aislamiento a READ UNCOMMITTED",
+      "Añadir un índice único sobre la columna de stock",
+      "Reintentar la operación en el cliente hasta que el stock sea positivo"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.7,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-mongo-index-01",
+    "skill": "mongodb",
+    "level": "mid",
+    "category": "performance",
+    "tag": "mongodb",
+    "briefing": "Una consulta de MongoDB filtra por `status`, ordena por `createdAt` y devuelve un rango de fechas. El plan muestra COLLSCAN.",
+    "text": "¿Cómo debe diseñarse el índice compuesto?",
+    "options": [
+      "Igualdad primero, luego ordenación y por último el rango (regla ESR): `{ status: 1, createdAt: -1 }`",
+      "Un índice por cada campo por separado; Mongo los combinará automáticamente",
+      "Un índice de texto sobre toda la colección",
+      "Poner siempre el campo de rango en primera posición del índice"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.7,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-redis-persist-01",
+    "skill": "redis",
+    "level": "mid",
+    "category": "architecture",
+    "tag": "redis",
+    "briefing": "Un script de mantenimiento ejecuta `KEYS user:*` sobre una instancia Redis de producción con millones de claves y el servicio se congela.",
+    "text": "¿Cuál es la alternativa correcta?",
+    "options": [
+      "Recorrer el keyspace con `SCAN` y su cursor, que itera en bloques sin bloquear el servidor",
+      "Ejecutar `KEYS` en una réplica de lectura, que no afecta al rendimiento",
+      "Aumentar el `timeout` del cliente para que soporte la espera",
+      "Usar `FLUSHDB` y repoblar solo las claves necesarias"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.65,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-mysql-charset-01",
+    "skill": "mysql",
+    "level": "junior",
+    "category": "debugging",
+    "tag": "mysql",
+    "briefing": "Al guardar comentarios con emojis en MySQL, la aplicación falla con 'Incorrect string value'.",
+    "text": "¿Cuál es la causa?",
+    "options": [
+      "La columna usa `utf8` (3 bytes), que no cubre emojis: hay que migrarla a `utf8mb4`",
+      "MySQL no admite emojis en ninguna versión y hay que codificarlos en base64",
+      "Falta escapar los emojis antes de la inserción para evitar inyección",
+      "El tamaño del `VARCHAR` es insuficiente y hay que ampliarlo al doble"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.4,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-es-pagination-01",
+    "skill": "elasticsearch",
+    "level": "senior",
+    "category": "performance",
+    "tag": "elasticsearch",
+    "briefing": "Una búsqueda paginada en Elasticsearch falla al pasar de la página 1000 con un error de límite de resultados.",
+    "text": "¿Cuál es el enfoque correcto para paginación profunda?",
+    "options": [
+      "Usar `search_after` con un criterio de orden único, en lugar de `from` + `size`",
+      "Subir `index.max_result_window` a un valor muy alto y mantener `from` + `size`",
+      "Traer todos los resultados y paginar en memoria en la aplicación",
+      "Reindexar los documentos ordenados para que las páginas altas sean accesibles"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.85,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-rest-idem-01",
+    "skill": "rest",
+    "level": "mid",
+    "category": "architecture",
+    "tag": "rest",
+    "briefing": "Una pasarela de pagos reintenta las peticiones cuando expira el timeout, y algunos clientes acaban cobrados dos veces.",
+    "text": "¿Qué mecanismo garantiza que el reintento no duplique el cobro?",
+    "options": [
+      "Exigir una clave de idempotencia por operación y devolver el resultado original si la clave ya se procesó",
+      "Cambiar el endpoint de POST a GET para que sea idempotente por definición",
+      "Aumentar el timeout hasta que los reintentos dejen de producirse",
+      "Deduplicar en base de datos comparando importe y fecha de la petición"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.75,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-graphql-nplus1-01",
+    "skill": "graphql",
+    "level": "senior",
+    "category": "performance",
+    "tag": "graphql",
+    "briefing": "Una consulta GraphQL que pide 100 posts con su autor genera 101 consultas a la base de datos.",
+    "text": "¿Cuál es la solución estándar?",
+    "options": [
+      "Agrupar las cargas por resolver con un DataLoader, que batchea las claves del mismo tick y cachea por petición",
+      "Prohibir las consultas anidadas mediante límite de profundidad",
+      "Cachear la respuesta completa en Redis con un TTL corto",
+      "Devolver siempre el autor completo embebido en el post, sin resolver"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.8,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-micro-saga-01",
+    "skill": "microservices",
+    "level": "senior",
+    "category": "architecture",
+    "tag": "microservices",
+    "briefing": "Una compra debe reservar stock, cobrar y crear el envío, cada uno en un microservicio con su propia base de datos.",
+    "text": "¿Cómo se mantiene la consistencia sin una transacción distribuida?",
+    "options": [
+      "Aplicar el patrón Saga: pasos locales encadenados por eventos, con transacciones compensatorias si uno falla",
+      "Abrir una transacción XA de dos fases que abarque las tres bases de datos",
+      "Unificar las tres bases de datos en una sola para poder usar `BEGIN`/`COMMIT`",
+      "Ejecutar los tres pasos en paralelo y reconciliar las diferencias con un cron nocturno"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.85,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-micro-retry-01",
+    "skill": "microservices",
+    "level": "senior",
+    "category": "architecture",
+    "tag": "microservices",
+    "briefing": "Un servicio se degrada y sus clientes reintentan de inmediato, multiplicando la carga y provocando una caída en cascada.",
+    "text": "¿Qué combinación de patrones evita la avalancha de reintentos?",
+    "options": [
+      "Backoff exponencial con jitter, un límite de reintentos y un circuit breaker que corte cuando el servicio esté caído",
+      "Reintentos inmediatos e ilimitados hasta que el servicio responda",
+      "Aumentar el número de réplicas del cliente para repartir los reintentos",
+      "Encolar todos los reintentos en memoria del cliente sin límite"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.85,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-sec-pwd-01",
+    "skill": "security",
+    "level": "mid",
+    "category": "security",
+    "tag": "security",
+    "briefing": "Una auditoría detecta que las contraseñas se guardan como `sha256(password + salt)`.",
+    "text": "¿Por qué es insuficiente y qué debe usarse?",
+    "options": [
+      "SHA-256 es rápida y permite miles de millones de intentos por segundo: hay que usar un hash lento y parametrizable como Argon2id o bcrypt",
+      "El problema es el salt: basta con generarlo más largo y aleatorio",
+      "Hay que cifrar las contraseñas con AES en lugar de hashearlas",
+      "Basta con aplicar SHA-256 varias veces seguidas en el propio código"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.7,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-sec-idor-01",
+    "skill": "security",
+    "level": "mid",
+    "category": "security",
+    "tag": "security",
+    "briefing": "El endpoint `GET /api/invoices/{id}` verifica que el usuario esté autenticado y devuelve la factura solicitada.",
+    "text": "¿Qué vulnerabilidad tiene y cómo se corrige?",
+    "options": [
+      "IDOR: autenticar no es autorizar. Hay que comprobar en cada petición que la factura pertenece al usuario",
+      "CSRF: hay que añadir un token anti-CSRF a la petición GET",
+      "Ninguna: al exigir autenticación el recurso ya está protegido",
+      "Se corrige usando identificadores UUID en lugar de numéricos"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.7,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-sec-jwt-01",
+    "skill": "security",
+    "level": "senior",
+    "category": "security",
+    "tag": "security",
+    "briefing": "Una SPA guarda el JWT de sesión en `localStorage` para enviarlo en cada petición.",
+    "text": "¿Cuál es el riesgo principal y la mitigación adecuada?",
+    "options": [
+      "Cualquier XSS puede leer el token y robar la sesión: conviene una cookie `HttpOnly`, `Secure` y `SameSite`, con tokens de vida corta",
+      "El riesgo es CSRF, y se mitiga moviendo el token a `sessionStorage`",
+      "El riesgo es que el token ocupe demasiado espacio; se mitiga comprimiéndolo",
+      "No hay riesgo mientras el JWT vaya firmado con un algoritmo fuerte"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.8,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-testing-flaky-01",
+    "skill": "testing",
+    "level": "mid",
+    "category": "debugging",
+    "tag": "testing",
+    "briefing": "Una suite de tests pasa en local y falla de forma intermitente en CI, con resultados distintos según el orden de ejecución.",
+    "text": "¿Cuál es la causa más probable?",
+    "options": [
+      "Estado compartido entre tests (base de datos, singletons, fechas): cada test debe crear y limpiar el suyo",
+      "CI tiene menos CPU y hay que ampliar los timeouts de todos los tests",
+      "Los tests deben ejecutarse siempre en orden alfabético para ser deterministas",
+      "Falta reintentar automáticamente los tests fallidos hasta que pasen"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.65,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-docker-cache-01",
+    "skill": "docker",
+    "level": "junior",
+    "category": "performance",
+    "tag": "docker",
+    "briefing": "Cada build de la imagen reinstala todas las dependencias aunque solo haya cambiado una línea de código de la aplicación.",
+    "text": "¿Cómo se aprovecha la caché de capas de Docker?",
+    "options": [
+      "Copiar primero el manifiesto de dependencias, instalarlas, y copiar el código fuente después",
+      "Copiar todo el proyecto en una única instrucción `COPY . .` al principio del Dockerfile",
+      "Añadir `--no-cache` al build para que las capas se regeneren correctamente",
+      "Instalar las dependencias en la última capa, justo antes del `CMD`"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.4,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  },
+  {
+    "id": "q-git-history-01",
+    "skill": "git",
+    "level": "junior",
+    "category": "debugging",
+    "tag": "git",
+    "briefing": "Se detecta un bug que no existía hace dos semanas, en un historial con cientos de commits.",
+    "text": "¿Cuál es la forma más eficiente de localizar el commit que lo introdujo?",
+    "options": [
+      "`git bisect`, que hace una búsqueda binaria entre un commit bueno y uno malo conocidos",
+      "Revisar `git log` commit por commit desde el más reciente hacia atrás",
+      "Hacer `git revert` de todos los commits del periodo y reaplicarlos uno a uno",
+      "Comparar el diff completo de las dos semanas con `git diff` y leerlo entero"
+    ],
+    "correctIndex": 0,
+    "difficultyScore": 0.45,
+    "version": "1.0.0",
+    "createdAt": {
+      "seconds": 1735689600,
+      "nanoseconds": 0
+    }
+  }
+]

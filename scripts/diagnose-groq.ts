@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Script de diagnóstico para validar conectividad con Groq (70B y 8B).
+ * Script de diagnóstico para validar conectividad con Groq (GPT-OSS 120B y 20B).
  */
 
 import { config } from 'dotenv';
@@ -11,72 +11,34 @@ console.log('🧪 DIAGNÓSTICO: GROQ 120B → 20B FALLBACK (GPT-OSS)');
 console.log('═'.repeat(80));
 console.log();
 
-// Test Groq 120B
-console.log('📡 Test 1: Groq GPT-OSS 120B');
-console.log('─'.repeat(80));
-
-async function testGroq120b() {
+/** Pide un "OK" a un modelo de Groq y dice si respondió. */
+async function testModel(step: number, label: string, model: string): Promise<boolean> {
   const { ai } = await import('../src/ai/genkit');
-  
-  const model = 'groq/openai/gpt-oss-120b';
+  console.log(`📡 Test ${step}: Groq GPT-OSS ${label}`);
+  console.log('─'.repeat(80));
   console.log(`Modelo: ${model}`);
   console.log(`API Key presente: ${!!process.env.GROQ_API_KEY}`);
   console.log();
-  
+
   try {
-    console.log('⏳ Enviando request a Groq 120B...');
-    const response = await ai.generate({
-      model,
-      prompt: 'Responde únicamente con la palabra: OK',
-    });
-    
-    console.log(`✅ Groq 120B respondió: "${response.text}"`);
+    console.log(`⏳ Enviando request a Groq ${label}...`);
+    const response = await ai.generate({ model, prompt: 'Responde únicamente con la palabra: OK' });
+    console.log(`✅ Groq ${label} respondió: "${response.text}"`);
     console.log();
     return true;
-  } catch (err: any) {
-    console.error('❌ Groq 120B falló:');
-    console.error(`   Status: ${err.status || 'N/A'}`);
-    console.error(`   Mensaje: ${err.message || err}`);
-    console.error();
-    return false;
-  }
-}
-
-// Test Groq 20B
-console.log();
-console.log('📡 Test 2: Groq GPT-OSS 20B');
-console.log('─'.repeat(80));
-
-async function testGroq20b() {
-  const { ai } = await import('../src/ai/genkit');
-  
-  const model = 'groq/openai/gpt-oss-20b';
-  console.log(`Modelo: ${model}`);
-  console.log(`API Key presente: ${!!process.env.GROQ_API_KEY}`);
-  console.log();
-  
-  try {
-    console.log('⏳ Enviando request a Groq 20B...');
-    const response = await ai.generate({
-      model,
-      prompt: 'Responde únicamente con la palabra: OK',
-    });
-    
-    console.log(`✅ Groq 20B respondió: "${response.text}"`);
-    console.log();
-    return true;
-  } catch (err: any) {
-    console.error('❌ Groq 20B falló:');
-    console.error(`   Status: ${err.status || 'N/A'}`);
-    console.error(`   Mensaje: ${err.message || err}`);
+  } catch (err) {
+    const e = err as { status?: number; message?: string };
+    console.error(`❌ Groq ${label} falló:`);
+    console.error(`   Status: ${e.status ?? 'N/A'}`);
+    console.error(`   Mensaje: ${e.message ?? String(err)}`);
     console.error();
     return false;
   }
 }
 
 async function main() {
-  const groq120bOk = await testGroq120b();
-  const groq20bOk = await testGroq20b();
+  const groq120bOk = await testModel(1, '120B', 'groq/openai/gpt-oss-120b');
+  const groq20bOk = await testModel(2, '20B', 'groq/openai/gpt-oss-20b');
   
   console.log('═'.repeat(80));
   console.log('📊 RESULTADOS');

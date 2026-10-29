@@ -356,9 +356,11 @@ bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.j
 - 4 skills del catálogo (`backup-recovery`, `javascript-es6`, `networking-basics`,
   `responsive-mobile-design`) **no aparecen en ninguna ruta**: solo son alcanzables como prerequisitos.
 - `user_roadmaps` es la **única colección escribible por el cliente sin ningún consumidor**.
-- `src/lib/server/question-bank.ts` (40 KB, 38 preguntas curadas) está **huérfano**: solo lo importan tests.
+- `src/lib/server/question-bank.ts` (38 preguntas curadas, datos en `question-bank.data.json`) está **huérfano**: solo
+  lo importan tests.
 - `generate-roadmap-flow.ts` es código muerto registrado en el Dev UI. `ROLE_WEIGHTS` no se usa.
-- Las 18 skills del catálogo MVP están **duplicadas verbatim** entre los dos seeders, sin nota de cuál usar.
+- ✅ (2026-10-29) El catálogo del roadmap vive en `scripts/data/skill-catalog.json`; `seed:catalog` (MVP, 18 skills)
+  y `seed:catalog:full` (112) comparten datos y lógica (`scripts/lib/skill-catalog-seed.ts`). Usar `:full`.
 - `src/types/index.ts` **no reexporta** `roadmap.types`, así que `@/types` no alcanza `Skill`/`RoadmapRoute`.
 - El motor de roadmap **no tiene tests unitarios**; solo un script manual contra Firestore de producción.
 - Basura en la raíz: `check-firestore-state.ts`, `migration.sh` (**hace `rm -rf .git`**), `graphify-out/`,

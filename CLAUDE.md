@@ -169,8 +169,8 @@ Ya construido: capa de confianza en servidor (DNA/scoring), banco de preguntas p
 91 tecnologías), **motor de GitHub** (AST con tree-sitter, 21 lenguajes), **roadmap determinista v2**
 (112 skills / 10 rutas), cierre del loop reclutador (`candidate_matches`), rate limiting y CI.
 
-**Estado verificado (2026-10-28, rama `test-vernon`, Linux + Node 22 como CI):** `typecheck` limpio ·
-`lint` 0 errores / 19 warnings · `test` 248 pasan, 26 *skipped* (los de reglas necesitan el emulador y **CI no
+**Estado verificado (2026-10-29, rama `test-vernon`, Linux + Node 22 como CI):** `typecheck` limpio ·
+`lint` 0 errores / 19 warnings · `test` 257 pasan, 26 *skipped* (los de reglas necesitan el emulador y **CI no
 lo arranca**) · `build` OK con Next.js 15.5.27. En Windows, `typecheck` puede fallar si los bindings nativos de
 `tree-sitter` no se instalaron; en CI pasa. Auditoría SonarJS (2026-10-28): ver `docs/SONARQUBE_SETUP.md` §Última auditoría.
 

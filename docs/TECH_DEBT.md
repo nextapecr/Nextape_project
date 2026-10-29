@@ -82,9 +82,10 @@ Ver detalle en [`CHANGELOG_FIXES.md`](./CHANGELOG_FIXES.md).
 ## 🟡 Complejidad cognitiva en scripts (SonarJS S3776)
 
 Quedan por encima del límite (15) los `main()` de scripts de CLI que se ejecutan a mano y **escriben en
-Firestore de producción**: `seed-question-bank` (44), `seed-skill-catalog-full` (44), `seed-skill-catalog` (36),
-`verify-roadmap-engine` (65), `inventory-question-pools` (21) y `test-github-feedback-tokens` (16). No se
-refactorizaron a ciegas (no se pueden probar sin credenciales). Hacerlo cuando se toquen, probándolos con `--dry-run`.
+Firestore de producción**: `seed-question-bank` (44), `verify-roadmap-engine` (65), `inventory-question-pools` (21)
+y `test-github-feedback-tokens` (16). No se refactorizaron a ciegas (no se pueden probar sin credenciales).
+Hacerlo cuando se toquen, probándolos con `--dry-run`. (✅ 2026-10-29: los dos seeders del catálogo ya no — ver
+`scripts/lib/skill-catalog-seed.ts`.)
 
 ## Notas de proceso
 

@@ -81,6 +81,26 @@ const createMockJobDoc = (jobId: string, createdBy: string): MockDocumentSnapsho
   } as unknown as CandidateMatch),
 });
 
+
+/** Mockea la próxima consulta (`getDocs`) con estos matches. */
+const mockQueryOnce = (matches: CandidateMatch[]) =>
+  vi.mocked(firestore.getDocs).mockResolvedValueOnce(
+    createMockSnapshot(matches) as unknown as QuerySnapshot<DocumentData, DocumentData>
+  );
+
+/** Un mock de documento tipado como DocumentSnapshot de Firestore. */
+const asDocSnapshot = (snap: Partial<MockDocumentSnapshot>) =>
+  snap as unknown as DocumentSnapshot<DocumentData, DocumentData>;
+
+/** Tres matches (user3, user2, user1) completados hace 1, 2 y 3 segundos. */
+const threeMatches = (jobId: string, recruiterId: string, now: Date) =>
+  [1000, 2000, 3000].map((ago, i) =>
+    createMockMatch(`user${3 - i}`, jobId, recruiterId, new Date(now.getTime() - ago))
+  );
+
+/** Cursor opaco tal como lo genera el servicio (JSON en base64). */
+const encodeCursor = (data: unknown) => Buffer.from(JSON.stringify(data)).toString("base64");
+
 describe("CompatibilityService.getMatchesForJob", () => {
   const defaultRecruiterId = "recruiter1";
   const defaultJobId = "job1";
@@ -89,9 +109,7 @@ describe("CompatibilityService.getMatchesForJob", () => {
     vi.clearAllMocks();
     // Mock por defecto: job existe y pertenece al recruiter
     const mockJobDoc = createMockJobDoc(defaultJobId, defaultRecruiterId);
-    vi.mocked(firestore.getDoc).mockResolvedValue(
-      mockJobDoc as unknown as DocumentSnapshot<DocumentData, DocumentData>
-    );
+    vi.mocked(firestore.getDoc).mockResolvedValue(asDocSnapshot(mockJobDoc));
   });
 
   it("primera página: retorna matches ordenados por completedAt DESC", async () => {
@@ -99,15 +117,9 @@ describe("CompatibilityService.getMatchesForJob", () => {
     const jobId = "job1";
     const now = new Date();
     
-    const matches = [
-      createMockMatch("user3", jobId, recruiterId, new Date(now.getTime() - 1000)),
-      createMockMatch("user2", jobId, recruiterId, new Date(now.getTime() - 2000)),
-      createMockMatch("user1", jobId, recruiterId, new Date(now.getTime() - 3000)),
-    ];
+    const matches = threeMatches(jobId, recruiterId, now);
 
-    vi.mocked(firestore.getDocs).mockResolvedValueOnce(
-      createMockSnapshot(matches) as unknown as QuerySnapshot<DocumentData, DocumentData>
-    );
+    mockQueryOnce(matches);
 
     const result = await CompatibilityService.getMatchesForJob(recruiterId, jobId, {
       pageSize: 3,
@@ -127,15 +139,9 @@ describe("CompatibilityService.getMatchesForJob", () => {
     const now = new Date();
     
     // Crear 3 matches, pero pedir solo 2 (pageSize=2 → query con limit(3))
-    const matches = [
-      createMockMatch("user3", jobId, recruiterId, new Date(now.getTime() - 1000)),
-      createMockMatch("user2", jobId, recruiterId, new Date(now.getTime() - 2000)),
-      createMockMatch("user1", jobId, recruiterId, new Date(now.getTime() - 3000)),
-    ];
+    const matches = threeMatches(jobId, recruiterId, now);
 
-    vi.mocked(firestore.getDocs).mockResolvedValueOnce(
-      createMockSnapshot(matches) as unknown as QuerySnapshot<DocumentData, DocumentData>
-    );
+    mockQueryOnce(matches);
 
     const result = await CompatibilityService.getMatchesForJob(recruiterId, jobId, {
       pageSize: 2,
@@ -158,9 +164,7 @@ describe("CompatibilityService.getMatchesForJob", () => {
       createMockMatch("user1", jobId, recruiterId, new Date(now.getTime() - 3000)),
     ];
 
-    vi.mocked(firestore.getDocs).mockResolvedValueOnce(
-      createMockSnapshot(matches) as unknown as QuerySnapshot<DocumentData, DocumentData>
-    );
+    mockQueryOnce(matches);
 
     const result = await CompatibilityService.getMatchesForJob(recruiterId, jobId, {
       pageSize: 2,
@@ -188,7 +192,7 @@ describe("CompatibilityService.getMatchesForJob", () => {
       completedAt: now.getTime() - 2000,
       docId: "user2_job1",
     };
-    const cursor = Buffer.from(JSON.stringify(cursorData)).toString("base64");
+    const cursor = encodeCursor(cursorData);
 
     // Mock del job (primer getDoc)
     const mockJobDoc = createMockJobDoc(jobId, recruiterId);
@@ -202,16 +206,14 @@ describe("CompatibilityService.getMatchesForJob", () => {
 
     // Setup: primer getDoc retorna job, segundo retorna cursor
     vi.mocked(firestore.getDoc)
-      .mockResolvedValueOnce(mockJobDoc as unknown as DocumentSnapshot<DocumentData, DocumentData>)
-      .mockResolvedValueOnce(mockCursorDoc as unknown as DocumentSnapshot<DocumentData, DocumentData>);
+      .mockResolvedValueOnce(asDocSnapshot(mockJobDoc))
+      .mockResolvedValueOnce(asDocSnapshot(mockCursorDoc));
 
     const matches = [
       createMockMatch("user1", jobId, recruiterId, new Date(now.getTime() - 3000)),
     ];
 
-    vi.mocked(firestore.getDocs).mockResolvedValueOnce(
-      createMockSnapshot(matches) as unknown as QuerySnapshot<DocumentData, DocumentData>
-    );
+    mockQueryOnce(matches);
 
     const result = await CompatibilityService.getMatchesForJob(recruiterId, jobId, {
       pageSize: 2,
@@ -237,7 +239,7 @@ describe("CompatibilityService.getMatchesForJob", () => {
   it("lanza error si el cursor tiene estructura inválida", async () => {
     const recruiterId = "recruiter1";
     const jobId = "job1";
-    const invalidCursor = Buffer.from(JSON.stringify({ foo: "bar" })).toString("base64");
+    const invalidCursor = encodeCursor({ foo: "bar" });
 
     await expect(
       CompatibilityService.getMatchesForJob(recruiterId, jobId, {
@@ -254,7 +256,7 @@ describe("CompatibilityService.getMatchesForJob", () => {
       completedAt: Date.now(),
       docId: "nonexistent_job1",
     };
-    const cursor = Buffer.from(JSON.stringify(cursorData)).toString("base64");
+    const cursor = encodeCursor(cursorData);
 
     // Mock del job (primer getDoc)
     const mockJobDoc = createMockJobDoc(jobId, recruiterId);
@@ -266,8 +268,8 @@ describe("CompatibilityService.getMatchesForJob", () => {
 
     // Setup: primer getDoc retorna job, segundo retorna cursor inexistente
     vi.mocked(firestore.getDoc)
-      .mockResolvedValueOnce(mockJobDoc as unknown as DocumentSnapshot<DocumentData, DocumentData>)
-      .mockResolvedValueOnce(mockCursorDoc as unknown as DocumentSnapshot<DocumentData, DocumentData>);
+      .mockResolvedValueOnce(asDocSnapshot(mockJobDoc))
+      .mockResolvedValueOnce(asDocSnapshot(mockCursorDoc));
 
     await expect(
       CompatibilityService.getMatchesForJob(recruiterId, jobId, {
@@ -316,9 +318,7 @@ describe("CompatibilityService.getMatchesForJob", () => {
       createMockMatch("user1", jobId, recruiterId, new Date(now.getTime() - 2000)),
     ];
 
-    vi.mocked(firestore.getDocs).mockResolvedValueOnce(
-      createMockSnapshot(matches) as unknown as QuerySnapshot<DocumentData, DocumentData>
-    );
+    mockQueryOnce(matches);
 
     const result = await CompatibilityService.getMatchesForJob(recruiterId, jobId, {
       pageSize: 5, // Más que los resultados disponibles
@@ -357,9 +357,7 @@ describe("CompatibilityService.getMatchesForJob", () => {
       createMockMatch("user1", jobId, recruiterId, new Date(sameTime.getTime() - 1000)),
     ];
 
-    vi.mocked(firestore.getDocs).mockResolvedValueOnce(
-      createMockSnapshot(matches) as unknown as QuerySnapshot<DocumentData, DocumentData>
-    );
+    mockQueryOnce(matches);
 
     const result = await CompatibilityService.getMatchesForJob(recruiterId, jobId, {
       pageSize: 2,

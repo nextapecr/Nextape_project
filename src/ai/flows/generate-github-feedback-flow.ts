@@ -75,7 +75,7 @@ function summaryFor(overall: number): string {
   return 'Perfil en desarrollo con potencial de mejora significativo. Se recomienda enfoque en las áreas prioritarias identificadas para fortalecer habilidades técnicas.';
 }
 
-function generateDeterministicFeedback(input: GenerateGithubFeedbackInput): GenerateGithubFeedbackOutput {
+export function generateDeterministicFeedback(input: GenerateGithubFeedbackInput): GenerateGithubFeedbackOutput {
   // Áreas de mejora: usar topWeaknesses calculadas por el motor (máximo 3)
   const improvements = input.topWeaknesses.length > 0
     ? input.topWeaknesses.slice(0, 3)

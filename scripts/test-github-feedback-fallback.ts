@@ -8,6 +8,7 @@
  */
 
 import './load-env';
+import { MID_LEVEL_NAME, feedbackProfile } from './lib/github-feedback-profiles';
 import { generateGithubFeedback } from '@/ai/flows/generate-github-feedback-flow';
 import type { GenerateGithubFeedbackInput } from '@/ai/flows/generate-github-feedback-flow';
 
@@ -19,20 +20,27 @@ console.log('');
 // Guardar la API key original
 const originalApiKey = process.env.GROQ_API_KEY;
 
-// Caso de prueba
-const testInput: GenerateGithubFeedbackInput = {
-  architecture: 65,
-  testing: 70,
-  security: 60,
-  maintainability: 68,
-  documentation: 55,
-  overall: 64,
-  topWeaknesses: [
-    'Patrones de seguridad básicos',
-    'Tests unitarios insuficientes',
-    'Falta documentación de API',
-  ],
-};
+// Caso de prueba: el perfil mid-level compartido.
+const testInput: GenerateGithubFeedbackInput = feedbackProfile(MID_LEVEL_NAME);
+
+/** Llama al flow, mide cuánto tarda e imprime la cabecera del resultado. `null` si no hubo feedback. */
+async function timedFeedback() {
+  const startTime = Date.now();
+  const result = await generateGithubFeedback(testInput);
+  const duration = Date.now() - startTime;
+
+  console.log('');
+  console.log('─'.repeat(80));
+  console.log('📊 RESULTADO:');
+  console.log('─'.repeat(80));
+  if (result) {
+    console.log(`✅ Feedback generado exitosamente`);
+    console.log(`📍 Source: ${result.source}`);
+    console.log(`⏱️  Duración: ${duration}ms`);
+    console.log('');
+  }
+  return result;
+}
 
 async function testWithInvalidKey() {
   console.log('📋 TEST 1: Simular fallo con API key inválida');
@@ -47,20 +55,9 @@ async function testWithInvalidKey() {
     console.log('📊 Input scores: overall=64/100');
     console.log('📝 Top weaknesses: 3 áreas identificadas\n');
 
-    const startTime = Date.now();
-    const result = await generateGithubFeedback(testInput);
-    const duration = Date.now() - startTime;
-
-    console.log('');
-    console.log('─'.repeat(80));
-    console.log('📊 RESULTADO:');
-    console.log('─'.repeat(80));
+    const result = await timedFeedback();
 
     if (result) {
-      console.log(`✅ Feedback generado exitosamente`);
-      console.log(`📍 Source: ${result.source}`);
-      console.log(`⏱️  Duración: ${duration}ms`);
-      console.log('');
       console.log('📝 Feedback:');
       console.log(`   "${result.feedback}"`);
       console.log('');
@@ -107,20 +104,9 @@ async function testWithValidKey() {
     console.log('🔧 Configuración: API key restaurada (válida)');
     console.log('📊 Input scores: mismo perfil (overall=64/100)\n');
 
-    const startTime = Date.now();
-    const result = await generateGithubFeedback(testInput);
-    const duration = Date.now() - startTime;
-
-    console.log('');
-    console.log('─'.repeat(80));
-    console.log('📊 RESULTADO:');
-    console.log('─'.repeat(80));
+    const result = await timedFeedback();
 
     if (result) {
-      console.log(`✅ Feedback generado exitosamente`);
-      console.log(`📍 Source: ${result.source}`);
-      console.log(`⏱️  Duración: ${duration}ms`);
-      console.log('');
       console.log('📝 Feedback (primeras 150 chars):');
       console.log(`   "${result.feedback.slice(0, 150)}..."`);
       console.log('');

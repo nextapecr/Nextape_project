@@ -11,6 +11,7 @@ import Link from "next/link";
 import { getTechnicalGrade } from "@/lib/grading";
 import { normalizeCandidateProfile, summarizeCandidate } from "@/lib/candidate-profile";
 import { findTechnology } from "@/lib/technologies";
+import { SkillBars } from "@/components/dna/SkillBars";
 
 export default function ProfilePage() {
   const { user, authLoading } = useAuthUser();
@@ -95,24 +96,12 @@ export default function ProfilePage() {
             </div>
             
             <div className="space-y-10">
-              {skills.length > 0 ? skills.map(skill => (
-                <div key={skill.name} className="space-y-4">
-                  <div className="flex justify-between items-end">
-                    <p className="font-bold text-sm uppercase tracking-widest text-black">{skill.name}</p>
-                    <span className="font-black text-2xl text-brand-blue italic">{skill.value}%</span>
-                  </div>
-                  <div className="h-3 rounded-full bg-gray-50 overflow-hidden border border-gray-100">
-                    <div 
-                      className="h-full bg-brand-blue rounded-full transition-all duration-1000 ease-out" 
-                      style={{ width: `${skill.value}%` }}
-                    />
-                  </div>
-                </div>
-              )) : (
-                <div className="py-12 text-center text-gray-400 italic font-medium">
-                  DNA técnico no sincronizado. Completa una prueba en "The LINE" para activar tu perfil.
-                </div>
-              )}
+              <SkillBars
+                skills={skills}
+                emptyText={"DNA técnico no sincronizado. Completa una prueba en \"The LINE\" para activar tu perfil."}
+                valueClassName="text-2xl"
+                emptyClassName="font-medium"
+              />
             </div>
           </div>
 

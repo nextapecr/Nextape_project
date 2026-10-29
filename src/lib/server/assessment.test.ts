@@ -23,56 +23,24 @@ import type {
   CodeOutputQuestion,
 } from "@/types/question.types";
 
-const base = { briefing: "b", difficulty: "senior" };
+/** Campos comunes a todos los tipos de pregunta. */
+const common = (id: string, tag: string, text: string) => ({ briefing: "b", difficulty: "senior", id, tag, text });
+const FOUR = ["0", "1", "2", "3"];
 
-const mc = (id: string, tag: string, correctIndex: number, text = "t"): MultipleChoiceQuestion => ({
-  ...base,
-  id,
-  tag,
-  text,
-  type: "multiple_choice",
-  options: ["0", "1", "2", "3"],
-  correctIndex,
-});
-
-const tf = (id: string, tag: string, correct: boolean, text = "tf"): TrueFalseQuestion => ({
-  ...base,
-  id,
-  tag,
-  text,
-  type: "true_false",
-  correct,
-});
-
-const ms = (id: string, tag: string, correctIndexes: number[], text = "ms"): MultiSelectQuestion => ({
-  ...base,
-  id,
-  tag,
-  text,
-  type: "multi_select",
-  options: ["a", "b", "c", "d", "e"],
-  correctIndexes,
-});
-
-const ord = (id: string, tag: string, correctOrder: number[], text = "ord"): OrderingQuestion => ({
-  ...base,
-  id,
-  tag,
-  text,
-  type: "ordering",
-  items: ["p0", "p1", "p2", "p3"],
-  correctOrder,
-});
-
+const mc = (id: string, tag: string, correctIndex: number, text = "t"): MultipleChoiceQuestion =>
+  ({ ...common(id, tag, text), type: "multiple_choice", options: FOUR, correctIndex });
+const tf = (id: string, tag: string, correct: boolean, text = "tf"): TrueFalseQuestion =>
+  ({ ...common(id, tag, text), type: "true_false", correct });
+const ms = (id: string, tag: string, correctIndexes: number[], text = "ms"): MultiSelectQuestion =>
+  ({ ...common(id, tag, text), type: "multi_select", options: ["a", "b", "c", "d", "e"], correctIndexes });
+const ord = (id: string, tag: string, correctOrder: number[], text = "ord"): OrderingQuestion =>
+  ({ ...common(id, tag, text), type: "ordering", items: ["p0", "p1", "p2", "p3"], correctOrder });
 const code = (id: string, tag: string, correctIndex: number, text = "co"): CodeOutputQuestion => ({
-  ...base,
-  id,
-  tag,
-  text,
+  ...common(id, tag, text),
   type: "code_output",
   code: "const x = 1;",
   language: "typescript",
-  options: ["0", "1", "2", "3"],
+  options: FOUR,
   correctIndex,
 });
 

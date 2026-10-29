@@ -5,6 +5,7 @@
  * Ejecutar: npx tsx scripts/extract-catalog-from-drafts.ts
  */
 
+import { SKILL_CATALOG } from "./lib/skill-catalog-seed";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
@@ -135,26 +136,8 @@ async function main() {
   const allRoutes: RouteDef[] = [];
   
   // Agregar skills existentes (de backend_junior_to_mid, ya en Firestore)
-  const existingSkillDefs: SkillDef[] = [
-    { id: "git-fundamentals", name: "Git & Control de Versiones", category: "tooling", githubDimension: null, prerequisites: [] },
-    { id: "node-runtime", name: "Node.js Runtime & Event Loop", category: "language", githubDimension: "architecture", prerequisites: [] },
-    { id: "typescript-basics", name: "TypeScript Fundamentals", category: "language", githubDimension: "architecture", prerequisites: [] },
-    { id: "sql-fundamentals", name: "SQL & Álgebra Relacional", category: "database", githubDimension: null, prerequisites: [] },
-    { id: "http-protocol", name: "HTTP/HTTPS & Protocolo REST", category: "api-design", githubDimension: null, prerequisites: [] },
-    { id: "unit-testing", name: "Unit Testing", category: "testing", githubDimension: "testing", prerequisites: ["typescript-basics"] },
-    { id: "api-design-rest", name: "Diseño de APIs REST", category: "api-design", githubDimension: "architecture", prerequisites: ["http-protocol", "typescript-basics"] },
-    { id: "postgresql", name: "PostgreSQL & Consultas Avanzadas", category: "database", githubDimension: null, prerequisites: ["sql-fundamentals"] },
-    { id: "orm-basics", name: "ORM (Prisma / TypeORM)", category: "database", githubDimension: null, prerequisites: ["postgresql", "typescript-basics"] },
-    { id: "auth-jwt", name: "Autenticación JWT & Sesiones", category: "security", githubDimension: "security", prerequisites: ["http-protocol", "api-design-rest"] },
-    { id: "error-handling", name: "Manejo de Errores & Logging", category: "tooling", githubDimension: "maintainability", prerequisites: ["typescript-basics"] },
-    { id: "integration-testing", name: "Integration Testing & Mocks", category: "testing", githubDimension: "testing", prerequisites: ["unit-testing", "api-design-rest"] },
-    { id: "environment-config", name: "Variables de Entorno & Config", category: "tooling", githubDimension: null, prerequisites: ["node-runtime"] },
-    { id: "docker-basics", name: "Docker & Contenedores", category: "infrastructure", githubDimension: null, prerequisites: ["environment-config"] },
-    { id: "async-patterns", name: "Async/Await & Concurrencia", category: "language", githubDimension: "architecture", prerequisites: ["node-runtime", "typescript-basics"] },
-    { id: "api-validation", name: "Validación de Input (Zod / Joi)", category: "api-design", githubDimension: "security", prerequisites: ["api-design-rest"] },
-    { id: "code-documentation", name: "Documentación de Código & OpenAPI", category: "tooling", githubDimension: "documentation", prerequisites: ["api-design-rest"] },
-    { id: "basic-security", name: "OWASP Top 10 & SQL Injection", category: "security", githubDimension: "security", prerequisites: ["auth-jwt", "api-validation"] },
-  ];
+  // Las 18 ya existentes salen del catálogo compartido (antes estaban copiadas aquí a mano).
+  const existingSkillDefs: SkillDef[] = SKILL_CATALOG.filter((skill) => EXISTING_SKILLS.has(skill.id));
   
   existingSkillDefs.forEach((s) => allSkills.set(s.id, s));
   

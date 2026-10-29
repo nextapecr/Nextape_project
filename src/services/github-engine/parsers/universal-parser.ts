@@ -17,7 +17,8 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type Parser from 'tree-sitter';
-import type { LanguageParser, ParsedAST, ASTNode } from './language-parser.interface';
+import type { LanguageParser, ParsedAST } from './language-parser.interface';
+import { convertTreeSitterNode as convertNode } from './tree-sitter-node';
 import { typescriptESTreeParser } from './typescript-estree-parser';
 
 /** Superficie del paquete nativo que este parser usa. */
@@ -26,81 +27,36 @@ interface LanguagePackModule {
   configure?: (config: { cacheDir?: string }) => void;
 }
 
-export const EXTENSION_MAP: Record<string, string> = {
-  // TypeScript / JavaScript
-  '.ts': 'typescript',
-  '.tsx': 'tsx',
-  '.mts': 'typescript',
-  '.cts': 'typescript',
-  '.js': 'javascript',
-  '.jsx': 'javascript',
-  '.mjs': 'javascript',
-  '.cjs': 'javascript',
-  // C / C++
-  '.cpp': 'cpp',
-  '.cc': 'cpp',
-  '.cxx': 'cpp',
-  '.hpp': 'cpp',
-  '.hh': 'cpp',
-  '.c': 'c',
-  '.h': 'c',
-  // Python
-  '.py': 'python',
-  '.pyw': 'python',
-  // Java / Kotlin / Scala
-  '.java': 'java',
-  '.kt': 'kotlin',
-  '.kts': 'kotlin',
-  '.scala': 'scala',
-  // C#
-  '.cs': 'c_sharp',
-  // Go
-  '.go': 'go',
-  '.golang': 'go',
-  // PHP
-  '.php': 'php',
-  // Rust
-  '.rs': 'rust',
-  // Ruby
-  '.rb': 'ruby',
-  // Swift
-  '.swift': 'swift',
-  // Dart
-  '.dart': 'dart',
-  // Shell / Bash
-  '.sh': 'bash',
-  '.bash': 'bash',
-  // HCL / Terraform
-  '.tf': 'hcl',
-  '.hcl': 'hcl',
-  // Elixir
-  '.ex': 'elixir',
-  '.exs': 'elixir',
-  // Lua
-  '.lua': 'lua',
-  // Solidity
-  '.sol': 'solidity',
+/** Gramática de Tree-sitter → extensiones de archivo que la usan. */
+const LANGUAGE_EXTENSIONS: Record<string, string[]> = {
+  typescript: ['.ts', '.mts', '.cts'],
+  tsx: ['.tsx'],
+  javascript: ['.js', '.jsx', '.mjs', '.cjs'],
+  cpp: ['.cpp', '.cc', '.cxx', '.hpp', '.hh'],
+  c: ['.c', '.h'],
+  python: ['.py', '.pyw'],
+  java: ['.java'],
+  kotlin: ['.kt', '.kts'],
+  scala: ['.scala'],
+  c_sharp: ['.cs'],
+  go: ['.go', '.golang'],
+  php: ['.php'],
+  rust: ['.rs'],
+  ruby: ['.rb'],
+  swift: ['.swift'],
+  dart: ['.dart'],
+  bash: ['.sh', '.bash'],
+  hcl: ['.tf', '.hcl'],
+  elixir: ['.ex', '.exs'],
+  lua: ['.lua'],
+  solidity: ['.sol'],
 };
 
-function convertNode(tsNode: Parser.SyntaxNode, maxDepth = 30, currentDepth = 0): ASTNode {
-  const children: ASTNode[] =
-    currentDepth < maxDepth
-      ? Array.from({ length: tsNode.childCount }, (_, i) => {
-          const child = tsNode.child(i);
-          return child
-            ? convertNode(child, maxDepth, currentDepth + 1)
-            : { type: 'null', text: '', startLine: 0, endLine: 0, children: [] };
-        })
-      : [];
+/** Extensión de archivo → gramática (p. ej. `.kt` → `kotlin`). */
+export const EXTENSION_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(LANGUAGE_EXTENSIONS).flatMap(([language, exts]) => exts.map((ext) => [ext, language])),
+);
 
-  return {
-    type: tsNode.type,
-    text: tsNode.text,
-    startLine: tsNode.startPosition.row + 1,
-    endLine: tsNode.endPosition.row + 1,
-    children,
-  };
-}
 
 class UniversalParserImpl implements LanguageParser {
   readonly language = 'universal';

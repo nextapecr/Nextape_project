@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, verifyRequestUid } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
 import { GithubSignalsService, getGithubToken } from "@/services/github-signals.service";
 import {
   GITHUB_ENGINE_VERSION,
-  GITHUB_USERNAME_PATTERN,
   MAX_REPOS_PER_ANALYSIS,
   repoDocId,
 } from "@/services/github-engine/evidence-keys";
-import { consumeRateLimit, GITHUB_RATE_LIMITS, rateLimitedResponse } from "@/lib/server/rate-limit";
+import { GITHUB_RATE_LIMITS } from "@/lib/server/rate-limit";
+import { authorizeGithubRequest } from "@/lib/server/github-request";
 import type { GithubRepoListItem, GithubRepoListResponse } from "@/types/github.types";
 
 export const runtime = "nodejs";
@@ -33,19 +33,10 @@ const DELETE_BATCH_SIZE = 400;
  * Body: { githubUsername: string } (usado solo para respuesta, el análisis usa OAuth token)
  */
 export async function POST(req: NextRequest) {
-  const uid = await verifyRequestUid(req.headers.get("authorization"));
-  if (!uid) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
-  const body = await req.json().catch(() => null);
-  const githubUsername = typeof body?.githubUsername === "string" ? body.githubUsername.trim() : "";
-  if (!GITHUB_USERNAME_PATTERN.test(githubUsername)) {
-    return NextResponse.json({ error: "invalid_github_username" }, { status: 400 });
-  }
-
   try {
-    // Phase 2: OAuth es obligatorio para analizar repositorios
-    const limit = await consumeRateLimit(adminDb(), "github_repos", uid, GITHUB_RATE_LIMITS.repos);
-    if (!limit.allowed) return rateLimitedResponse(limit);
+    const auth = await authorizeGithubRequest(req, { scope: "github_repos", rule: GITHUB_RATE_LIMITS.repos });
+    if (auth instanceof NextResponse) return auth;
+    const { uid, githubUsername } = auth;
 
     const reposRef = adminDb().collection("github_evidence").doc(uid).collection("repos");
     

@@ -2,39 +2,10 @@
  * Check when last GitHub analysis was executed and from which environment.
  */
 
-import { initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import * as dotenv from 'dotenv';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import './load-env';
+import { scriptFirestore } from './lib/firestore';
 
-dotenv.config({ path: '.env.local' });
-
-let serviceAccount: any;
-
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-} else {
-  const keyPath = join(process.cwd(), 'firebase-admin-key.json');
-  if (existsSync(keyPath)) {
-    serviceAccount = JSON.parse(readFileSync(keyPath, 'utf-8'));
-  } else {
-    console.error('❌ Firebase credentials not found.');
-    process.exit(1);
-  }
-}
-
-try {
-  initializeApp({
-    credential: cert(serviceAccount),
-  });
-} catch (err: any) {
-  if (!err.message?.includes('already exists')) {
-    throw err;
-  }
-}
-
-const db = getFirestore();
+const db = scriptFirestore();
 
 async function checkLastAnalysis() {
   console.log('🔍 Checking last GitHub analysis in Firestore...\n');

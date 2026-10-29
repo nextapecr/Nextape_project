@@ -56,126 +56,207 @@ export interface Technology {
   group: string;
 }
 
-export const TECHNOLOGIES: Technology[] = [
-  // ── Frontend ──
-  { id: "react", label: "React", category: "frontend", group: "Frameworks y librerías" },
-  { id: "nextjs", label: "Next.js", category: "frontend", group: "Frameworks y librerías" },
-  { id: "angular", label: "Angular", category: "frontend", group: "Frameworks y librerías" },
-  { id: "vue", label: "Vue", category: "frontend", group: "Frameworks y librerías" },
-  { id: "nuxt", label: "Nuxt", category: "frontend", group: "Frameworks y librerías" },
-  { id: "svelte", label: "Svelte", category: "frontend", group: "Frameworks y librerías" },
-  { id: "javascript", label: "JavaScript", category: "frontend", group: "Lenguajes y estándares web" },
-  { id: "typescript", label: "TypeScript", category: "frontend", group: "Lenguajes y estándares web" },
-  { id: "html", label: "HTML y accesibilidad", category: "frontend", group: "Lenguajes y estándares web" },
-  { id: "css", label: "CSS", category: "frontend", group: "Estilos" },
-  { id: "tailwind", label: "Tailwind CSS", category: "frontend", group: "Estilos" },
-  { id: "redux", label: "Redux / Redux Toolkit", category: "frontend", group: "Estado y datos" },
-  { id: "tanstack-query", label: "TanStack Query", category: "frontend", group: "Estado y datos" },
-  { id: "web-performance", label: "Rendimiento web (Core Web Vitals)", category: "frontend", group: "Calidad" },
-
-  // ── Backend y frameworks (por lenguaje) ──
-  { id: "node.js", label: "Node.js", category: "backend", group: "JavaScript / TypeScript" },
-  { id: "express", label: "Express", category: "backend", group: "JavaScript / TypeScript" },
-  { id: "nestjs", label: "NestJS", category: "backend", group: "JavaScript / TypeScript" },
-  { id: "django", label: "Django", category: "backend", group: "Python" },
-  { id: "fastapi", label: "FastAPI", category: "backend", group: "Python" },
-  { id: "flask", label: "Flask", category: "backend", group: "Python" },
-  { id: "spring", label: "Spring", category: "backend", group: "Java / Kotlin" },
-  { id: "asp.net", label: "ASP.NET Core", category: "backend", group: "C# / .NET" },
-  { id: "laravel", label: "Laravel", category: "backend", group: "PHP" },
-  { id: "rails", label: "Ruby on Rails", category: "backend", group: "Ruby" },
-  { id: "gin", label: "Gin", category: "backend", group: "Go" },
-
-  // ── Lenguajes ──
-  { id: "python", label: "Python", category: "languages", group: "Propósito general y scripting" },
-  { id: "php", label: "PHP", category: "languages", group: "Propósito general y scripting" },
-  { id: "ruby", label: "Ruby", category: "languages", group: "Propósito general y scripting" },
-  { id: "java", label: "Java", category: "languages", group: "JVM y .NET" },
-  { id: "kotlin", label: "Kotlin", category: "languages", group: "JVM y .NET" },
-  { id: "scala", label: "Scala", category: "languages", group: "JVM y .NET" },
-  { id: "dotnet", label: "C# / .NET", category: "languages", group: "JVM y .NET" },
-  { id: "go", label: "Go", category: "languages", group: "Sistemas" },
-  { id: "rust", label: "Rust", category: "languages", group: "Sistemas" },
-  { id: "c", label: "C", category: "languages", group: "Sistemas" },
-  { id: "c++", label: "C++", category: "languages", group: "Sistemas" },
-  { id: "swift", label: "Swift", category: "languages", group: "Móvil" },
-  { id: "dart", label: "Dart", category: "languages", group: "Móvil" },
-
-  // ── Móvil ──
-  { id: "android", label: "Android (SDK, ciclo de vida)", category: "mobile", group: "Nativo Android" },
-  { id: "jetpack-compose", label: "Jetpack Compose", category: "mobile", group: "Nativo Android" },
-  { id: "ios", label: "iOS (UIKit, ciclo de vida)", category: "mobile", group: "Nativo iOS" },
-  { id: "swiftui", label: "SwiftUI", category: "mobile", group: "Nativo iOS" },
-  { id: "flutter", label: "Flutter", category: "mobile", group: "Multiplataforma" },
-  { id: "react native", label: "React Native", category: "mobile", group: "Multiplataforma" },
-  { id: "kotlin-multiplatform", label: "Kotlin Multiplatform", category: "mobile", group: "Multiplataforma" },
-
-  // ── Bases de datos ──
-  { id: "sql", label: "SQL (consultas y modelado)", category: "databases", group: "Relacionales (SQL)" },
-  { id: "postgresql", label: "PostgreSQL", category: "databases", group: "Relacionales (SQL)" },
-  { id: "mysql", label: "MySQL", category: "databases", group: "Relacionales (SQL)" },
-  { id: "sqlserver", label: "SQL Server", category: "databases", group: "Relacionales (SQL)" },
-  { id: "oracle", label: "Oracle Database", category: "databases", group: "Relacionales (SQL)" },
-  { id: "sqlite", label: "SQLite", category: "databases", group: "Relacionales (SQL)" },
-  { id: "mongodb", label: "MongoDB", category: "databases", group: "NoSQL" },
-  { id: "dynamodb", label: "DynamoDB", category: "databases", group: "NoSQL" },
-  { id: "firestore", label: "Firestore", category: "databases", group: "NoSQL" },
-  { id: "cassandra", label: "Cassandra", category: "databases", group: "NoSQL" },
-  { id: "redis", label: "Redis", category: "databases", group: "Caché y búsqueda" },
-  { id: "elasticsearch", label: "Elasticsearch", category: "databases", group: "Caché y búsqueda" },
-
-  // ── Cloud (por proveedor y servicio) ──
-  { id: "aws", label: "AWS (fundamentos: IAM, VPC, EC2, S3)", category: "cloud", group: "AWS" },
-  { id: "aws-serverless", label: "AWS Serverless (Lambda, API Gateway, SQS)", category: "cloud", group: "AWS" },
-  { id: "aws-containers", label: "AWS Contenedores (ECS, EKS, Fargate)", category: "cloud", group: "AWS" },
-  { id: "azure", label: "Azure (fundamentos: Entra ID, VNet, VMs, Storage)", category: "cloud", group: "Azure" },
-  { id: "azure-functions", label: "Azure Functions y App Service", category: "cloud", group: "Azure" },
-  { id: "gcp", label: "Google Cloud (fundamentos: IAM, VPC, GCE, GCS)", category: "cloud", group: "Google Cloud" },
-  { id: "gcp-cloud-run", label: "Cloud Run y Cloud Functions", category: "cloud", group: "Google Cloud" },
-  { id: "firebase", label: "Firebase (Auth, reglas, Functions)", category: "cloud", group: "Firebase" },
-
-  // ── DevOps e infraestructura ──
-  { id: "docker", label: "Docker", category: "devops", group: "Contenedores y orquestación" },
-  { id: "kubernetes", label: "Kubernetes", category: "devops", group: "Contenedores y orquestación" },
-  { id: "terraform", label: "Terraform", category: "devops", group: "Infraestructura como código" },
-  { id: "ansible", label: "Ansible", category: "devops", group: "Infraestructura como código" },
-  { id: "git", label: "Git", category: "devops", group: "Versionado y CI/CD" },
-  { id: "ci-cd", label: "CI/CD", category: "devops", group: "Versionado y CI/CD" },
-  { id: "github-actions", label: "GitHub Actions", category: "devops", group: "Versionado y CI/CD" },
-  { id: "linux", label: "Linux y shell", category: "devops", group: "Sistemas y operación" },
-  { id: "observability", label: "Observabilidad (logs, métricas, trazas)", category: "devops", group: "Sistemas y operación" },
-
-  // ── APIs e integración ──
-  { id: "rest", label: "REST / OpenAPI", category: "api", group: "Estilos de API" },
-  { id: "graphql", label: "GraphQL", category: "api", group: "Estilos de API" },
-  { id: "grpc", label: "gRPC", category: "api", group: "Estilos de API" },
-  { id: "websockets", label: "WebSockets y tiempo real", category: "api", group: "Estilos de API" },
-  { id: "kafka", label: "Apache Kafka", category: "api", group: "Mensajería y eventos" },
-  { id: "rabbitmq", label: "RabbitMQ", category: "api", group: "Mensajería y eventos" },
-
-  // ── Testing ──
-  { id: "testing", label: "Testing (general)", category: "testing", group: "Fundamentos" },
-  { id: "jest", label: "Jest", category: "testing", group: "Unitarias e integración" },
-  { id: "vitest", label: "Vitest", category: "testing", group: "Unitarias e integración" },
-  { id: "pytest", label: "pytest", category: "testing", group: "Unitarias e integración" },
-  { id: "junit", label: "JUnit", category: "testing", group: "Unitarias e integración" },
-  { id: "playwright", label: "Playwright", category: "testing", group: "End-to-end" },
-  { id: "cypress", label: "Cypress", category: "testing", group: "End-to-end" },
-
-  // ── Arquitectura y seguridad ──
-  { id: "architecture", label: "Arquitectura de sistemas", category: "architecture", group: "Arquitectura" },
-  { id: "microservices", label: "Microservicios", category: "architecture", group: "Arquitectura" },
-  { id: "security", label: "Seguridad (OWASP)", category: "architecture", group: "Seguridad" },
-  { id: "auth", label: "Autenticación y autorización (OAuth, JWT)", category: "architecture", group: "Seguridad" },
-  // Teoría transversal: no es una tecnología que el candidato elija. Va en TODAS las pruebas
-  // combinadas de The LINE (30 %), sea cual sea su stack. Ver THEORY_TECHNOLOGY_ID.
-  {
-    id: "software-engineering",
-    label: "Ingeniería de software (SOLID, patrones, arquitectura)",
-    category: "architecture",
-    group: "Teoría",
+/**
+ * Catálogo por categoría → subgrupo → `{ id: etiqueta }`, en el orden en que se muestra.
+ * `software-engineering` (Arquitectura → Teoría) no es elegible: va en TODAS las pruebas combinadas
+ * de The LINE (30 %), sea cual sea el stack. Ver THEORY_TECHNOLOGY_ID.
+ */
+const CATALOG: Record<TechCategory, Record<string, Record<string, string>>> = {
+  frontend: {
+    "Frameworks y librerías": {
+      react: "React",
+      nextjs: "Next.js",
+      angular: "Angular",
+      vue: "Vue",
+      nuxt: "Nuxt",
+      svelte: "Svelte",
+    },
+    "Lenguajes y estándares web": {
+      javascript: "JavaScript",
+      typescript: "TypeScript",
+      html: "HTML y accesibilidad",
+    },
+    "Estilos": {
+      css: "CSS",
+      tailwind: "Tailwind CSS",
+    },
+    "Estado y datos": {
+      redux: "Redux / Redux Toolkit",
+      "tanstack-query": "TanStack Query",
+    },
+    "Calidad": {
+      "web-performance": "Rendimiento web (Core Web Vitals)",
+    },
   },
-];
+  backend: {
+    "JavaScript / TypeScript": {
+      "node.js": "Node.js",
+      express: "Express",
+      nestjs: "NestJS",
+    },
+    "Python": {
+      django: "Django",
+      fastapi: "FastAPI",
+      flask: "Flask",
+    },
+    "Java / Kotlin": {
+      spring: "Spring",
+    },
+    "C# / .NET": {
+      "asp.net": "ASP.NET Core",
+    },
+    "PHP": {
+      laravel: "Laravel",
+    },
+    "Ruby": {
+      rails: "Ruby on Rails",
+    },
+    "Go": {
+      gin: "Gin",
+    },
+  },
+  languages: {
+    "Propósito general y scripting": {
+      python: "Python",
+      php: "PHP",
+      ruby: "Ruby",
+    },
+    "JVM y .NET": {
+      java: "Java",
+      kotlin: "Kotlin",
+      scala: "Scala",
+      dotnet: "C# / .NET",
+    },
+    "Sistemas": {
+      go: "Go",
+      rust: "Rust",
+      c: "C",
+      "c++": "C++",
+    },
+    "Móvil": {
+      swift: "Swift",
+      dart: "Dart",
+    },
+  },
+  mobile: {
+    "Nativo Android": {
+      android: "Android (SDK, ciclo de vida)",
+      "jetpack-compose": "Jetpack Compose",
+    },
+    "Nativo iOS": {
+      ios: "iOS (UIKit, ciclo de vida)",
+      swiftui: "SwiftUI",
+    },
+    "Multiplataforma": {
+      flutter: "Flutter",
+      "react native": "React Native",
+      "kotlin-multiplatform": "Kotlin Multiplatform",
+    },
+  },
+  databases: {
+    "Relacionales (SQL)": {
+      sql: "SQL (consultas y modelado)",
+      postgresql: "PostgreSQL",
+      mysql: "MySQL",
+      sqlserver: "SQL Server",
+      oracle: "Oracle Database",
+      sqlite: "SQLite",
+    },
+    "NoSQL": {
+      mongodb: "MongoDB",
+      dynamodb: "DynamoDB",
+      firestore: "Firestore",
+      cassandra: "Cassandra",
+    },
+    "Caché y búsqueda": {
+      redis: "Redis",
+      elasticsearch: "Elasticsearch",
+    },
+  },
+  cloud: {
+    "AWS": {
+      aws: "AWS (fundamentos: IAM, VPC, EC2, S3)",
+      "aws-serverless": "AWS Serverless (Lambda, API Gateway, SQS)",
+      "aws-containers": "AWS Contenedores (ECS, EKS, Fargate)",
+    },
+    "Azure": {
+      azure: "Azure (fundamentos: Entra ID, VNet, VMs, Storage)",
+      "azure-functions": "Azure Functions y App Service",
+    },
+    "Google Cloud": {
+      gcp: "Google Cloud (fundamentos: IAM, VPC, GCE, GCS)",
+      "gcp-cloud-run": "Cloud Run y Cloud Functions",
+    },
+    "Firebase": {
+      firebase: "Firebase (Auth, reglas, Functions)",
+    },
+  },
+  devops: {
+    "Contenedores y orquestación": {
+      docker: "Docker",
+      kubernetes: "Kubernetes",
+    },
+    "Infraestructura como código": {
+      terraform: "Terraform",
+      ansible: "Ansible",
+    },
+    "Versionado y CI/CD": {
+      git: "Git",
+      "ci-cd": "CI/CD",
+      "github-actions": "GitHub Actions",
+    },
+    "Sistemas y operación": {
+      linux: "Linux y shell",
+      observability: "Observabilidad (logs, métricas, trazas)",
+    },
+  },
+  api: {
+    "Estilos de API": {
+      rest: "REST / OpenAPI",
+      graphql: "GraphQL",
+      grpc: "gRPC",
+      websockets: "WebSockets y tiempo real",
+    },
+    "Mensajería y eventos": {
+      kafka: "Apache Kafka",
+      rabbitmq: "RabbitMQ",
+    },
+  },
+  testing: {
+    "Fundamentos": {
+      testing: "Testing (general)",
+    },
+    "Unitarias e integración": {
+      jest: "Jest",
+      vitest: "Vitest",
+      pytest: "pytest",
+      junit: "JUnit",
+    },
+    "End-to-end": {
+      playwright: "Playwright",
+      cypress: "Cypress",
+    },
+  },
+  architecture: {
+    "Arquitectura": {
+      architecture: "Arquitectura de sistemas",
+      microservices: "Microservicios",
+    },
+    "Seguridad": {
+      security: "Seguridad (OWASP)",
+      auth: "Autenticación y autorización (OAuth, JWT)",
+    },
+    "Teoría": {
+      "software-engineering": "Ingeniería de software (SOLID, patrones, arquitectura)",
+    },
+  },
+};
+
+export const TECHNOLOGIES: Technology[] = TECH_CATEGORIES.flatMap((category) =>
+  Object.entries(CATALOG[category]).flatMap(([group, items]) =>
+    Object.entries(items).map(([id, label]) => ({ id, label, category, group })),
+  ),
+);
 
 /**
  * Id del banco de teoría de ingeniería de software: principios SOLID, patrones de diseño, arquitectura

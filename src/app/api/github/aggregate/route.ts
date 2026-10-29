@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import { adminAuth, adminDb, verifyRequestUid } from "@/lib/firebase/admin";
+import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { GithubSignalsService } from "@/services/github-signals.service";
 import { aggregateRepoEvidence, sameSkillScores } from "@/services/github-engine/aggregate";
-import { consumeRateLimit, GITHUB_RATE_LIMITS, rateLimitedResponse } from "@/lib/server/rate-limit";
+import { GITHUB_RATE_LIMITS } from "@/lib/server/rate-limit";
+import { authorizeGithubRequest } from "@/lib/server/github-request";
 import {
   GITHUB_ENGINE_VERSION,
-  GITHUB_USERNAME_PATTERN,
 } from "@/services/github-engine/evidence-keys";
 import { generateGithubFeedback } from "@/ai/flows/generate-github-feedback-flow";
 import type {
@@ -73,18 +73,10 @@ function topKey(counts: Record<string, number> | undefined): string | null {
  * Body: { githubUsername: string }
  */
 export async function POST(req: NextRequest) {
-  const uid = await verifyRequestUid(req.headers.get("authorization"));
-  if (!uid) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
-  const body = await req.json().catch(() => null);
-  const githubUsername = typeof body?.githubUsername === "string" ? body.githubUsername.trim() : "";
-  if (!GITHUB_USERNAME_PATTERN.test(githubUsername)) {
-    return NextResponse.json({ error: "invalid_github_username" }, { status: 400 });
-  }
-
   try {
-    const limit = await consumeRateLimit(adminDb(), "github_aggregate", uid, GITHUB_RATE_LIMITS.aggregate);
-    if (!limit.allowed) return rateLimitedResponse(limit);
+    const auth = await authorizeGithubRequest(req, { scope: "github_aggregate", rule: GITHUB_RATE_LIMITS.aggregate });
+    if (auth instanceof NextResponse) return auth;
+    const { uid, githubUsername } = auth;
 
     const profileRef = adminDb().collection("github_evidence").doc(uid);
     // Defensa en profundidad: limita a 100 repos aunque /api/github/repos ya poda a ese máximo.

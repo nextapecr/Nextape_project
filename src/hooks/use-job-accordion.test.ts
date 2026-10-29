@@ -26,6 +26,25 @@ describe("useJobAccordion", () => {
     completedAt: Timestamp.now(),
   };
 
+  /** Respuesta paginada de `getMatchesForJob`. */
+  const page = (matches: CandidateMatch[], nextCursor: string | undefined, hasMore: boolean) => ({
+    matches,
+    nextCursor,
+    hasMore,
+  });
+
+  /** Monta el hook, abre la vacante y espera a que termine la primera carga. */
+  async function openJob() {
+    const { result } = renderHook(() => useJobAccordion(mockRecruiterId));
+    act(() => {
+      result.current.handleOpenJob(mockJobId);
+    });
+    await waitFor(() => {
+      expect(result.current.jobStates[mockJobId]?.loaded).toBe(true);
+    });
+    return result;
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -43,21 +62,9 @@ describe("useJobAccordion", () => {
   it("primera carga exitosa: llama a getMatchesForJob con pageSize 20 y actualiza estado", async () => {
     const mockGetMatches = vi
       .spyOn(CompatibilityService, "getMatchesForJob")
-      .mockResolvedValue({
-        matches: [mockMatch],
-        nextCursor: "cursor123",
-        hasMore: true,
-      });
+      .mockResolvedValue(page([mockMatch], "cursor123", true));
 
-    const { result } = renderHook(() => useJobAccordion(mockRecruiterId));
-
-    act(() => {
-      result.current.handleOpenJob(mockJobId);
-    });
-
-    await waitFor(() => {
-      expect(result.current.jobStates[mockJobId]?.loaded).toBe(true);
-    });
+    const result = await openJob();
 
     expect(mockGetMatches).toHaveBeenCalledWith(mockRecruiterId, mockJobId, {
       pageSize: 20,
@@ -77,21 +84,9 @@ describe("useJobAccordion", () => {
   });
 
   it("primera carga vacía: matches vacío, hasMore false, loaded true", async () => {
-    vi.spyOn(CompatibilityService, "getMatchesForJob").mockResolvedValue({
-      matches: [],
-      nextCursor: undefined,
-      hasMore: false,
-    });
+    vi.spyOn(CompatibilityService, "getMatchesForJob").mockResolvedValue(page([], undefined, false));
 
-    const { result } = renderHook(() => useJobAccordion(mockRecruiterId));
-
-    act(() => {
-      result.current.handleOpenJob(mockJobId);
-    });
-
-    await waitFor(() => {
-      expect(result.current.jobStates[mockJobId]?.loaded).toBe(true);
-    });
+    const result = await openJob();
 
     const state = result.current.jobStates[mockJobId];
     expect(state.matches).toHaveLength(0);
@@ -108,27 +103,11 @@ describe("useJobAccordion", () => {
 
     const mockGetMatches = vi
       .spyOn(CompatibilityService, "getMatchesForJob")
-      .mockResolvedValueOnce({
-        matches: [mockMatch],
-        nextCursor: "cursor123",
-        hasMore: true,
-      })
-      .mockResolvedValueOnce({
-        matches: [mockMatch2],
-        nextCursor: undefined,
-        hasMore: false,
-      });
-
-    const { result } = renderHook(() => useJobAccordion(mockRecruiterId));
+      .mockResolvedValueOnce(page([mockMatch], "cursor123", true))
+      .mockResolvedValueOnce(page([mockMatch2], undefined, false));
 
     // Primera carga
-    act(() => {
-      result.current.handleOpenJob(mockJobId);
-    });
-
-    await waitFor(() => {
-      expect(result.current.jobStates[mockJobId]?.loaded).toBe(true);
-    });
+    const result = await openJob();
 
     expect(result.current.jobStates[mockJobId].matches).toHaveLength(1);
 
@@ -155,21 +134,9 @@ describe("useJobAccordion", () => {
   });
 
   it("load more hasta el final: cuando hasMore false, no hay cursor", async () => {
-    vi.spyOn(CompatibilityService, "getMatchesForJob").mockResolvedValue({
-      matches: [mockMatch],
-      nextCursor: undefined,
-      hasMore: false,
-    });
+    vi.spyOn(CompatibilityService, "getMatchesForJob").mockResolvedValue(page([mockMatch], undefined, false));
 
-    const { result } = renderHook(() => useJobAccordion(mockRecruiterId));
-
-    act(() => {
-      result.current.handleOpenJob(mockJobId);
-    });
-
-    await waitFor(() => {
-      expect(result.current.jobStates[mockJobId]?.loaded).toBe(true);
-    });
+    const result = await openJob();
 
     const state = result.current.jobStates[mockJobId];
     expect(state.hasMore).toBe(false);
@@ -181,11 +148,7 @@ describe("useJobAccordion", () => {
     const mockGetMatches = vi
       .spyOn(CompatibilityService, "getMatchesForJob")
       .mockRejectedValueOnce(mockError)
-      .mockResolvedValueOnce({
-        matches: [mockMatch],
-        nextCursor: undefined,
-        hasMore: false,
-      });
+      .mockResolvedValueOnce(page([mockMatch], undefined, false));
 
     const { result } = renderHook(() => useJobAccordion(mockRecruiterId));
 
@@ -242,16 +205,8 @@ describe("useJobAccordion", () => {
     };
 
     vi.spyOn(CompatibilityService, "getMatchesForJob")
-      .mockResolvedValueOnce({
-        matches: [mockMatch1],
-        nextCursor: undefined,
-        hasMore: false,
-      })
-      .mockResolvedValueOnce({
-        matches: [mockMatch2],
-        nextCursor: "cursor456",
-        hasMore: true,
-      });
+      .mockResolvedValueOnce(page([mockMatch1], undefined, false))
+      .mockResolvedValueOnce(page([mockMatch2], "cursor456", true));
 
     const { result } = renderHook(() => useJobAccordion(mockRecruiterId));
 
@@ -284,11 +239,7 @@ describe("useJobAccordion", () => {
   it("abrir una vacante dispara una sola carga", async () => {
     const mockGetMatches = vi
       .spyOn(CompatibilityService, "getMatchesForJob")
-      .mockResolvedValue({
-        matches: [mockMatch],
-        nextCursor: undefined,
-        hasMore: false,
-      });
+      .mockResolvedValue(page([mockMatch], undefined, false));
 
     const { result } = renderHook(() => useJobAccordion(mockRecruiterId));
 
@@ -315,22 +266,10 @@ describe("useJobAccordion", () => {
   it("bloqueo por loadingMore: doble clic en Ver más no hace doble request", async () => {
     const mockGetMatches = vi
       .spyOn(CompatibilityService, "getMatchesForJob")
-      .mockResolvedValue({
-        matches: [mockMatch],
-        nextCursor: "cursor123",
-        hasMore: true,
-      });
-
-    const { result } = renderHook(() => useJobAccordion(mockRecruiterId));
+      .mockResolvedValue(page([mockMatch], "cursor123", true));
 
     // Primera carga
-    act(() => {
-      result.current.handleOpenJob(mockJobId);
-    });
-
-    await waitFor(() => {
-      expect(result.current.jobStates[mockJobId]?.loaded).toBe(true);
-    });
+    const result = await openJob();
 
     // Doble clic en "Ver más"
     act(() => {
@@ -385,11 +324,7 @@ describe("useJobAccordion", () => {
 
     // Resolver segunda respuesta primero (más reciente, requestId=2)
     act(() => {
-      resolveSecond({
-        matches: [{ ...mockMatch, userId: "user2" }],
-        nextCursor: undefined,
-        hasMore: false,
-      });
+      resolveSecond(page([{ ...mockMatch, userId: "user2" }], undefined, false));
     });
 
     await waitFor(() => {
@@ -400,11 +335,7 @@ describe("useJobAccordion", () => {
 
     // Resolver primera respuesta después (obsoleta, requestId=1)
     act(() => {
-      resolveFirst({
-        matches: [{ ...mockMatch, userId: "user1" }],
-        nextCursor: undefined,
-        hasMore: false,
-      });
+      resolveFirst(page([{ ...mockMatch, userId: "user1" }], undefined, false));
     });
 
     // Esperar un tick y verificar que el estado NO cambió

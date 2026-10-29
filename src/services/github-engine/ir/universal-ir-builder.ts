@@ -20,6 +20,7 @@
 
 import type { ASTNode } from '../parsers/language-parser.interface';
 import type { FileIR, IRFunction, IRClass, IRImport, IRExport } from './types';
+import { findAll } from './ast-traversal';
 
 // Nodos que indican funciones o métodos en diversos lenguajes
 // Tree-sitter format (snake_case) + ESTree format (PascalCase)
@@ -107,16 +108,6 @@ const UNIVERSAL_COMPLEXITY_NODES = new Set([
   'ConditionalExpression',
 ]);
 
-function findAll(node: ASTNode, types: Set<string>): ASTNode[] {
-  const results: ASTNode[] = [];
-  const queue: ASTNode[] = [node];
-  while (queue.length) {
-    const current = queue.shift()!;
-    if (types.has(current.type)) results.push(current);
-    for (const child of current.children) queue.push(child);
-  }
-  return results;
-}
 
 function extractName(node: ASTNode): string {
   // ESTree nodes have 'id' property with the identifier

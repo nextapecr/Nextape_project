@@ -7,43 +7,10 @@
  * If uid is not provided, shows errors from all users.
  */
 
-import { initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import * as dotenv from 'dotenv';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import './load-env';
+import { scriptFirestore } from './lib/firestore';
 
-// Load .env.local
-dotenv.config({ path: '.env.local' });
-
-// Initialize Firebase Admin
-let serviceAccount: any;
-
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-} else {
-  // Try to load from firebase-admin-key.json
-  const keyPath = join(process.cwd(), 'firebase-admin-key.json');
-  if (existsSync(keyPath)) {
-    serviceAccount = JSON.parse(readFileSync(keyPath, 'utf-8'));
-  } else {
-    console.error('❌ Firebase credentials not found.');
-    console.error('Set FIREBASE_SERVICE_ACCOUNT env var or create firebase-admin-key.json');
-    process.exit(1);
-  }
-}
-
-try {
-  initializeApp({
-    credential: cert(serviceAccount),
-  });
-} catch (err: any) {
-  if (!err.message?.includes('already exists')) {
-    throw err;
-  }
-}
-
-const db = getFirestore();
+const db = scriptFirestore();
 
 interface GithubAnalysisError {
   analysisId: string;

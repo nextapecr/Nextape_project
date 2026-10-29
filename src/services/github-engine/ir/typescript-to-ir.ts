@@ -12,6 +12,7 @@
 
 import type { ASTNode } from '../parsers/language-parser.interface';
 import type { FileIR, IRFunction, IRClass, IRImport, IRExport } from './types';
+import { findAll, findFirst } from './ast-traversal';
 
 // ─────────────────────────────────────────────────────────
 // Nodos de Tree-sitter que generan un punto de decisión
@@ -48,27 +49,7 @@ const FUNCTION_NODES = new Set([
 // Utilidades de traversal
 // ─────────────────────────────────────────────────────────
 
-/** Recopila todos los descendientes de un tipo (BFS) */
-function findAll(node: ASTNode, types: Set<string>): ASTNode[] {
-  const results: ASTNode[] = [];
-  const queue: ASTNode[] = [node];
-  while (queue.length) {
-    const current = queue.shift()!;
-    if (types.has(current.type)) results.push(current);
-    for (const child of current.children) queue.push(child);
-  }
-  return results;
-}
 
-/** Busca el primer descendiente de un tipo (DFS) */
-function findFirst(node: ASTNode, type: string): ASTNode | null {
-  if (node.type === type) return node;
-  for (const child of node.children) {
-    const found = findFirst(child, type);
-    if (found) return found;
-  }
-  return null;
-}
 
 /** Extrae el texto de un nodo identificador o nombre */
 function extractName(node: ASTNode): string {

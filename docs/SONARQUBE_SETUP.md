@@ -270,6 +270,22 @@ jobs:
 
 ---
 
+## 🧾 Código duplicado (2026-10-29)
+
+Sonar marcaba 16 archivos (el peor, `question-bank.ts`, con 85,6 %). Medido aquí con un detector que replica su
+regla (bloques de 100 tokens con los literales normalizados): **1 562 → 0 líneas duplicadas**. Criterio:
+- **Datos fuera del código:** las tablas grandes de literales (banco de 38 preguntas, catálogo del roadmap,
+  fragmentos de prueba del parser) pasaron a JSON (`question-bank.data.json`, `scripts/data/*.json`). Para Sonar
+  cientos de objetos con la misma forma son "código copiado" aunque cambie el texto.
+- **Una sola implementación compartida:** seeders del catálogo (`scripts/lib/skill-catalog-seed.ts`), init de
+  Firestore en scripts (`scripts/lib/firestore.ts`), perfiles de prueba del feedback
+  (`scripts/lib/github-feedback-profiles.ts`), conversión de nodos de tree-sitter
+  (`parsers/tree-sitter-node.ts`), recorridos del AST (`ir/ast-traversal.ts`), entrada de los endpoints de GitHub
+  (`src/lib/server/github-request.ts`) y barras del DNA (`components/dna/SkillBars.tsx`).
+- **Tests:** helpers y fábricas en vez de bloques repetidos.
+- `test-github-feedback-force-fallback.ts` imprimía resultados escritos a mano; ahora ejecuta el fallback real
+  (y `generate-github-feedback-flow.test.ts` lo cubre en CI).
+
 ## 🧾 Última auditoría (2026-10-28, rama `test-vernon`)
 
 SonarCloud no era accesible desde el entorno de la auditoría, así que se corrieron **las mismas reglas
