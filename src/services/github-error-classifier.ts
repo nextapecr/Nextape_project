@@ -10,6 +10,7 @@
  * - Only public GitHub usernames and repo names
  */
 
+import { randomUUID } from 'node:crypto';
 import type { Firestore } from 'firebase-admin/firestore';
 import {
   GithubErrorCode,
@@ -276,7 +277,7 @@ export function createErrorResponse(
  */
 export function generateAnalysisId(uid: string): string {
   const timestamp = Date.now();
-  // Solo para distinguir análisis en logs; no es un secreto ni un token.
-  const random = Math.random().toString(36).substring(2, 8); // NOSONAR typescript:S2245
+  // Solo para distinguir análisis en logs (no es un secreto): un trozo de UUID del CSPRNG de Node.
+  const random = randomUUID().slice(0, 6);
   return `${uid}_${timestamp}_${random}`;
 }

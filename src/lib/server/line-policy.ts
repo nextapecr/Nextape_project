@@ -199,9 +199,10 @@ export const SEEN_MEMORY = 150;
  */
 export function questionFingerprint(q: Pick<Question, "text" | "id">): string {
   const text = String(q.text ?? q.id ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-  // Huella para no repetir preguntas, no un uso criptográfico: cambiarla a otro hash reiniciaría
-  // el historial `line_seen` de todos los usuarios.
-  return createHash("sha1").update(text).digest("hex").slice(0, 16); // NOSONAR typescript:S4790
+  // SHA-256 desde 2026-10-29 (antes SHA-1, que Sonar marca como hash débil). Al cambiar, las huellas
+  // guardadas en `line_seen` dejaron de coincidir una vez: ese historial se rehace con los intentos
+  // siguientes (solo afecta a qué preguntas se priorizan, no a notas ni intentos).
+  return createHash("sha256").update(text).digest("hex").slice(0, 16);
 }
 
 /**

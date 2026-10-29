@@ -39,7 +39,7 @@ import type { Firestore } from "firebase-admin/firestore";
 
 import { TECHNOLOGIES, TECH_CATEGORIES, findTechnology } from "@/lib/technologies";
 import type { TechCategory } from "@/lib/technologies";
-import { LEVELS, SPECIALTY_STACKS, countByType, dedupeQuestions } from "@/lib/server/assessment";
+import { LEVELS, SPECIALTY_STACKS, countByType } from "@/lib/server/assessment";
 import {
   buildTechnologyPool,
   buildQuestionPool,
@@ -47,6 +47,7 @@ import {
   ALL_QUESTION_TYPES,
 } from "@/lib/server/question-pool";
 import type { Question } from "@/types/question.types";
+import { growPool } from "./lib/grow-pool";
 
 const COLLECTION = "line_question_pools";
 const GENERATOR = "seed-question-bank@v2"; // v2: preguntas por subtema (technology-topics.ts)
@@ -208,9 +209,8 @@ function printPlan(targets: Target[], opts: Options) {
   console.log("");
 }
 
-async function main() {
-  const opts = parseArgs(process.argv.slice(2));
-
+/** Aborta si `--only` trae ids desconocidos o el filtro no selecciona nada; si no, devuelve el plan. */
+function planOrExit(opts: Options): Target[] {
   // Un id mal escrito en --only generaría un plan vacío o incompleto sin avisar.
   const unknown = opts.only.filter((id) => !findTechnology(id));
   if (unknown.length > 0) {
@@ -218,142 +218,146 @@ async function main() {
     console.error(`   Válidas: ${TECHNOLOGIES.map((t) => t.id).join(", ")}\n`);
     process.exit(1);
   }
-
   const targets = buildPlan(opts);
-
   if (targets.length === 0) {
     console.error("❌ El filtro no selecciona ninguna combinación. Revisa --only / --category / --levels.");
     console.error(`   Tecnologías válidas: ${TECHNOLOGIES.map((t) => t.id).join(", ")}`);
     process.exit(1);
   }
+  return targets;
+}
 
+/** `false` si falta confirmar con --yes o falta la API key (y lo explica). */
+function readyToWrite(opts: Options): boolean {
+  if (!opts.confirmed) {
+    console.error("⚠️  Esto escribe en el Firestore del proyecto configurado (probablemente PRODUCCIÓN).");
+    console.error("   Revisa el plan de arriba y vuelve a lanzarlo con --yes para confirmar.\n");
+    return false;
+  }
+  if (!process.env.GROQ_API_KEY) {
+    console.error("❌ Falta GROQ_API_KEY. Defínela en .env.local antes de ejecutar.\n");
+    return false;
+  }
+  return true;
+}
+
+type Outcome = "created" | "incomplete" | "skipped" | "failed";
+
+/** Genera, guarda y clasifica UNA combinación. Nunca lanza: un fallo cuenta como `failed`. */
+async function processTarget(db: Firestore, target: Target, opts: Options, progress: string) {
+  try {
+    // En --top-up se parte de lo existente; con --force se descarta; si no, solo se completa lo que falta.
+    const existing = opts.force ? [] : await existingQuestions(db, target.docId);
+    const goal = opts.topUp ? opts.target : 20;
+    if (existing.length >= goal) {
+      console.log(`${progress} ⏭️  ${target.docId} — ya tiene ${existing.length} preguntas (objetivo ${goal})`);
+      return { outcome: "skipped" as Outcome, count: 0 };
+    }
+    if (existing.length > 0) {
+      console.log(
+        `${progress} 🔄 ${target.docId} — ${existing.length} preguntas < ${goal}, ` +
+          (opts.topUp ? "ampliando con IA..." : "completando con IA...")
+      );
+    }
+    console.log(`${progress} 🤖 ${target.docId} — generando (${target.label}, ${target.level})...`);
+
+    const questions = await growPool({
+      start: opts.topUp ? existing : [],
+      goal,
+      rounds: opts.topUp ? TOP_UP_MAX_ROUNDS : 1,
+      generate: (round) =>
+        target.kind === "technology"
+          ? buildTechnologyPool({ technology: target.key, level: target.level, round })
+          : buildQuestionPool({ stack: SPECIALTY_STACKS[target.key], level: target.level }),
+    });
+
+    if (questions.length === 0 || (opts.topUp && questions.length <= existing.length)) {
+      console.error(`${progress} ❌ ${target.docId} — la IA no devolvió preguntas nuevas`);
+      return { outcome: "failed" as Outcome, count: 0 };
+    }
+    return { outcome: await savePool(db, target, questions, progress), count: questions.length };
+  } catch (err) {
+    console.error(`${progress} ❌ ${target.docId} —`, err instanceof Error ? err.message : err);
+    return { outcome: "failed" as Outcome, count: 0 };
+  }
+}
+
+/** Escribe el repertorio y dice si quedó completo (≥ 20 preguntas) o incompleto. */
+async function savePool(db: Firestore, target: Target, questions: Question[], progress: string): Promise<Outcome> {
+  const isIncomplete = questions.length < 20;
+  const byType = countByType(questions);
+  await db.collection(COLLECTION).doc(target.docId).set({
+    key: target.key,
+    kind: target.kind,
+    label: target.label,
+    category: target.category,
+    level: target.level,
+    questions,
+    count: questions.length,
+    status: isIncomplete ? "incomplete" : "complete",
+    byType,
+    generator: GENERATOR,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  const mix = Object.entries(byType)
+    .filter(([, n]) => n > 0)
+    .map(([t, n]) => `${t}:${n}`)
+    .join(" ");
+  if (isIncomplete) {
+    console.warn(`${progress} ⚠️  ${target.docId} — INCOMPLETA: solo ${questions.length} preguntas de 25 esperadas (${mix})`);
+    return "incomplete";
+  }
+  console.log(`${progress} ✅ ${target.docId} — ${questions.length} preguntas (${mix})`);
+  return "created";
+}
+
+function printSummary(counts: Record<Outcome, number>, totalQuestions: number, incompleteTargets: string[], startedAt: number) {
+  const minutes = Math.round((Date.now() - startedAt) / 60000);
+  console.log("\n" + "─".repeat(60));
+  console.log("🎉 PRECARGA TERMINADA");
+  console.log(`   Creados     : ${counts.created}`);
+  console.log(`   Incompletos : ${counts.incomplete} (menos de 20 preguntas)`);
+  console.log(`   Saltados    : ${counts.skipped} (ya existían)`);
+  console.log(`   Fallidos    : ${counts.failed}`);
+  console.log(`   Preguntas   : ${totalQuestions}`);
+  console.log(`   Duración    : ~${minutes} min`);
+  if (incompleteTargets.length > 0) {
+    console.log(`\n   ⚠️ Combinaciones incompletas: ${incompleteTargets.join(", ")}`);
+  }
+  if (counts.failed > 0 || counts.incomplete > 0) {
+    console.log("\n   Relanza el mismo comando con --force en las incompletas para regenerarlas.");
+  }
+  console.log("─".repeat(60) + "\n");
+}
+
+async function main() {
+  const opts = parseArgs(process.argv.slice(2));
+  const targets = planOrExit(opts);
   printPlan(targets, opts);
 
   if (opts.dryRun) {
     console.log("🔍 --dry-run: no se ha escrito nada. Quita --dry-run y añade --yes para ejecutar.\n");
     return;
   }
-
-  if (!opts.confirmed) {
-    console.error("⚠️  Esto escribe en el Firestore del proyecto configurado (probablemente PRODUCCIÓN).");
-    console.error("   Revisa el plan de arriba y vuelve a lanzarlo con --yes para confirmar.\n");
-    process.exit(1);
-  }
-
-  if (!process.env.GROQ_API_KEY) {
-    console.error("❌ Falta GROQ_API_KEY. Defínela en .env.local antes de ejecutar.\n");
-    process.exit(1);
-  }
+  if (!readyToWrite(opts)) process.exit(1);
 
   const db = initFirestore();
-
-  let created = 0;
-  let skipped = 0;
-  let incomplete = 0;
-  let failed = 0;
-  let totalQuestions = 0;
+  const counts: Record<Outcome, number> = { created: 0, incomplete: 0, skipped: 0, failed: 0 };
   const incompleteTargets: string[] = [];
+  let totalQuestions = 0;
   const startedAt = Date.now();
 
   for (const [i, target] of targets.entries()) {
-    const progress = `[${i + 1}/${targets.length}]`;
-
-    try {
-      // En --top-up se parte de lo existente; con --force se descarta; si no, solo se completa lo que falta.
-      const existing = opts.force ? [] : await existingQuestions(db, target.docId);
-      const goal = opts.topUp ? opts.target : 20;
-      if (existing.length >= goal) {
-        console.log(`${progress} ⏭️  ${target.docId} — ya tiene ${existing.length} preguntas (objetivo ${goal})`);
-        skipped++;
-        continue;
-      } else if (existing.length > 0) {
-        console.log(
-          `${progress} 🔄 ${target.docId} — ${existing.length} preguntas < ${goal}, ` +
-            (opts.topUp ? "ampliando con IA..." : "completando con IA...")
-        );
-      }
-
-      console.log(`${progress} 🤖 ${target.docId} — generando (${target.label}, ${target.level})...`);
-
-      const generate = (round: number): Promise<Question[]> =>
-        target.kind === "technology"
-          ? buildTechnologyPool({ technology: target.key, level: target.level, round })
-          : buildQuestionPool({ stack: SPECIALTY_STACKS[target.key], level: target.level });
-
-      let questions: Question[] = opts.topUp ? existing : [];
-      const rounds = opts.topUp ? TOP_UP_MAX_ROUNDS : 1;
-      for (let round = 0; round < rounds && questions.length < goal; round++) {
-        const before = questions.length;
-        questions = dedupeQuestions([...questions, ...(await generate(round))]);
-        if (questions.length === before) break; // el proveedor no aporta nada nuevo
-      }
-      // Ids consecutivos: cada lote generado numera desde 0.
-      questions = questions.map((q, idx) => ({ ...q, id: String(idx) }));
-
-      if (questions.length === 0 || (opts.topUp && questions.length <= existing.length)) {
-        console.error(`${progress} ❌ ${target.docId} — la IA no devolvió preguntas nuevas`);
-        failed++;
-        continue;
-      }
-
-      const isIncomplete = questions.length < 20;
-
-      await db.collection(COLLECTION).doc(target.docId).set({
-        key: target.key,
-        kind: target.kind,
-        label: target.label,
-        category: target.category,
-        level: target.level,
-        questions,
-        count: questions.length,
-        status: isIncomplete ? "incomplete" : "complete",
-        byType: countByType(questions),
-        generator: GENERATOR,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-
-      const mix = Object.entries(countByType(questions))
-        .filter(([, n]) => n > 0)
-        .map(([t, n]) => `${t}:${n}`)
-        .join(" ");
-
-      if (isIncomplete) {
-        console.warn(
-          `${progress} ⚠️  ${target.docId} — INCOMPLETA: solo ${questions.length} preguntas de 25 esperadas (${mix})`
-        );
-        incomplete++;
-        incompleteTargets.push(target.docId);
-      } else {
-        console.log(`${progress} ✅ ${target.docId} — ${questions.length} preguntas (${mix})`);
-        created++;
-      }
-
-      totalQuestions += questions.length;
-    } catch (err) {
-      console.error(`${progress} ❌ ${target.docId} —`, err instanceof Error ? err.message : err);
-      failed++;
-    }
-
-    if (opts.delayMs > 0 && i < targets.length - 1) await sleep(opts.delayMs);
+    const { outcome, count } = await processTarget(db, target, opts, `[${i + 1}/${targets.length}]`);
+    counts[outcome]++;
+    totalQuestions += count;
+    if (outcome === "incomplete") incompleteTargets.push(target.docId);
+    // Pausa entre combinaciones que llamaron a la IA (no tras saltar una que ya estaba completa).
+    if (outcome !== "skipped" && opts.delayMs > 0 && i < targets.length - 1) await sleep(opts.delayMs);
   }
 
-  const minutes = Math.round((Date.now() - startedAt) / 60000);
-  console.log("\n" + "─".repeat(60));
-  console.log("🎉 PRECARGA TERMINADA");
-  console.log(`   Creados     : ${created}`);
-  console.log(`   Incompletos : ${incomplete} (menos de 20 preguntas)`);
-  console.log(`   Saltados    : ${skipped} (ya existían)`);
-  console.log(`   Fallidos    : ${failed}`);
-  console.log(`   Preguntas   : ${totalQuestions}`);
-  console.log(`   Duración    : ~${minutes} min`);
-  if (incompleteTargets.length > 0) {
-    console.log(`\n   ⚠️ Combinaciones incompletas: ${incompleteTargets.join(", ")}`);
-  }
-  if (failed > 0 || incomplete > 0) {
-    console.log("\n   Relanza el mismo comando con --force en las incompletas para regenerarlas.");
-  }
-  console.log("─".repeat(60) + "\n");
-
+  printSummary(counts, totalQuestions, incompleteTargets, startedAt);
 }
 
 import { deleteApp } from "firebase-admin/app";

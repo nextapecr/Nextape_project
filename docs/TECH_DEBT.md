@@ -79,13 +79,13 @@ Ver detalle en [`CHANGELOG_FIXES.md`](./CHANGELOG_FIXES.md).
 - `src/ai/dev.ts` vacío → los flows no se registran en Genkit Dev UI.
 - The LINE sin guard cuando `questions` llega vacío (crash potencial).
 
-## 🟡 Complejidad cognitiva en scripts (SonarJS S3776)
+## ✅ Complejidad cognitiva en scripts (SonarJS S3776) — resuelto 2026-10-29
 
-Quedan por encima del límite (15) los `main()` de scripts de CLI que se ejecutan a mano y **escriben en
-Firestore de producción**: `seed-question-bank` (44), `verify-roadmap-engine` (65), `inventory-question-pools` (21)
-y `test-github-feedback-tokens` (16). No se refactorizaron a ciegas (no se pueden probar sin credenciales).
-Hacerlo cuando se toquen, probándolos con `--dry-run`. (✅ 2026-10-29: los dos seeders del catálogo ya no — ver
-`scripts/lib/skill-catalog-seed.ts`.)
+Los `main()` de los scripts de CLI se partieron en pasos con nombre y la lógica pura pasó a `scripts/lib/`
+con tests (`grow-pool`, `pool-inventory`, `skill-catalog-seed`). `seed-question-bank` se probó con `--dry-run`;
+`verify-roadmap-engine` ahora es un gate real (sale con 1 si una invariante falla), corre sin credenciales
+contra `scripts/data/skill-catalog.json` (`npm run verify:roadmap`, también en CI) y usa `--firestore` para
+producción.
 
 ## Notas de proceso
 

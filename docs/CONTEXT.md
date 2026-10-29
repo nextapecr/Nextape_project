@@ -105,11 +105,13 @@ status: complete|incomplete, byType, generator, updatedAt}`. Regla: `read, write
 **279 combinaciones** (~7 000 preguntas). Alias → id canónico en `TECHNOLOGY_ALIASES`. Los `id` van **en
 minúsculas** (invariante del DNA).
 
-Reparto por categoría: frontend 14 · backend 11 · languages 13 · mobile 7 · databases 12 · cloud 8 ·
-devops 9 · api 6 · testing 7 · architecture 5 (incluye la teoría).
+Reparto por categoría: frontend 14 · backend 21 · mobile 10 · databases 12 · cloud 8 · devops 9 · api 6 ·
+testing 7 · architecture 5 (incluye la teoría). **No hay categoría "Lenguajes"** (2026-10-29): cada lenguaje vive
+en el subgrupo de su ecosistema para que no aparezca dos veces (Python en Backend → Python junto a Django/FastAPI,
+Kotlin en Móvil → Nativo Android, Swift en Nativo iOS, Dart en Multiplataforma; JS/TS en Frontend → Base web).
 
 **Subgrupos (2026-10-29):** cada tecnología tiene un `group` dentro de su categoría y el selector del perfil
-los muestra separados: backend por lenguaje (Node, Python, Java/Kotlin, C#, PHP, Ruby, Go), bases de datos en
+los muestra separados: backend por lenguaje (Node, Python, JVM, C#, PHP, Ruby, Go, sistemas), bases de datos en
 SQL / NoSQL / caché y búsqueda, cloud por proveedor y servicio (AWS fundamentos / serverless / contenedores,
 Azure, Google Cloud, Firebase), móvil en nativo Android / nativo iOS / multiplataforma, etc.
 
@@ -197,7 +199,7 @@ vacíos. Tope 100 repos; 12 archivos descargados por repo, de los que **8** entr
 eligen **repartidos entre lenguajes** (round-robin), priorizando los de más código dentro de cada uno.
 
 **Parseo:** `EXTENSION_MAP` cubre ~40 extensiones → **21 gramáticas**: ts, tsx, js, c, cpp, python, java,
-kotlin, scala, c_sharp, go, php, rust, ruby, swift, dart, bash, hcl, elixir, lua, solidity.
+kotlin, scala, csharp, go, php, rust, ruby, swift, dart, bash, hcl, elixir, lua, solidity.
 
 **Analyzers** (puros, sobre el IR): `complexity`, `coupling`, `dead-code` (**devuelve `null` a propósito:
 no está implementado**), `testing`, `documentation`. El **skill mapper** produce
@@ -351,8 +353,8 @@ bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.j
 
 ### 🟡 Menores
 
-- `scripts/verify-roadmap-engine.ts` **no es un gate**: las violaciones imprimen ❌ pero el proceso sale con
-  código 0. Además una de sus aserciones ya está obsoleta.
+- ✅ (2026-10-29) `scripts/verify-roadmap-engine.ts` es un gate (`npm run verify:roadmap`, en CI): sale con 1 si
+  una invariante falla. La aserción obsoleta de precisión ("con GitHub → high") se cambió por la regla real del 30 %.
 - 4 skills del catálogo (`backup-recovery`, `javascript-es6`, `networking-basics`,
   `responsive-mobile-design`) **no aparecen en ninguna ruta**: solo son alcanzables como prerequisitos.
 - `user_roadmaps` es la **única colección escribible por el cliente sin ningún consumidor**.

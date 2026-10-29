@@ -88,7 +88,7 @@ Colecciones de **confianza**, escritas/leídas SOLO por el Admin SDK (reglas `re
   timeLimitMinutes, expiresAt (ms), expireAt (Timestamp, para TTL), createdAt }`. Sesión de una simulación;
   guarda la clave de respuestas. Se borra al enviar (`/api/line/submit`). Si el envío llega después de
   `expiresAt` + 90 s, se rechaza (`410 session_expired`) y el intento queda como `expired`.
-- `line_seen/{uid}_{repertorio}`: `{ uid, poolKey, fingerprints[], updatedAt }`. Huellas (sha1 del enunciado)
+- `line_seen/{uid}_{repertorio}`: `{ uid, poolKey, fingerprints[], updatedAt }`. Huellas (sha256 del enunciado, 16 hex; sha1 hasta 2026-10-29)
   de las últimas 150 preguntas que vio el usuario en ese repertorio, de la más antigua a la más reciente.
   `/api/line/start` prioriza las no vistas. Server-only.
 - `job_answer_keys`: `{ jobId, questions (con clave), covered, missing, source: "bank", updatedAt }`. Repertorio

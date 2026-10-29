@@ -650,10 +650,14 @@ const SidebarMenuSkeleton = React.forwardRef<
     showIcon?: boolean
   }
 >(({ className, showIcon = false, ...props }, ref) => {
-  // Random width between 50 to 90%.
+  // Ancho entre 50 y 90 %, distinto por skeleton pero DETERMINISTA: sale del id que React asigna
+  // igual en servidor y cliente. Con Math.random el HTML del servidor y el del cliente no
+  // coincidían (aviso de hidratación) y Sonar lo marcaba como generador pseudoaleatorio.
+  const id = React.useId()
   const width = React.useMemo(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%` // NOSONAR typescript:S2245 — ancho decorativo del skeleton
-  }, [])
+    const hash = [...id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 9973, 7)
+    return `${50 + (hash % 41)}%`
+  }, [id])
 
   return (
     <div

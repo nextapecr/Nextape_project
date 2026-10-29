@@ -38,7 +38,7 @@ const LANGUAGE_EXTENSIONS: Record<string, string[]> = {
   java: ['.java'],
   kotlin: ['.kt', '.kts'],
   scala: ['.scala'],
-  c_sharp: ['.cs'],
+  csharp: ['.cs'], // nombre descargable; `c_sharp` solo funciona como alias si ya está en caché
   go: ['.go', '.golang'],
   php: ['.php'],
   rust: ['.rs'],

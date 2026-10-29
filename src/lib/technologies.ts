@@ -17,7 +17,6 @@
 export const TECH_CATEGORIES = [
   "frontend",
   "backend",
-  "languages",
   "mobile",
   "databases",
   "cloud",
@@ -32,8 +31,7 @@ export type TechCategory = (typeof TECH_CATEGORIES)[number];
 /** Etiqueta legible de cada categoría, para agrupar el selector. */
 export const CATEGORY_LABELS: Record<TechCategory, string> = {
   frontend: "Frontend",
-  backend: "Backend y frameworks",
-  languages: "Lenguajes",
+  backend: "Backend (lenguajes y frameworks)",
   mobile: "Móvil",
   databases: "Bases de datos",
   cloud: "Cloud",
@@ -71,7 +69,7 @@ const CATALOG: Record<TechCategory, Record<string, Record<string, string>>> = {
       nuxt: "Nuxt",
       svelte: "Svelte",
     },
-    "Lenguajes y estándares web": {
+    "Base web (JS, TS, HTML)": {
       javascript: "JavaScript",
       typescript: "TypeScript",
       html: "HTML y accesibilidad",
@@ -95,59 +93,51 @@ const CATALOG: Record<TechCategory, Record<string, Record<string, string>>> = {
       nestjs: "NestJS",
     },
     "Python": {
+      python: "Python (lenguaje)",
       django: "Django",
       fastapi: "FastAPI",
       flask: "Flask",
     },
-    "Java / Kotlin": {
+    "JVM (Java, Scala)": {
+      java: "Java (lenguaje)",
+      scala: "Scala (lenguaje)",
       spring: "Spring",
     },
     "C# / .NET": {
+      dotnet: "C# / .NET (lenguaje)",
       "asp.net": "ASP.NET Core",
     },
     "PHP": {
+      php: "PHP (lenguaje)",
       laravel: "Laravel",
     },
     "Ruby": {
+      ruby: "Ruby (lenguaje)",
       rails: "Ruby on Rails",
     },
     "Go": {
+      go: "Go (lenguaje)",
       gin: "Gin",
     },
-  },
-  languages: {
-    "Propósito general y scripting": {
-      python: "Python",
-      php: "PHP",
-      ruby: "Ruby",
-    },
-    "JVM y .NET": {
-      java: "Java",
-      kotlin: "Kotlin",
-      scala: "Scala",
-      dotnet: "C# / .NET",
-    },
-    "Sistemas": {
-      go: "Go",
-      rust: "Rust",
+    "Sistemas (C, C++, Rust)": {
       c: "C",
       "c++": "C++",
-    },
-    "Móvil": {
-      swift: "Swift",
-      dart: "Dart",
+      rust: "Rust",
     },
   },
   mobile: {
     "Nativo Android": {
+      kotlin: "Kotlin (lenguaje)",
       android: "Android (SDK, ciclo de vida)",
       "jetpack-compose": "Jetpack Compose",
     },
     "Nativo iOS": {
+      swift: "Swift (lenguaje)",
       ios: "iOS (UIKit, ciclo de vida)",
       swiftui: "SwiftUI",
     },
     "Multiplataforma": {
+      dart: "Dart (lenguaje)",
       flutter: "Flutter",
       "react native": "React Native",
       "kotlin-multiplatform": "Kotlin Multiplatform",

@@ -34,6 +34,10 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Invariantes del roadmap
+        # Usa el catálogo del repo (scripts/data/skill-catalog.json): no necesita credenciales.
+        run: npm run verify:roadmap
+
       - name: Build
         run: npm run build
         env:

@@ -308,9 +308,10 @@ Lo más relevante:
   ahora prueba `src/lib/server/github-revoke.ts`, la lógica real extraída del handler.
 - **Deprecaciones:** `React.ElementRef` → `ComponentRef`; icono `Github` de lucide → `GithubIcon` (simple-icons).
 
-Revisados como seguros y marcados con `// NOSONAR <regla> — motivo` (SonarQube los respeta; el plugin de
-ESLint no): sha1 de huella de pregunta (`line-policy.ts`), `Math.random` decorativo y de ids de log, y
-literales `http://`/`javascript:` en tests que prueban justamente su manejo.
+Hotspots: el sha1 de la huella de pregunta pasó a sha256 y los `Math.random` (ancho del skeleton e id de
+log) se cambiaron por un valor determinista y por `randomUUID` (2026-10-29). Quedan marcados con
+`// NOSONAR <regla> — motivo` solo los literales `http://`/`javascript:` de tests que prueban justamente su
+manejo y el tipo de retorno `Id | ""` de `oneOf` (el `""` es el valor vacío de los selects).
 
 ---
 

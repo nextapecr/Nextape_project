@@ -9,7 +9,8 @@ export default defineConfig({
   esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    // scripts/lib: lógica pura de los scripts de terminal, testeable sin Firestore.
+    include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
   },
   resolve: {
     alias: {

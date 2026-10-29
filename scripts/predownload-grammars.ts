@@ -11,14 +11,14 @@
  * Este script hace esa descarga UNA vez, antes del despliegue, contra el mismo `cacheDir` que
  * usa el parser en runtime.
  *
- * SIN EJECUTARLO el sistema sigue funcionando: 20 de los 21 lenguajes del mapa de extensiones
- * se resuelven individualmente. El único que no es C# (`c_sharp`), que solo está disponible en
- * el grupo "all"; sus archivos quedan sin analizar y el score de arquitectura sale `null` con
- * explicación explícita, que es el comportamiento correcto y ya implementado.
+ * SIN EJECUTARLO el sistema sigue funcionando: los 21 lenguajes del mapa de extensiones se
+ * descargan individualmente la primera vez que se piden. (Hasta 2026-10-29 C# fallaba: el mapa
+ * pedía `c_sharp`, que el pack solo resuelve como alias de una gramática ya cacheada; el nombre
+ * descargable es `csharp`. Se creía que solo estaba en el grupo "all".)
  *
  * Uso:
  *   npx tsx scripts/predownload-grammars.ts          # solo lo que falte del mapa
- *   npx tsx scripts/predownload-grammars.ts --all    # el grupo completo (incluye C#)
+ *   npx tsx scripts/predownload-grammars.ts --all    # el grupo completo (306 gramáticas)
  */
 
 import { tmpdir } from "node:os";
