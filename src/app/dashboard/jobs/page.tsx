@@ -44,7 +44,7 @@ export default function JobsPage() {
       }
     };
 
-    loadJobs();
+    void loadJobs(); // los errores se manejan dentro (try/catch)
   }, [user, authLoading]);
 
   const filteredJobs = jobs.filter(job =>

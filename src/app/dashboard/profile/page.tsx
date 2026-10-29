@@ -50,7 +50,7 @@ export default function ProfilePage() {
       }
     };
 
-    loadProfileData();
+    void loadProfileData(); // los errores se manejan dentro (try/catch)
   }, [user, authLoading]);
 
   const candidate = profile?.candidateProfile ? normalizeCandidateProfile(profile.candidateProfile) : null;

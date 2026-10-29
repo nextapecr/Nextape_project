@@ -41,7 +41,7 @@ echo ""
 
 git push -u origin migration
 
-if [ $? -eq 0 ]; then
+if [[ $? -eq 0 ]]; then
     echo "✅ Migración completada con éxito en la rama 'migration'."
 else
     echo "❌ Error en el push. Verifica que tu cuenta tenga permisos de escritura en el repo."

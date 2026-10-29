@@ -6,6 +6,14 @@
 import { config } from 'dotenv';
 config({ path: '.env.local' });
 
+/**
+ * Texto externo (respuesta de la API, argumentos) listo para el log: sin saltos de línea ni
+ * caracteres de control, para que no pueda falsificar líneas del log (log injection), y acotado.
+ */
+function forLog(value: unknown, max = 300): string {
+  return String(value).replace(/[\u0000-\u001f\u007f]+/g, " ").slice(0, max);
+}
+
 async function listModels() {
   const apiKey = process.env.GROQ_API_KEY;
   
@@ -37,19 +45,22 @@ async function listModels() {
     console.log();
     
     for (const model of data.data) {
-      console.log(`  📦 ${model.id}`);
-      if (model.owned_by) console.log(`     Owner: ${model.owned_by}`);
+      console.log(`  📦 ${forLog(model.id)}`);
+      if (model.owned_by) console.log(`     Owner: ${forLog(model.owned_by)}`);
       console.log();
     }
     
     console.log('═'.repeat(80));
-    console.log(`Total: ${data.data.length} modelos`);
+    console.log(`Total: ${Number(data.data.length)} modelos`);
     
-  } catch (err: any) {
+  } catch (err) {
     console.error('❌ Error al listar modelos:');
-    console.error(`   ${err.message || err}`);
+    console.error(`   ${forLog(err instanceof Error ? err.message : err)}`);
     process.exit(1);
   }
 }
 
-listModels();
+listModels().catch((err) => {
+  console.error(`❌ ${forLog(err instanceof Error ? err.message : err)}`);
+  process.exit(1);
+});

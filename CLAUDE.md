@@ -11,7 +11,8 @@ Plataforma de **evaluación técnica con IA** que construye el "DNA técnico ver
 Roles: `developer` y `recruiter`.
 - **The LINE**: examen técnico **determinista**. Las preguntas se **precargan** con IA en
   `line_question_pools/{tech}_{nivel}` (`npm run seed:questions`); en runtime **NO se llama al modelo**,
-  solo se sortean. 55 tecnologías + teoría (`software-engineering`) × 3 niveles, 5 tipos de pregunta.
+  solo se sortean. 91 tecnologías (agrupadas por subgrupo) + teoría (`software-engineering`) × 3 niveles, 5 tipos
+  de pregunta, generadas por subtema (`src/lib/server/technology-topics.ts`).
   **Prueba combinada:** 70 % de las tecnologías del perfil (`users.lineTechnologies`, solo servidor, máx. 6)
   + 30 % teoría, al nivel declarado. Quitar una tecnología borra sus puntos (`/api/profile/technologies`).
   **Es la única fuente del DNA.**
@@ -165,7 +166,7 @@ estado real (snapshot `main` @ `5e4beb7`, 2026-09-22). `thelineRAG` es hoy el mi
 `fix/system-hardening` quedó 29 commits atrás.
 
 Ya construido: capa de confianza en servidor (DNA/scoring), banco de preguntas precargado (5 tipos,
-55 tecnologías), **motor de GitHub** (AST con tree-sitter, 21 lenguajes), **roadmap determinista v2**
+91 tecnologías), **motor de GitHub** (AST con tree-sitter, 21 lenguajes), **roadmap determinista v2**
 (112 skills / 10 rutas), cierre del loop reclutador (`candidate_matches`), rate limiting y CI.
 
 **Estado verificado (2026-10-28, rama `test-vernon`, Linux + Node 22 como CI):** `typecheck` limpio ·
@@ -174,7 +175,7 @@ lo arranca**) · `build` OK con Next.js 15.5.27. En Windows, `typecheck` puede f
 `tree-sitter` no se instalaron; en CI pasa. Auditoría SonarJS (2026-10-28): ver `docs/SONARQUBE_SETUP.md` §Última auditoría.
 
 **Pendiente destacado** (detalle en [`docs/CONTEXT.md`](./docs/CONTEXT.md) §9 y [`docs/TECH_DEBT.md`](./docs/TECH_DEBT.md)):
-- ✅ Roadmap y The LINE conectados (`src/lib/skill-technology-map.ts`): 62 de 112 skills del catálogo se miden
+- ✅ Roadmap y The LINE conectados (`src/lib/skill-technology-map.ts`): 67 de 112 skills del catálogo se miden
   con tecnologías de The LINE. Al añadir una skill o una tecnología, revisa ese mapa.
 - ✅ `.env.example` está completo y marca qué es obligatorio (incluida `TOKEN_ENCRYPTION_KEY` para GitHub).
 - 🟠 `jobs` valida campos server-only en `update` pero no en `create`. (`/api/line/start` ya tiene límite de

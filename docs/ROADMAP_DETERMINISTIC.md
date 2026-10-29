@@ -56,7 +56,7 @@ El **umbral objetivo** de cada skill es `SENIORITY_THRESHOLDS[route.toLevel]`.
 
 > **Antes de 2026-10** el paso 1 buscaba solo `dna[skill.id]`. Los ids del catálogo son habilidades
 > conceptuales y los del DNA son tecnologías, así que solo 2 de 112 coincidían y el roadmap casi no usaba The
-> LINE. El mapa conecta hoy 62 de 112; el resto no tiene ninguna tecnología de The LINE que lo mida.
+> LINE. El mapa conecta hoy 67 de 112; el resto no tiene ninguna tecnología de The LINE que lo mida.
 
 ### 3.4 Estado de cada skill
 
@@ -118,5 +118,5 @@ En la página (`src/app/dashboard/roadmap/page.tsx`), cada skill muestra de dón
 - **Cobertura del banco:** una skill solo se alimenta de The LINE si su tecnología tiene preguntas sembradas
   (`npm run inventory:pools`). Con los 13 bancos actuales, 20 skills del catálogo ya se alimentan; cada
   tecnología nueva que se siembre suma las suyas.
-- **Las skills sin tecnología relacionada** (accesibilidad, observabilidad, redes…) solo pueden medirse con
+- **Las skills sin tecnología relacionada** (redes, accesibilidad móvil…) solo pueden medirse con
   GitHub o por promedio de categoría.

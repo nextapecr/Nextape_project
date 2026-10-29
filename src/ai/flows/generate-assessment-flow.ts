@@ -26,6 +26,11 @@ const GenerateQuestionsInputSchema = z.object({
   type: z.enum(QUESTION_TYPES).default('multiple_choice'),
   /** Fuentes de referencia con las que anclar los escenarios. */
   sources: z.array(z.string()).optional(),
+  /**
+   * Subtemas concretos que deben cubrir las preguntas (uno por pregunta, en orden). Sin ellos el
+   * modelo repite preguntas genéricas de la tecnología. Ver `src/lib/server/technology-topics.ts`.
+   */
+  topics: z.array(z.string()).optional(),
 });
 
 const BaseFields = {
@@ -223,12 +228,24 @@ Añade a cada pregunta un campo "source" con la URL de la lista que mejor respal
 `
       : '';
 
+    const topics = input.topics ?? [];
+    const topicsBlock = topics.length
+      ? `
+SUBTEMAS OBLIGATORIOS — la pregunta N trata el subtema N de esta lista (uno distinto por pregunta):
+${topics.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+
+Cada pregunta debe ser ESPECÍFICA de su subtema: una API, un comportamiento documentado, un modo de
+fallo o una decisión de diseño concreta de ${stack}. Prohibido lo genérico ("¿qué es X?", "¿para qué
+sirve X?") y lo que valdría igual para cualquier otra tecnología.
+`
+      : '';
+
     const prompt = `Eres un Arquitecto de Software Senior en NEXTAPE que evalúa a candidatos de élite.
 
 Responde ÚNICAMENTE con un objeto JSON válido. Sin markdown, sin texto adicional, solo JSON.
 
 Genera EXACTAMENTE ${count} desafíos técnicos de nivel ${input.level} centrados en: ${stack}.
-${sourcesBlock}
+${topicsBlock}${sourcesBlock}
 Estructura EXACTA del JSON:
 {
   "questions": [

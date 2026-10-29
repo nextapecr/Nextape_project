@@ -49,7 +49,7 @@ import {
 import type { Question } from "@/types/question.types";
 
 const COLLECTION = "line_question_pools";
-const GENERATOR = "seed-question-bank@v1";
+const GENERATOR = "seed-question-bank@v2"; // v2: preguntas por subtema (technology-topics.ts)
 
 /* ────────────────────────────────── Argumentos ────────────────────────────────── */
 
@@ -275,16 +275,16 @@ async function main() {
 
       console.log(`${progress} 🤖 ${target.docId} — generando (${target.label}, ${target.level})...`);
 
-      const generate = (): Promise<Question[]> =>
+      const generate = (round: number): Promise<Question[]> =>
         target.kind === "technology"
-          ? buildTechnologyPool({ technology: target.key, level: target.level })
+          ? buildTechnologyPool({ technology: target.key, level: target.level, round })
           : buildQuestionPool({ stack: SPECIALTY_STACKS[target.key], level: target.level });
 
       let questions: Question[] = opts.topUp ? existing : [];
       const rounds = opts.topUp ? TOP_UP_MAX_ROUNDS : 1;
       for (let round = 0; round < rounds && questions.length < goal; round++) {
         const before = questions.length;
-        questions = dedupeQuestions([...questions, ...(await generate())]);
+        questions = dedupeQuestions([...questions, ...(await generate(round))]);
         if (questions.length === before) break; // el proveedor no aporta nada nuevo
       }
       // Ids consecutivos: cada lote generado numera desde 0.

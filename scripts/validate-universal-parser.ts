@@ -168,4 +168,7 @@ async function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error("❌ Error fatal:", err);
+  process.exit(1);
+});

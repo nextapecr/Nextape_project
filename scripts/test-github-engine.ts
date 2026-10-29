@@ -93,6 +93,11 @@ async function testAIFlow() {
   console.log(JSON.stringify(feedback, null, 2));
 }
 
-testAIFlow().then(() => {
-  console.log('\n✅ Todos los tests del GitHub Engine completados con éxito.');
-});
+testAIFlow()
+  .then(() => {
+    console.log('\n✅ Todos los tests del GitHub Engine completados con éxito.');
+  })
+  .catch((err) => {
+    console.error('❌ Error fatal:', err);
+    process.exit(1);
+  });

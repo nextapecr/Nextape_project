@@ -14,8 +14,8 @@ import { canonicalSkillKey, findTechnology } from "@/lib/technologies";
  *
  * Este mapa dice, para cada skill del catálogo, qué tecnologías de The LINE la **evidencian**.
  * Criterio: solo relaciones claras (aprobar el examen de esa tecnología exige dominar esa
- * habilidad). Las skills sin ninguna tecnología que las mida (accesibilidad, observabilidad,
- * networking…) se dejan fuera a propósito: es más honesto "sin datos" que inventar una nota.
+ * habilidad). Las skills sin ninguna tecnología que las mida (networking, accesibilidad móvil…)
+ * se dejan fuera a propósito: es más honesto "sin datos" que inventar una nota.
  *
  * Cómo se usa la nota: la **mejor** de las tecnologías relacionadas que el usuario haya hecho.
  * Si demostró React o Next.js, demostró los fundamentos de React; no se le exige haber hecho
@@ -37,20 +37,20 @@ export const SKILL_TECHNOLOGY_MAP: Readonly<Record<string, readonly string[]>> =
   "async-patterns": ["node.js", "javascript", "typescript"],
   "responsive-design": ["css", "tailwind"],
   "responsive-mobile-design": ["flutter", "react native"],
-  "mobile-language-fundamentals": ["kotlin", "swift"],
-  "mobile-ui-basics": ["android", "ios", "flutter", "react native"],
+  "mobile-language-fundamentals": ["kotlin", "swift", "dart"],
+  "mobile-ui-basics": ["android", "ios", "flutter", "react native", "jetpack-compose", "swiftui"],
   "mobile-lifecycle": ["android", "ios"],
   "async-programming-mobile": ["kotlin", "swift"],
   "native-features-advanced": ["android", "ios"],
 
   // ── Arquitectura ──
   "component-architecture": ["react", "angular", "vue", "svelte"],
-  "state-management": ["react", "angular", "vue", "svelte"],
+  "state-management": ["react", "angular", "vue", "svelte", "redux", "tanstack-query"],
   "nextjs-ssr": ["nextjs"],
   "system-design": ["architecture", "microservices"],
   "distributed-systems": ["microservices", "architecture"],
-  "event-driven-architecture": ["microservices"],
-  "mobile-state-management": ["flutter", "react native"],
+  "event-driven-architecture": ["microservices", "kafka", "rabbitmq"],
+  "mobile-state-management": ["flutter", "react native", "jetpack-compose", "swiftui"],
   "mobile-architecture-advanced": ["android", "ios"],
   "multi-cloud-architecture": ["aws", "azure", "gcp"],
   "platform-engineering": ["kubernetes", "terraform"],
@@ -60,12 +60,18 @@ export const SKILL_TECHNOLOGY_MAP: Readonly<Record<string, readonly string[]>> =
   "kubernetes-basics": ["kubernetes"],
   "kubernetes-advanced": ["kubernetes"],
   terraform: ["terraform"],
-  "cloud-fundamentals": ["aws", "azure", "gcp"],
+  "cloud-fundamentals": ["aws", "azure", "gcp", "firebase"],
   "cloud-storage": ["aws", "azure", "gcp"],
   "caching-strategies": ["redis"],
+  // Habilidades que antes no tenía ninguna tecnología de The LINE (2026-10-29).
+  "accessibility-wcag": ["html"],
+  "linux-fundamentals": ["linux"],
+  "message-queues": ["kafka", "rabbitmq", "aws-serverless"],
+  observability: ["observability"],
+  "monitoring-infrastructure": ["observability"],
 
   // ── Testing ──
-  "unit-testing": ["testing", "jest", "vitest"],
+  "unit-testing": ["testing", "jest", "vitest", "pytest", "junit"],
   "component-testing": ["testing", "jest", "vitest"],
   "integration-testing": ["testing"],
   "e2e-testing": ["playwright", "cypress"],
@@ -81,11 +87,11 @@ export const SKILL_TECHNOLOGY_MAP: Readonly<Record<string, readonly string[]>> =
 
   // ── Herramientas y prácticas ──
   "git-fundamentals": ["git"],
-  "ci-cd-pipelines": ["ci-cd"],
+  "ci-cd-pipelines": ["ci-cd", "github-actions"],
   "ci-cd-advanced": ["ci-cd"],
   gitops: ["ci-cd"],
   "react-routing": ["react", "nextjs"],
-  "frontend-performance": ["react", "nextjs", "angular", "vue"],
+  "frontend-performance": ["react", "nextjs", "angular", "vue", "web-performance"],
   "css-modules": ["css"],
   "error-boundaries": ["react", "nextjs"],
   "form-validation": ["react", "angular", "vue"],
@@ -94,12 +100,12 @@ export const SKILL_TECHNOLOGY_MAP: Readonly<Record<string, readonly string[]>> =
 
   // ── Bases de datos ──
   postgresql: ["postgresql"],
-  "sql-fundamentals": ["postgresql", "mysql", "sqlserver"],
-  "database-performance": ["postgresql", "mysql", "sqlserver", "mongodb", "elasticsearch"],
+  "sql-fundamentals": ["sql", "postgresql", "mysql", "sqlserver", "oracle", "sqlite"],
+  "database-performance": ["sql", "postgresql", "mysql", "sqlserver", "oracle", "mongodb", "elasticsearch"],
   "orm-basics": ["django", "laravel", "spring", "asp.net", "nestjs"],
 
   // ── Seguridad ──
-  "auth-jwt": ["security", "express", "nestjs"],
+  "auth-jwt": ["auth", "security", "express", "nestjs"],
   "basic-security": ["security"],
   "basic-security-infra": ["security"],
   "web-security-frontend": ["security"],

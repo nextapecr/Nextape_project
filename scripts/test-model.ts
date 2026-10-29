@@ -2,6 +2,14 @@
 import { config } from 'dotenv';
 config({ path: '.env.local' });
 
+/**
+ * Texto externo (respuesta de la API, argumentos) listo para el log: sin saltos de línea ni
+ * caracteres de control, para que no pueda falsificar líneas del log (log injection), y acotado.
+ */
+function forLog(value: unknown, max = 300): string {
+  return String(value).replace(/[\u0000-\u001f\u007f]+/g, " ").slice(0, max);
+}
+
 const modelToTest = process.argv[2] || 'gemma2-9b';
 
 async function test() {
@@ -20,12 +28,15 @@ async function test() {
 
   if (!response.ok) {
     const error = await response.text();
-    console.error(`❌ ${modelToTest}: ${response.status} - ${error}`);
+    console.error(`❌ ${forLog(modelToTest)}: ${response.status} - ${forLog(error)}`);
     process.exit(1);
   }
 
   const data = await response.json();
-  console.log(`✅ ${modelToTest}: ${data.choices[0].message.content}`);
+  console.log(`✅ ${forLog(modelToTest)}: ${forLog(data.choices?.[0]?.message?.content)}`);
 }
 
-test();
+test().catch((err) => {
+  console.error(`❌ ${forLog(err instanceof Error ? err.message : err)}`);
+  process.exit(1);
+});

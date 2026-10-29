@@ -152,6 +152,11 @@ const TECHNOLOGY_SOURCES: Record<string, string[]> = {
   css: ["https://developer.mozilla.org/en-US/docs/Web/CSS"],
   tailwind: ["https://developer.mozilla.org/en-US/docs/Web/CSS"],
   typescript: ["https://www.typescriptlang.org/docs"],
+  nuxt: ["https://nuxt.com/docs", "https://vuejs.org/guide"],
+  html: ["https://developer.mozilla.org/en-US/docs/Web/HTML", "https://www.w3.org/WAI/standards-guidelines/wcag"],
+  redux: ["https://redux.js.org", "https://redux-toolkit.js.org"],
+  "tanstack-query": ["https://tanstack.com/query/latest/docs"],
+  "web-performance": ["https://web.dev/articles/vitals", "https://developer.mozilla.org/en-US/docs/Web/Performance"],
   ts: ["https://www.typescriptlang.org/docs"],
 
   // Backend
@@ -165,6 +170,9 @@ const TECHNOLOGY_SOURCES: Record<string, string[]> = {
   laravel: ["https://laravel.com/docs", "https://www.php.net/docs.php"],
   "asp.net": ["https://learn.microsoft.com/aspnet/core"],
   spring: ["https://docs.spring.io", "https://docs.oracle.com/en/java"],
+  flask: ["https://flask.palletsprojects.com", "https://docs.python.org/3"],
+  rails: ["https://guides.rubyonrails.org", "https://www.ruby-lang.org/en/documentation"],
+  gin: ["https://gin-gonic.com/docs", "https://go.dev/doc"],
 
   // Lenguajes
   python: ["https://docs.python.org/3"],
@@ -178,12 +186,19 @@ const TECHNOLOGY_SOURCES: Record<string, string[]> = {
   kotlin: ["https://kotlinlang.org/docs"],
   swift: ["https://developer.apple.com/documentation/swift"],
   "c++": ["https://en.cppreference.com"],
+  ruby: ["https://www.ruby-lang.org/en/documentation"],
+  scala: ["https://docs.scala-lang.org"],
+  c: ["https://en.cppreference.com/w/c"],
+  dart: ["https://dart.dev/guides"],
 
   // Móvil
   android: ["https://developer.android.com/docs", "https://kotlinlang.org/docs"],
   ios: ["https://developer.apple.com/documentation"],
   flutter: ["https://docs.flutter.dev"],
   "react native": ["https://reactnative.dev/docs/getting-started", "https://react.dev"],
+  "jetpack-compose": ["https://developer.android.com/develop/ui/compose/documentation"],
+  swiftui: ["https://developer.apple.com/documentation/swiftui"],
+  "kotlin-multiplatform": ["https://kotlinlang.org/docs/multiplatform.html"],
 
   // Datos
   postgresql: ["https://www.postgresql.org/docs"],
@@ -193,11 +208,26 @@ const TECHNOLOGY_SOURCES: Record<string, string[]> = {
   mongodb: ["https://www.mongodb.com/docs"],
   redis: ["https://redis.io/docs"],
   elasticsearch: ["https://www.elastic.co/guide"],
+  sql: ["https://www.postgresql.org/docs/current/sql.html", "https://use-the-index-luke.com"],
+  oracle: ["https://docs.oracle.com/en/database"],
+  sqlite: ["https://www.sqlite.org/docs.html"],
+  dynamodb: ["https://docs.aws.amazon.com/amazondynamodb"],
+  firestore: ["https://firebase.google.com/docs/firestore"],
+  cassandra: ["https://cassandra.apache.org/doc/latest"],
 
   // Cloud / DevOps
   aws: ["https://docs.aws.amazon.com"],
   azure: ["https://learn.microsoft.com/azure"],
   gcp: ["https://cloud.google.com/docs"],
+  "aws-serverless": ["https://docs.aws.amazon.com/lambda", "https://docs.aws.amazon.com/apigateway", "https://docs.aws.amazon.com/sqs"],
+  "aws-containers": ["https://docs.aws.amazon.com/ecs", "https://docs.aws.amazon.com/eks"],
+  "azure-functions": ["https://learn.microsoft.com/azure/azure-functions", "https://learn.microsoft.com/azure/app-service"],
+  "gcp-cloud-run": ["https://cloud.google.com/run/docs", "https://cloud.google.com/functions/docs"],
+  firebase: ["https://firebase.google.com/docs", "https://firebase.google.com/docs/rules"],
+  ansible: ["https://docs.ansible.com"],
+  "github-actions": ["https://docs.github.com/actions"],
+  linux: ["https://man7.org/linux/man-pages", "https://www.gnu.org/software/bash/manual"],
+  observability: ["https://opentelemetry.io/docs", "https://prometheus.io/docs", "https://sre.google/sre-book/monitoring-distributed-systems"],
   docker: ["https://docs.docker.com"],
   kubernetes: ["https://kubernetes.io/docs"],
   k8s: ["https://kubernetes.io/docs"],
@@ -211,12 +241,16 @@ const TECHNOLOGY_SOURCES: Record<string, string[]> = {
   rest: ["https://spec.openapis.org/oas/latest.html"],
   graphql: ["https://graphql.org/learn"],
   grpc: ["https://grpc.io/docs"],
+  websockets: ["https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API", "https://www.rfc-editor.org/rfc/rfc6455"],
+  kafka: ["https://kafka.apache.org/documentation"],
+  rabbitmq: ["https://www.rabbitmq.com/docs"],
 
   // Testing
   jest: ["https://jestjs.io/docs"],
   vitest: ["https://vitest.dev/guide"],
   playwright: ["https://playwright.dev/docs"],
   cypress: ["https://docs.cypress.io"],
+  pytest: ["https://docs.pytest.org"],
   junit: ["https://junit.org/junit5/docs/current/user-guide"],
   testing: SOURCE_CATALOG.testing,
 
@@ -225,6 +259,7 @@ const TECHNOLOGY_SOURCES: Record<string, string[]> = {
   seguridad: SOURCE_CATALOG.security,
   owasp: ["https://owasp.org/www-project-top-ten", "https://cwe.mitre.org"],
   microservices: ["https://microservices.io", "https://martinfowler.com"],
+  auth: ["https://oauth.net/2", "https://www.rfc-editor.org/rfc/rfc7519", "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html"],
   // Teoría de ingeniería de software (SOLID, patrones, arquitectura, clean code).
   "software-engineering": [
     "https://refactoring.guru/design-patterns",
@@ -263,8 +298,10 @@ export function resolveSourcesForSkill(skill: string, max = 4): string[] {
   const exact = TECHNOLOGY_SOURCES[key];
   if (exact) return dedupe([...exact, ...UNIVERSAL_SOURCES]).slice(0, max);
 
+  // Coincidencia parcial solo con claves de 3+ letras: con "c" (lenguaje C) o "go", cualquier
+  // texto que contenga esa letra caía en sus fuentes ("brainfuck" → C).
   const partialKey = Object.keys(TECHNOLOGY_SOURCES).find(
-    (k) => key.includes(k) || k.includes(key)
+    (k) => k.length >= 3 && key.length >= 3 && (key.includes(k) || k.includes(key))
   );
   if (partialKey) {
     return dedupe([...TECHNOLOGY_SOURCES[partialKey], ...UNIVERSAL_SOURCES]).slice(0, max);

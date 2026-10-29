@@ -83,7 +83,7 @@ function parseSkillWeights(content: string): Record<string, number> {
     if (inBlock && line.includes(":") && line.includes("0.")) {
       const match = /["']([a-z-]+)["']:\s*(0\.\d+)/.exec(line);
       if (match) {
-        weights[match[1]] = parseFloat(match[2]);
+        weights[match[1]] = Number.parseFloat(match[2]);
       }
     }
   }

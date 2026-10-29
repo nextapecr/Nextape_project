@@ -86,7 +86,7 @@ export default function DashboardPage() {
       }
     };
 
-    loadDashboardData();
+    void loadDashboardData(); // los errores se manejan dentro (try/catch)
   }, [user, authLoading]);
 
   if (loading) {

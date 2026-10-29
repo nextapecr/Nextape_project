@@ -105,7 +105,7 @@ export default function ManageVacancyPage() {
       }
     };
 
-    load();
+    void load(); // los errores se manejan dentro (try/catch)
   }, [jobId, user, authLoading]);
 
   const handleSave = async (e: React.FormEvent) => {

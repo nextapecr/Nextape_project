@@ -100,13 +100,24 @@ en `line_question_pools/{tech}_{level}`; en runtime solo se **sortean**.
 **Esquema del repertorio:** `{key, kind, label, category, level, questions[] (CON clave), count,
 status: complete|incomplete, byType, generator, updatedAt}`. Regla: `read, write: if false`.
 
-**Catálogo:** **55 tecnologías + 1 banco de teoría** (`software-engineering`: SOLID, patrones, arquitectura) en
+**Catálogo:** **91 tecnologías + 1 banco de teoría** (`software-engineering`: SOLID, patrones, arquitectura) en
 `src/lib/technologies.ts`, 10 categorías × **3 niveles** (`junior|mid|senior`) + 3 stacks históricos =
-**177 combinaciones** (~4 425 preguntas).
-Alias → id canónico en `TECHNOLOGY_ALIASES` (40 entradas). Los `id` van **en minúsculas** (invariante del DNA).
+**279 combinaciones** (~7 000 preguntas). Alias → id canónico en `TECHNOLOGY_ALIASES`. Los `id` van **en
+minúsculas** (invariante del DNA).
 
-Reparto por categoría: frontend 9 · backend 8 · **languages 9** · mobile 4 · databases 6 · cloud 3 ·
-devops 5 · api 3 · testing 5 · architecture 4 (incluye la teoría).
+Reparto por categoría: frontend 14 · backend 11 · languages 13 · mobile 7 · databases 12 · cloud 8 ·
+devops 9 · api 6 · testing 7 · architecture 5 (incluye la teoría).
+
+**Subgrupos (2026-10-29):** cada tecnología tiene un `group` dentro de su categoría y el selector del perfil
+los muestra separados: backend por lenguaje (Node, Python, Java/Kotlin, C#, PHP, Ruby, Go), bases de datos en
+SQL / NoSQL / caché y búsqueda, cloud por proveedor y servicio (AWS fundamentos / serverless / contenedores,
+Azure, Google Cloud, Firebase), móvil en nativo Android / nativo iOS / multiplataforma, etc.
+
+**Subtemas (2026-10-29):** [`technology-topics.ts`](../src/lib/server/technology-topics.ts) define 6–12
+subtemas concretos por tecnología (p. ej. React → reconciliación y keys, limpieza de useEffect, Server
+Components…). El seed reparte los subtemas entre los 5 tipos de pregunta (cada pregunta trata uno), así el
+banco cubre la tecnología a lo ancho y prohíbe lo genérico. Los bancos sembrados antes (`generator:
+seed-question-bank@v1`) no los usan: para que mejoren hay que regenerarlos (`--force`) o ampliarlos (`--top-up`).
 
 **Los 5 tipos de pregunta** (`src/types/question.types.ts`):
 
@@ -312,7 +323,7 @@ bindings nativos **incompatibles con Workers**), `apphosting.yaml` y `firebase.j
 - **H1 — ✅ Resuelto (2026-10): los vocabularios de The LINE y del roadmap ya están conectados.** Antes el motor
   buscaba `dna[skill.id]` y los ids del catálogo (`react-fundamentals`) nunca coinciden con los del DNA (`react`):
   solo 2 de 112 skills coincidían. Ahora [`src/lib/skill-technology-map.ts`](../src/lib/skill-technology-map.ts)
-  dice qué tecnologías de The LINE evidencian cada skill (62 de 112 conectadas; el resto no tiene ninguna tecnología
+  dice qué tecnologías de The LINE evidencian cada skill (67 de 112 conectadas; el resto no tiene ninguna tecnología
   que la mida y queda como `unknown`). La nota es la **mejor** de las tecnologías relacionadas, y como el DNA está
   ponderado por nivel, un examen junior no da por dominada una skill avanzada. También resuelve alias (A10) y el
   botón "Practicar" lleva a la tecnología relacionada que tenga banco. Con los bancos de hoy (13 tecnologías),

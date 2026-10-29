@@ -50,7 +50,7 @@ export default function VacanciesPage() {
       }
     };
 
-    fetchVacancies();
+    void fetchVacancies(); // los errores se manejan dentro (try/catch)
   }, [user, authLoading]);
 
   if (loading) {

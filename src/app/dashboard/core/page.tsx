@@ -39,7 +39,7 @@ export default function CorePage() {
       }
     };
 
-    loadCoreData();
+    void loadCoreData(); // los errores se manejan dentro (try/catch)
   }, [user, authLoading]);
 
   if (loading) {

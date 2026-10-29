@@ -6,6 +6,15 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
 import { UserService } from "@/services/users.service";
 
+/** Espera a que exista `users/{uid}`: hasta `retries` reintentos cada `delayMs`. No lanza si no aparece. */
+async function waitForProfile(uid: string, retries = 5, delayMs = 500): Promise<void> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (await UserService.getUser(uid)) return;
+    if (attempt < retries) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  console.warn("Profile still missing after retries; letting the user in.");
+}
+
 export function AuthGuard({ children }: Readonly<{ children: React.ReactNode }>) {
   const [status, setStatus] = useState<"loading" | "authenticated" | "unauthenticated">("loading");
   const router = useRouter();
@@ -25,21 +34,11 @@ export function AuthGuard({ children }: Readonly<{ children: React.ReactNode }>)
         const profile = await UserService.getUser(user.uid);
         if (!profile && pathname.startsWith("/dashboard")) {
           console.warn("Profile not yet available in Firestore, waiting...");
-          // Si el usuario acaba de registrarse, el perfil puede tardar un segundo
-          let retryCount = 0;
-          const checkProfile = async () => {
-             const p = await UserService.getUser(user.uid);
-             if (p) {
-               setStatus("authenticated");
-             } else if (retryCount < 5) {
-               retryCount++;
-               setTimeout(checkProfile, 500);
-             } else {
-               // Si después de 5 reintentos no hay perfil, lo dejamos pasar pero avisamos
-               setStatus("authenticated");
-             }
-          };
-          checkProfile();
+          // Si el usuario acaba de registrarse, el perfil puede tardar un segundo. Pase lo que pase
+          // se le deja entrar; un fallo de red cae en el catch de abajo (antes quedaba como promesa
+          // rechazada sin manejar).
+          await waitForProfile(user.uid);
+          setStatus("authenticated");
         } else {
           setStatus("authenticated");
         }

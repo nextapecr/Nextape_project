@@ -8,7 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { CATEGORY_LABELS, THEORY_TECHNOLOGY_ID, findTechnology, technologiesByCategory } from "@/lib/technologies";
+import {
+  CATEGORY_LABELS,
+  THEORY_TECHNOLOGY_ID,
+  findTechnology,
+  groupTechnologies,
+  technologiesByCategory,
+  type Technology,
+} from "@/lib/technologies";
 import {
   AVAILABILITY,
   EDUCATION_LEVELS,
@@ -162,6 +169,18 @@ export function CandidateProfileForm({
   const groups = technologiesByCategory()
     .map((g) => ({ ...g, items: g.items.filter((t) => t.id !== THEORY_TECHNOLOGY_ID) }))
     .filter((g) => g.items.length > 0);
+  const techChip = (t: Technology) => (
+    <Chip
+      key={t.id}
+      selected={p.technologies.includes(t.id)}
+      onClick={() => set("technologies", toggleIn(p.technologies, t.id, LIMITS.technologies))}
+    >
+      {t.label}
+      {bankAvailable && !bankAvailable[t.id]?.length && (
+        <span className="text-[9px] font-bold uppercase tracking-widest opacity-60">· sin preguntas aún</span>
+      )}
+    </Chip>
+  );
   /** Quitadas respecto a lo guardado y que ya tienen nota: se borran del DNA al guardar. */
   const losing = savedTechnologies
     .filter((t) => !p.technologies.includes(t) && typeof dnaScores[t] === "number")
@@ -371,26 +390,25 @@ export function CandidateProfileForm({
                   </Chip>
                 ))}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {groups
-                  .flatMap((g) => g.items)
-                  .filter((t) => (techCategory ? t.category === techCategory : p.technologies.includes(t.id)))
-                  .map((t) => (
-                    <Chip
-                      key={t.id}
-                      selected={p.technologies.includes(t.id)}
-                      onClick={() => set("technologies", toggleIn(p.technologies, t.id, LIMITS.technologies))}
-                    >
-                      {t.label}
-                      {bankAvailable && !bankAvailable[t.id]?.length && (
-                        <span className="text-[9px] font-bold uppercase tracking-widest opacity-60">· sin preguntas aún</span>
-                      )}
-                    </Chip>
+              {techCategory ? (
+                // Dentro de cada categoría, por subgrupo: Backend → por lenguaje, Cloud → por
+                // proveedor, Bases de datos → SQL / NoSQL / caché y búsqueda…
+                <div className="space-y-4">
+                  {groupTechnologies(groups.find((g) => g.category === techCategory)?.items ?? []).map((sub) => (
+                    <div key={sub.group} className="space-y-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{sub.group}</p>
+                      <div className="flex flex-wrap gap-2">{sub.items.map(techChip)}</div>
+                    </div>
                   ))}
-                {!techCategory && p.technologies.length === 0 && (
-                  <p className="text-sm text-gray-400">Elige una categoría para ver sus tecnologías.</p>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {groups.flatMap((g) => g.items).filter((t) => p.technologies.includes(t.id)).map(techChip)}
+                  {p.technologies.length === 0 && (
+                    <p className="text-sm text-gray-400">Elige una categoría para ver sus tecnologías.</p>
+                  )}
+                </div>
+              )}
               {losing.length > 0 && (
                 <div role="alert" className="mt-3 bg-brand-red/5 text-brand-red rounded-2xl p-4 text-sm font-medium">
                   Al guardar se borrarán de tu DNA los puntos de{" "}

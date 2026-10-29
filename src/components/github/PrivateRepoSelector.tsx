@@ -69,7 +69,7 @@ export function PrivateRepoSelector({ uid, onSelectionUpdated }: Readonly<Privat
       }
     };
 
-    loadData();
+    void loadData(); // los errores se manejan dentro (try/catch)
 
     return () => {
       cancelled = true;

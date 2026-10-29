@@ -184,7 +184,7 @@ export function classifyGithubError(
  */
 function extractHttpStatus(message: string): number | undefined {
   const match = /\b(4\d{2}|5\d{2})\b/.exec(message);
-  return match ? parseInt(match[1], 10) : undefined;
+  return match ? Number.parseInt(match[1], 10) : undefined;
 }
 
 /**

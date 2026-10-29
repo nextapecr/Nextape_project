@@ -53,7 +53,7 @@ export default function CompatibilityPage() {
       setLoading(false);
       return;
     }
-    calculateLiveCompatibility();
+    void calculateLiveCompatibility(); // los errores se manejan dentro (try/catch)
   }, [user, authLoading, calculateLiveCompatibility]);
 
   if (loading) {

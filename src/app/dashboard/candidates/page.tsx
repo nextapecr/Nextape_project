@@ -45,7 +45,7 @@ export default function CandidatesPage() {
       }
     };
 
-    fetchData();
+    void fetchData(); // los errores se manejan dentro (try/catch)
   }, [user, authLoading]);
 
   if (loading) {

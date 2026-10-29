@@ -19,7 +19,11 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # Sin scripts de instalación: ningún paquete (ni una dependencia comprometida) ejecuta
+        # código al instalarse. Typecheck, lint y tests no necesitan los binarios nativos de
+        # tree-sitter (verificado 2026-10-29). Si un paso futuro los necesita, compilarlos
+        # aparte con `npm rebuild <paquete>`.
+        run: npm ci --ignore-scripts
 
       - name: Typecheck
         run: npm run typecheck

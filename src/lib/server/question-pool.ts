@@ -1,6 +1,7 @@
 import { generateQuestions } from "@/ai/flows/generate-assessment-flow";
 import { dedupeQuestions } from "./assessment";
 import { resolveSourcesForSkill } from "./sources";
+import { topicsFor, topicsForCall } from "./technology-topics";
 import type { Question, QuestionType } from "@/types/question.types";
 
 /**
@@ -87,6 +88,11 @@ export interface BuildTechnologyPoolInput {
   types?: QuestionType[];
   /** Preguntas por tipo. Por defecto `BANK_QUESTIONS_PER_TYPE`. */
   perType?: Partial<Record<QuestionType, number>>;
+  /**
+   * Ronda de generación (`--top-up` llama varias veces). Desplaza los subtemas para que cada ronda
+   * pida otros en vez de repetir los de la primera.
+   */
+  round?: number;
 }
 
 /**
@@ -103,23 +109,28 @@ export async function buildTechnologyPool({
   level,
   types = ALL_QUESTION_TYPES,
   perType,
+  round = 0,
 }: BuildTechnologyPoolInput): Promise<Question[]> {
   const skill = technology.trim().toLowerCase();
   if (!skill) return [];
 
   const sources = resolveSourcesForSkill(skill);
+  const allTopics = topicsFor(skill);
   const collected: Question[] = [];
 
   // En serie: el script puede recorrer cientos de combinaciones y disparar los cinco tipos a la
   // vez multiplicaría la presión sobre el límite de peticiones de Groq.
-  for (const type of types) {
+  for (const [typeIndex, type] of types.entries()) {
+    const count = perType?.[type] ?? BANK_QUESTIONS_PER_TYPE[type];
     try {
       const result = await generateQuestions({
         stack: [skill],
         level,
         type,
-        count: perType?.[type] ?? BANK_QUESTIONS_PER_TYPE[type],
+        count,
         sources,
+        // Cada tipo arranca en otro punto de la lista: entre los 5 tipos se cubren todos los subtemas.
+        topics: topicsForCall(allTopics, typeIndex + round * types.length, count),
       });
       collected.push(...(result.questions as Question[]));
     } catch (err) {
@@ -161,13 +172,14 @@ export async function buildQuestionPool({ stack, level }: BuildPoolInput): Promi
     const sources = resolveSourcesForSkill(skill);
 
     const batches = await Promise.all(
-      typesForSkill(index).map(async (type) => {
+      typesForSkill(index).map(async (type, typeIndex) => {
         try {
           const result = await generateQuestions({
             stack: [skill],
             level,
             type,
             count: QUESTIONS_PER_TYPE[type],
+            topics: topicsForCall(topicsFor(skill), typeIndex, QUESTIONS_PER_TYPE[type]),
             // Cada skill se ancla en sus fuentes de referencia (docs oficiales + material
             // transversal), para que los escenarios salgan de tecnología real y no genérica.
             sources,
