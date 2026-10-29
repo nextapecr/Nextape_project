@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import type { DocumentData } from "firebase-admin/firestore";
+import type { DocumentData, WriteBatch } from "firebase-admin/firestore";
 import { adminDb, verifyRequestUid } from "@/lib/firebase/admin";
 import {
   examSizeFor,
-  normalizeSimulationParams,
   normalizeStoredQuestions,
   LEVELS,
   pickRandomQuestions,
@@ -24,6 +23,13 @@ import {
 import { consumeRateLimit, rateLimitedResponse } from "@/lib/server/rate-limit";
 import { composeJobPoolFromBank, JOB_POOL_MIN_QUESTIONS } from "@/lib/server/job-pool";
 import { hasGithubEvidence } from "@/lib/server/github-evidence";
+import {
+  combinedPoolDocIds,
+  composeCombinedExam,
+  lineLevelFromSelfLevel,
+  MAX_LINE_TECHNOLOGIES,
+} from "@/lib/server/combined-exam";
+import { normalizeLineTechnologies } from "@/lib/line-technologies";
 import type { Question } from "@/types/question.types";
 
 // El Admin SDK requiere el runtime de Node (no Edge).
@@ -76,7 +82,12 @@ function readCoveredLevels(covered: unknown, fallback: string): Record<string, s
  * Variedad: se priorizan las preguntas que el usuario no ha visto (`line_seen`) y las opciones se
  * barajan en cada sesión.
  *
- * Body: { jobId?: string } | { technology?: string, specialty?: string, level?: string }
+ * Sin vacante = PRUEBA COMBINADA (2026-10): ~70 % de las tecnologías del perfil del candidato
+ * (`users.lineTechnologies`, server-only) + ~30 % de teoría de ingeniería de software, al nivel que
+ * declaró (`candidateProfile.selfLevel`). El candidato no elige tecnología ni nivel: si el body trae
+ * `technology`/`level`, se ignoran. Ver `src/lib/server/combined-exam.ts`.
+ *
+ * Body: { jobId?: string }
  * Auth: header `Authorization: Bearer <Firebase ID token>`.
  */
 export async function POST(req: NextRequest) {
@@ -90,154 +101,47 @@ export async function POST(req: NextRequest) {
     const githubSnap = await adminDb().collection("github_evidence").doc(uid).get();
     const withGithub = hasGithubEvidence(githubSnap.data());
 
-    let pool: Question[] = [];
-    let override: unknown;
-    let timeOverride: unknown;
-    /** Clave del repertorio, para recordar qué preguntas ya vio el usuario. */
-    let poolKey: string;
-    /** Límite de intentos: por vacante o por tecnología. */
-    let scope: string;
-    /** Nivel de las preguntas por skill (para ponderar el DNA). */
-    let skillLevels: Record<string, string> = {};
-    let level: string;
+    // Preguntas que el usuario ya vio, de la más antigua a la más reciente. En la prueba combinada
+    // la memoria es una sola para todas sus tecnologías (las huellas son por enunciado).
+    const seenKey = jobId ? `job_${jobId}` : "combined";
+    const seenRef = adminDb().collection("line_seen").doc(`${uid}_${seenKey}`);
+    const seen: string[] = (await seenRef.get()).data()?.fingerprints ?? [];
+    const ranks = seenRanks(Array.isArray(seen) ? seen : []);
+    const recency = (q: Question) => ranks.get(questionFingerprint(q));
 
-    if (jobId) {
-      const jobRef = adminDb().collection("jobs").doc(jobId);
-      const jobSnap = await jobRef.get();
-      if (!jobSnap.exists) return NextResponse.json({ error: "job_not_found" }, { status: 404 });
+    const prepared = jobId
+      ? await prepareJobExam(jobId)
+      : await prepareCombinedExam(uid, examSizeFor({ hasGithubEvidence: withGithub }), recency);
+    if (prepared instanceof NextResponse) return prepared;
+    const { level, poolKey, scope, skillLevels } = prepared;
 
-      const job = jobSnap.data()!;
-
-      if (job.active === false) {
-        return NextResponse.json({ error: "job_closed" }, { status: 409 });
-      }
-
-      // Sin skills la prueba no evalúa el puesto; sin dueño no hay empresa que reciba la candidatura.
-      if (!Array.isArray(job.requiredSkills) || job.requiredSkills.length === 0 || !job.createdBy) {
-        console.error(`[line/start] jobId=${jobId} incompleta (skills/createdBy). No evaluable.`);
-        return NextResponse.json({ error: "job_incomplete" }, { status: 409 });
-      }
-
-      override = job.examQuestionCount;
-      timeOverride = job.examTimeLimitMinutes;
-      level = normalizeLevel(job.level);
-      poolKey = `job_${jobId}`;
-      scope = attemptScope({ jobId });
-      const keyRef = adminDb().collection("job_answer_keys").doc(jobId);
-      const keyData = (await keyRef.get()).data();
-      pool = readPool(keyData);
-      skillLevels = readCoveredLevels(keyData?.covered, level);
-
-      if (pool.length === 0) {
-        // La vacante no tiene repertorio (se publicó antes de este cambio, o falló al publicarse):
-        // se compone ahora desde el banco. Rápido y sin IA, así que cabe en la petición.
-        const composed = await composeJobPoolFromBank(
-          adminDb(),
-          job.requiredSkills,
-          typeof job.level === "string" ? job.level : "senior",
-        );
-
-        if (composed.questions.length < JOB_POOL_MIN_QUESTIONS) {
-          console.error(
-            `[line/start] jobId=${jobId} sin banco suficiente (${composed.questions.length}). ` +
-              `Skills sin preguntas: ${composed.missing.join(", ") || "—"}`,
-          );
-          return NextResponse.json(
-            { error: "job_without_bank", missingSkills: composed.missing },
-            { status: 409 },
-          );
-        }
-
-        // Transacción: dos candidatos que empiezan a la vez comparten el mismo repertorio.
-        pool = await adminDb().runTransaction(async (tx) => {
-          const fresh = readPool((await tx.get(keyRef)).data());
-          if (fresh.length > 0) return fresh;
-          tx.set(keyRef, {
-            jobId,
-            questions: composed.questions,
-            covered: composed.covered,
-            missing: composed.missing,
-            source: "bank",
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-          tx.update(jobRef, {
-            assessmentReady: true,
-            assessmentPoolSize: composed.questions.length,
-            assessmentMissingSkills: composed.missing,
-          });
-          return composed.questions;
-        });
-        skillLevels = readCoveredLevels(composed.covered, level);
-      }
-    } else {
-      // Práctica general: repertorio PRECARGADO por tecnología y nivel. Solo se lee un documento.
-      const params = normalizeSimulationParams(body?.technology ?? body?.specialty, body?.level);
-      const subject = params.subject;
-      level = params.level;
-      poolKey = `${subject}_${level}`;
-      scope = attemptScope({ subject });
-      pool = readPool(
-        (await adminDb().collection("line_question_pools").doc(`${subject}_${level}`).get()).data(),
-      );
-
-      if (pool.length === 0) {
-        console.warn(`[line/start] banco sin precargar: ${subject}_${level}`);
-        return NextResponse.json({ error: "pool_not_seeded", subject, level }, { status: 503 });
-      }
-    }
-
-    if (pool.length === 0) {
+    if (!prepared.picked && prepared.pool.length === 0) {
       return NextResponse.json({ error: "no_questions" }, { status: 502 });
     }
 
-    const overrideSet = typeof override === "number" && Number.isInteger(override);
-    const examSize = examSizeFor({ hasGithubEvidence: withGithub, override });
+    const overrideSet = typeof prepared.override === "number" && Number.isInteger(prepared.override);
+    const examSize = examSizeFor({ hasGithubEvidence: withGithub, override: prepared.override });
 
     // Límite de intentos. Se consume AQUÍ, con el repertorio ya validado: un 503/409 anterior no
     // gasta el intento, pero abandonar una prueba empezada sí (si no, bastaría con abrirla para
     // ver las preguntas y salir).
-    const rule = attemptRule();
-    if (rule) {
-      const decision = await consumeRateLimit(adminDb(), scope, uid, rule);
-      if (!decision.allowed) return rateLimitedResponse(decision);
-    }
-
-    // Preguntas que el usuario ya vio en este repertorio, de la más antigua a la más reciente.
-    const seenRef = adminDb().collection("line_seen").doc(`${uid}_${poolKey}`);
-    const seen: string[] = (await seenRef.get()).data()?.fingerprints ?? [];
-    const ranks = seenRanks(Array.isArray(seen) ? seen : []);
+    const limited = await consumeAttempt(scope, uid);
+    if (limited) return limited;
 
     // Sorteo estratificado por skill y por tipo, priorizando lo no visto; y opciones barajadas.
-    const picked = pickRandomQuestions(pool, examSize, (q) => ranks.get(questionFingerprint(q)));
+    // (La prueba combinada ya viene sorteada de composeCombinedExam.)
+    const picked = prepared.picked ?? pickRandomQuestions(prepared.pool, examSize, recency);
     const questions = picked.map(shuffleQuestionOptions);
 
-    // Nivel por skill: en práctica, todas las preguntas son del nivel elegido.
-    for (const q of questions) {
-      const tag = String(q.tag || "general").toLowerCase();
-      if (!skillLevels[tag]) skillLevels[tag] = level;
-    }
+    fillDefaultLevels(questions, skillLevels, level);
 
-    const timeLimitMinutes = timeLimitMinutesFor(jobId ? timeOverride : undefined);
+    const timeLimitMinutes = timeLimitMinutesFor(prepared.timeOverride);
     const now = Date.now();
     const expiresAt = now + timeLimitMinutes * 60 * 1000;
 
-    // Limpieza: sesiones vencidas o abandonadas de ESTE usuario (la TTL de Firestore requiere
-    // facturación). Solo filtra por `userId` (índice simple, sin índice compuesto) y decide en
-    // memoria. Nunca toca una sesión que todavía se podría enviar.
-    const ownSessions = await adminDb()
-      .collection("line_sessions")
-      .where("userId", "==", uid)
-      .limit(SESSION_CLEANUP_SCAN_LIMIT)
-      .get();
-
     const sessionRef = adminDb().collection("line_sessions").doc();
     const batch = adminDb().batch();
-    ownSessions.forEach((doc) => {
-      const data = doc.data();
-      const createdAtMs =
-        typeof data.createdAt?.toMillis === "function" ? (data.createdAt.toMillis() as number) : null;
-      if (isSessionDisposable({ expiresAt: data.expiresAt, createdAtMs }, now)) batch.delete(doc.ref);
-    });
+    await deleteDisposableSessions(uid, now, batch);
     batch.set(sessionRef, {
       userId: uid,
       jobId: jobId ?? null,
@@ -265,6 +169,8 @@ export async function POST(req: NextRequest) {
       examSize: questions.length,
       githubCompensated: withGithub && !overrideSet,
       level,
+      // Prueba combinada: tecnologías del perfil que aún no tienen preguntas, y si hubo teoría.
+      ...(prepared.combinedInfo ?? {}),
       timeLimitMinutes,
       // El cliente cuenta con su propio reloj a partir de esto (no con `expiresAt`, que depende
       // de que los relojes coincidan).
@@ -273,5 +179,170 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[line/start] error:", err);
     return NextResponse.json({ error: "server_error" }, { status: 500 });
+  }
+}
+
+/** Lo que cada modo (vacante o prueba combinada) aporta antes de crear la sesión. */
+interface PreparedExam {
+  /** Repertorio del que se sortea (vacante). */
+  pool: Question[];
+  /** Preguntas ya sorteadas (prueba combinada). */
+  picked?: Question[];
+  /** Tamaño del examen fijado por el reclutador. */
+  override?: unknown;
+  /** Tiempo fijado por el reclutador; `undefined` = 30 min de práctica. */
+  timeOverride?: unknown;
+  /** Clave del repertorio, para recordar qué preguntas ya vio el usuario. */
+  poolKey: string;
+  /** Límite de intentos: por vacante o por la prueba combinada. */
+  scope: string;
+  /** Nivel de las preguntas por skill (para ponderar el DNA). */
+  skillLevels: Record<string, string>;
+  level: string;
+  combinedInfo?: { uncoveredTechnologies: string[]; theoryIncluded: boolean };
+}
+
+/** Vacante: valida que se pueda evaluar y lee (o compone) su repertorio. */
+async function prepareJobExam(jobId: string): Promise<PreparedExam | NextResponse> {
+  const jobRef = adminDb().collection("jobs").doc(jobId);
+  const jobSnap = await jobRef.get();
+  if (!jobSnap.exists) return NextResponse.json({ error: "job_not_found" }, { status: 404 });
+
+  const job = jobSnap.data()!;
+  if (job.active === false) {
+    return NextResponse.json({ error: "job_closed" }, { status: 409 });
+  }
+
+  // Sin skills la prueba no evalúa el puesto; sin dueño no hay empresa que reciba la candidatura.
+  if (!Array.isArray(job.requiredSkills) || job.requiredSkills.length === 0 || !job.createdBy) {
+    console.error(`[line/start] jobId=${jobId} incompleta (skills/createdBy). No evaluable.`);
+    return NextResponse.json({ error: "job_incomplete" }, { status: 409 });
+  }
+
+  const level = normalizeLevel(job.level);
+  const base = {
+    override: job.examQuestionCount,
+    timeOverride: job.examTimeLimitMinutes,
+    level,
+    poolKey: `job_${jobId}`,
+    scope: attemptScope({ jobId }),
+  };
+  const keyRef = adminDb().collection("job_answer_keys").doc(jobId);
+  const keyData = (await keyRef.get()).data();
+  const pool = readPool(keyData);
+  if (pool.length > 0) {
+    return { ...base, pool, skillLevels: readCoveredLevels(keyData?.covered, level) };
+  }
+
+  // La vacante no tiene repertorio (se publicó antes de este cambio, o falló al publicarse):
+  // se compone ahora desde el banco. Rápido y sin IA, así que cabe en la petición.
+  const composed = await composeJobPoolFromBank(
+    adminDb(),
+    job.requiredSkills,
+    typeof job.level === "string" ? job.level : "senior",
+  );
+
+  if (composed.questions.length < JOB_POOL_MIN_QUESTIONS) {
+    console.error(
+      `[line/start] jobId=${jobId} sin banco suficiente (${composed.questions.length}). ` +
+        `Skills sin preguntas: ${composed.missing.join(", ") || "—"}`,
+    );
+    return NextResponse.json({ error: "job_without_bank", missingSkills: composed.missing }, { status: 409 });
+  }
+
+  // Transacción: dos candidatos que empiezan a la vez comparten el mismo repertorio.
+  const shared = await adminDb().runTransaction(async (tx) => {
+    const fresh = readPool((await tx.get(keyRef)).data());
+    if (fresh.length > 0) return fresh;
+    tx.set(keyRef, {
+      jobId,
+      questions: composed.questions,
+      covered: composed.covered,
+      missing: composed.missing,
+      source: "bank",
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    tx.update(jobRef, {
+      assessmentReady: true,
+      assessmentPoolSize: composed.questions.length,
+      assessmentMissingSkills: composed.missing,
+    });
+    return composed.questions;
+  });
+  return { ...base, pool: shared, skillLevels: readCoveredLevels(composed.covered, level) };
+}
+
+/** Prueba combinada: tecnologías y nivel salen del perfil, no del body. */
+async function prepareCombinedExam(
+  uid: string,
+  examSize: number,
+  recency: (q: Question) => number | undefined,
+): Promise<PreparedExam | NextResponse> {
+  const userData = (await adminDb().collection("users").doc(uid).get()).data();
+  const technologies = normalizeLineTechnologies(userData?.lineTechnologies).slice(0, MAX_LINE_TECHNOLOGIES);
+  const level = lineLevelFromSelfLevel(userData?.candidateProfile?.selfLevel);
+
+  if (!level) return NextResponse.json({ error: "profile_incomplete" }, { status: 409 });
+  if (technologies.length === 0) return NextResponse.json({ error: "no_technologies" }, { status: 409 });
+
+  const refs = combinedPoolDocIds(technologies, level).map((id) =>
+    adminDb().collection("line_question_pools").doc(id),
+  );
+  const bank: Record<string, Question[]> = {};
+  for (const snap of await adminDb().getAll(...refs)) {
+    const questions = readPool(snap.data());
+    if (questions.length > 0) bank[snap.id] = questions;
+  }
+
+  const exam = composeCombinedExam({ technologies, level, bank, examSize, recency });
+  const uncovered = technologies.filter((t) => exam.coverage[t] === null);
+
+  if (exam.questions.length === 0) {
+    console.warn(`[line/start] prueba combinada sin banco: ${technologies.join(", ")} (${level})`);
+    return NextResponse.json({ error: "pool_not_seeded", missing: uncovered, level }, { status: 503 });
+  }
+  return {
+    pool: [],
+    picked: exam.questions,
+    level,
+    poolKey: "combined",
+    scope: attemptScope({ combined: true }),
+    skillLevels: exam.skillLevels,
+    combinedInfo: { uncoveredTechnologies: uncovered, theoryIncluded: exam.theoryLevel !== null },
+  };
+}
+
+/**
+ * Limpieza: sesiones vencidas o abandonadas de ESTE usuario (la TTL de Firestore requiere
+ * facturación). Solo filtra por `userId` (índice simple, sin índice compuesto) y decide en
+ * memoria. Nunca toca una sesión que todavía se podría enviar.
+ */
+async function deleteDisposableSessions(uid: string, now: number, batch: WriteBatch) {
+  const ownSessions = await adminDb()
+    .collection("line_sessions")
+    .where("userId", "==", uid)
+    .limit(SESSION_CLEANUP_SCAN_LIMIT)
+    .get();
+  for (const doc of ownSessions.docs) {
+    const data = doc.data();
+    const createdAtMs =
+      typeof data.createdAt?.toMillis === "function" ? (data.createdAt.toMillis() as number) : null;
+    if (isSessionDisposable({ expiresAt: data.expiresAt, createdAtMs }, now)) batch.delete(doc.ref);
+  }
+}
+
+/** Consume el intento del día; devuelve la respuesta 429 si ya no quedan. */
+async function consumeAttempt(scope: string, uid: string): Promise<NextResponse | null> {
+  const rule = attemptRule();
+  if (!rule) return null;
+  const decision = await consumeRateLimit(adminDb(), scope, uid, rule);
+  return decision.allowed ? null : rateLimitedResponse(decision);
+}
+
+/** Nivel por skill: lo que no trae nivel propio se pondera con el nivel de la prueba. */
+function fillDefaultLevels(questions: Question[], skillLevels: Record<string, string>, level: string) {
+  for (const q of questions) {
+    const tag = String(q.tag || "general").toLowerCase();
+    if (!skillLevels[tag]) skillLevels[tag] = level;
   }
 }

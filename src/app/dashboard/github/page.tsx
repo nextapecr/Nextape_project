@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Github, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { UserService } from "@/services/users.service";
 import { GithubEvidenceCard } from "@/components/github/GithubEvidenceCard";
@@ -41,7 +42,7 @@ export default function GithubPage() {
     <div className="space-y-12 max-w-4xl mx-auto">
       <header className="space-y-3">
         <div className="w-14 h-14 bg-black rounded-2xl flex items-center justify-center">
-          <Github className="h-7 w-7 text-white" />
+          <GithubIcon className="h-7 w-7 text-white" />
         </div>
         <h1 className="text-4xl font-bold tracking-tight text-black italic">GitHub.</h1>
         <p className="text-gray-500 font-medium text-sm max-w-xl">

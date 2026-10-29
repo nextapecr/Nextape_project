@@ -19,8 +19,7 @@
  * Este servicio solo hace lecturas de Firestore; no escribe datos verificados.
  */
 
-import { getDocById, queryCollection } from "@/lib/firebase/firestore";
-import { where } from "firebase/firestore";
+import { getDocById } from "@/lib/firebase/firestore";
 import { inferFromLevel } from "@/lib/roadmap-engine";
 import type { Skill, RoadmapRoute } from "@/types/roadmap.types";
 import type { UserSkills } from "@/types/user.types";

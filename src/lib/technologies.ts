@@ -126,7 +126,22 @@ export const TECHNOLOGIES: Technology[] = [
   { id: "microservices", label: "Microservicios", category: "architecture" },
   { id: "architecture", label: "Arquitectura de sistemas", category: "architecture" },
   { id: "security", label: "Seguridad (OWASP)", category: "architecture" },
+  // Teoría transversal: no es una tecnología que el candidato elija. Va en TODAS las pruebas
+  // combinadas de The LINE (30 %), sea cual sea su stack. Ver THEORY_TECHNOLOGY_ID.
+  { id: "software-engineering", label: "Ingeniería de software (SOLID, patrones, arquitectura)", category: "architecture" },
 ];
+
+/**
+ * Id del banco de teoría de ingeniería de software: principios SOLID, patrones de diseño, arquitectura
+ * (capas, hexagonal, microservicios vs. monolito), clean code, acoplamiento y cohesión, testing.
+ * Se siembra como cualquier otra tecnología (`npm run seed:questions -- --only=software-engineering`).
+ */
+export const THEORY_TECHNOLOGY_ID = "software-engineering";
+
+/** Tecnologías que el candidato puede elegir para que se le evalúen (todas menos la teoría). */
+export function selectableTechnologies(): Technology[] {
+  return TECHNOLOGIES.filter((t) => t.id !== THEORY_TECHNOLOGY_ID);
+}
 
 const BY_ID = new Map(TECHNOLOGIES.map((t) => [t.id, t]));
 
@@ -149,7 +164,7 @@ export function technologiesByCategory(): { category: TechCategory; items: Techn
  *
  * El id canónico es la clave bajo la que The LINE acredita el score en el DNA. Si una vacante pide
  * "Next.js" y la práctica guarda "nextjs", el match nunca los casaba: el candidato tenía el score
- * pero la vacante no lo veía. Resolver aquí mantiene una sola clave en todo el sistema.
+ * pero la vacante no lo veía. Resolver aquí mantiene una sola clave en el sistema entero.
  */
 const TECHNOLOGY_ALIASES: Record<string, string> = {
   "react.js": "react",

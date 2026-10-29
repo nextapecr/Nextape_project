@@ -9,7 +9,7 @@
  * ── Cómo se ejecuta ─────────────────────────────────────────────────────────────────────────
  *   npm run seed:questions -- --dry-run                    # plan y coste estimado, no escribe
  *   npm run seed:questions -- --category=frontend --yes    # genera una tanda
- *   npm run seed:questions -- --yes                        # todo el catálogo (tarda MUCHO)
+ *   npm run seed:questions -- --yes                        # el catálogo completo (tarda MUCHO)
  *   npm run seed:questions -- --top-up --target=50 --yes   # AMPLÍA lo existente hasta ~50 por combinación
  *
  * Requiere en `.env.local` (o el entorno):
@@ -196,12 +196,13 @@ function printPlan(targets: Target[], opts: Options) {
     `Tiempo aproximado                  : ~${Math.round((calls * (3000 + opts.delayMs)) / 60000)} min`
   );
   console.log(`Regenerar existentes               : ${opts.force ? "SÍ (--force)" : "no"}`);
-  console.log(`Ampliar existentes (--top-up)      : ${opts.topUp ? `sí, hasta ${opts.target}` : "no"}`);
+  const topUpText = opts.topUp ? `sí, hasta ${opts.target}` : "no";
+  console.log(`Ampliar existentes (--top-up)      : ${topUpText}`);
   console.log("─".repeat(60));
 
   const byCategory = new Map<string, number>();
   for (const t of targets) byCategory.set(t.category, (byCategory.get(t.category) ?? 0) + 1);
-  for (const [cat, n] of [...byCategory.entries()].sort()) {
+  for (const [cat, n] of [...byCategory.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     console.log(`  ${cat.padEnd(16)} ${n} combinaciones`);
   }
   console.log("");

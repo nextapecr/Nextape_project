@@ -42,44 +42,48 @@ export type GenerateGithubFeedbackOutput = z.infer<typeof GenerateGithubFeedback
  * Genera feedback determinístico a partir de los scores numéricos cuando la IA falla.
  * Construye un análisis estructurado basado en las métricas calculadas.
  */
-function generateDeterministicFeedback(input: GenerateGithubFeedbackInput): GenerateGithubFeedbackOutput {
-  const { architecture, testing, security, maintainability, documentation, overall, topWeaknesses } = input;
+/** Umbral a partir del cual una dimensión cuenta como fortaleza. */
+const STRENGTH_THRESHOLD = 70;
 
-  // Identificar áreas fuertes (score >= 70)
-  const strengths: string[] = [];
-  if (testing >= 70) strengths.push('Buenas prácticas de testing y CI detectadas');
-  if (documentation >= 70) strengths.push('Documentación clara y completa en el repositorio');
-  if (security !== null && security >= 70) strengths.push('Implementación sólida de patrones de seguridad');
-  if (maintainability !== null && maintainability >= 70) strengths.push('Código estructurado y mantenible');
-  if (architecture !== null && architecture >= 70) strengths.push('Arquitectura bien diseñada con bajo acoplamiento');
-
+function strengthsFrom(input: GenerateGithubFeedbackInput): string[] {
+  const { architecture, testing, security, maintainability, documentation, overall } = input;
+  const isStrong = (score: number | null) => score !== null && score >= STRENGTH_THRESHOLD;
+  const candidates: [number | null, string][] = [
+    [testing, 'Buenas prácticas de testing y CI detectadas'],
+    [documentation, 'Documentación clara y completa en el repositorio'],
+    [security, 'Implementación sólida de patrones de seguridad'],
+    [maintainability, 'Código estructurado y mantenible'],
+    [architecture, 'Arquitectura bien diseñada con bajo acoplamiento'],
+  ];
+  const strengths = candidates.filter(([score]) => isStrong(score)).map(([, text]) => text);
+  if (strengths.length > 0) return strengths;
   // Si no hay fortalezas evidentes, mencionar el overall
-  if (strengths.length === 0) {
-    if (overall >= 50) {
-      strengths.push('Fundamentos técnicos presentes en el código analizado');
-    } else {
-      strengths.push('Oportunidades de mejora identificadas en múltiples áreas');
-    }
-  }
+  return [
+    overall >= 50
+      ? 'Fundamentos técnicos presentes en el código analizado'
+      : 'Oportunidades de mejora identificadas en múltiples áreas',
+  ];
+}
 
-  // Áreas de mejora: usar topWeaknesses calculadas por el motor
-  const improvements = topWeaknesses.length > 0
-    ? topWeaknesses.slice(0, 3) // Máximo 3 mejoras principales
+function summaryFor(overall: number): string {
+  if (overall >= 75) {
+    return 'Perfil técnico sólido con buenas prácticas evidenciadas en el código. Las métricas muestran experiencia en múltiples áreas de desarrollo.';
+  }
+  if (overall >= 50) {
+    return 'Fundamentos técnicos adecuados con oportunidades claras de crecimiento. Se identifican áreas específicas para fortalecer competencias.';
+  }
+  return 'Perfil en desarrollo con potencial de mejora significativo. Se recomienda enfoque en las áreas prioritarias identificadas para fortalecer habilidades técnicas.';
+}
+
+function generateDeterministicFeedback(input: GenerateGithubFeedbackInput): GenerateGithubFeedbackOutput {
+  // Áreas de mejora: usar topWeaknesses calculadas por el motor (máximo 3)
+  const improvements = input.topWeaknesses.length > 0
+    ? input.topWeaknesses.slice(0, 3)
     : ['Ampliar cobertura de tests y documentación técnica', 'Reforzar patrones de arquitectura y seguridad'];
 
-  // Resumen basado en el overall
-  let feedback: string;
-  if (overall >= 75) {
-    feedback = 'Perfil técnico sólido con buenas prácticas evidenciadas en el código. Las métricas muestran experiencia en múltiples áreas de desarrollo.';
-  } else if (overall >= 50) {
-    feedback = 'Fundamentos técnicos adecuados con oportunidades claras de crecimiento. Se identifican áreas específicas para fortalecer competencias.';
-  } else {
-    feedback = 'Perfil en desarrollo con potencial de mejora significativo. Se recomienda enfoque en las áreas prioritarias identificadas para fortalecer habilidades técnicas.';
-  }
-
   return {
-    feedback,
-    strengths,
+    feedback: summaryFor(input.overall),
+    strengths: strengthsFrom(input),
     improvements,
     source: 'deterministic',
   };

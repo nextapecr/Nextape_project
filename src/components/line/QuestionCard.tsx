@@ -27,7 +27,7 @@ const TYPE_LABEL: Record<QuestionType, { label: string; icon: typeof Check }> = 
 };
 
 /** Etiqueta del tipo, para que el candidato sepa qué se le pide antes de responder. */
-export function QuestionTypeBadge({ type }: { type: QuestionType }) {
+export function QuestionTypeBadge({ type }: Readonly<{ type: QuestionType }>) {
   const { label, icon: Icon } = TYPE_LABEL[type];
   return (
     <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 text-white/70 rounded-full text-[9px] font-bold uppercase tracking-widest">
@@ -42,10 +42,10 @@ const optionButtonClass =
 export function QuestionCard({
   question,
   onAnswer,
-}: {
+}: Readonly<{
   question: PublicQuestion;
   onAnswer: (answer: Answer) => void;
-}) {
+}>) {
   switch (question.type) {
     case "multiple_choice":
       return <ChoiceOptions options={question.options} onPick={onAnswer} />;
@@ -92,10 +92,10 @@ export function QuestionCard({
 function ChoiceOptions({
   options,
   onPick,
-}: {
+}: Readonly<{
   options: string[];
   onPick: (index: number) => void;
-}) {
+}>) {
   return (
     <div className="grid grid-cols-1 gap-3">
       {options.map((opt, i) => (
@@ -116,10 +116,10 @@ function ChoiceOptions({
 function MultiSelect({
   options,
   onConfirm,
-}: {
+}: Readonly<{
   options: string[];
   onConfirm: (indexes: number[]) => void;
-}) {
+}>) {
   const [selected, setSelected] = useState<number[]>([]);
 
   const toggle = (i: number) =>
@@ -170,10 +170,10 @@ function MultiSelect({
 function Ordering({
   items,
   onConfirm,
-}: {
+}: Readonly<{
   items: string[];
   onConfirm: (order: number[]) => void;
-}) {
+}>) {
   /** Índices de `items` en el orden elegido por el candidato. */
   const [order, setOrder] = useState<number[]>([]);
 

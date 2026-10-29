@@ -32,6 +32,8 @@ import { apiPost } from "@/lib/api";
 import type { JobOpportunity } from "@/types/job.types";
 import { SkillPicker, normalizeJobSkills } from "@/components/vacancies/SkillPicker";
 
+const byText = (a: string, b: string) => a.localeCompare(b);
+
 /**
  * Gestión de una vacante publicada: editar sus datos, archivarla y regenerar su repertorio
  * de preguntas. Antes no existía — una vacante publicada era inmutable.
@@ -116,7 +118,7 @@ export default function ManageVacancyPage() {
         return;
       }
       const skillsChanged =
-        JSON.stringify([...skills].sort()) !== JSON.stringify(normalizeJobSkills(job?.requiredSkills).sort());
+        JSON.stringify([...skills].sort(byText)) !== JSON.stringify(normalizeJobSkills(job?.requiredSkills).sort(byText));
 
       await JobService.updateJob(jobId, {
         title: form.title,
@@ -255,11 +257,7 @@ export default function ManageVacancyPage() {
               <Terminal className="h-5 w-5 text-brand-blue" /> Prueba The LINE
             </h2>
             <p className="text-[11px] text-gray-400 font-medium">
-              {job.assessmentReady
-                ? `Repertorio de ${job.assessmentPoolSize ?? "?"} preguntas. Cada candidato responde ${
-                    job.examQuestionCount ? `${job.examQuestionCount}` : "10 si tiene GitHub analizado o 20 si no,"
-                  } sorteadas al azar, con ${job.examTimeLimitMinutes ?? 30} minutos para responder.`
-                : "Sin prueba todavía. Se compone con preguntas del banco para las habilidades de la vacante."}
+              {assessmentSummary(job)}
             </p>
           </div>
           <Button
@@ -436,7 +434,7 @@ export default function ManageVacancyPage() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: Readonly<{ label: string; children: React.ReactNode }>) {
   return (
     <div className="space-y-2">
       <Label className="text-[10px] font-black uppercase tracking-widest text-gray-300 ml-1">
@@ -445,4 +443,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </div>
   );
+}
+
+/** Texto que resume la prueba de la vacante para el reclutador. */
+function assessmentSummary(job: JobOpportunity): string {
+  if (!job.assessmentReady) {
+    return "Sin prueba todavía. Se compone con preguntas del banco para las habilidades de la vacante.";
+  }
+  const perCandidate = job.examQuestionCount ? `${job.examQuestionCount}` : "10 si tiene GitHub analizado o 20 si no,";
+  return `Repertorio de ${job.assessmentPoolSize ?? "?"} preguntas. Cada candidato responde ${perCandidate} sorteadas al azar, con ${job.examTimeLimitMinutes ?? 30} minutos para responder.`;
 }

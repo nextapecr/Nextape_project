@@ -4,9 +4,13 @@ import { examSizeFor } from "@/lib/server/assessment";
 import { hasGithubEvidence } from "@/lib/server/github-evidence";
 import {
   attemptCooldownHours,
+  COMBINED_SCOPE,
   PRACTICE_SCOPE_PREFIX,
   PRACTICE_TIME_LIMIT_MINUTES,
 } from "@/lib/server/line-policy";
+import { lineLevelFromSelfLevel, planCombinedExam } from "@/lib/server/combined-exam";
+import { normalizeLineTechnologies } from "@/lib/line-technologies";
+import { THEORY_TECHNOLOGY_ID } from "@/lib/technologies";
 import { RATE_LIMIT_COLLECTION } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
@@ -33,19 +37,26 @@ export async function GET(req: NextRequest) {
 
   try {
     const cooldownHours = attemptCooldownHours();
-    const [snap, githubSnap, limitsSnap] = await Promise.all([
+    const [snap, githubSnap, limitsSnap, userSnap] = await Promise.all([
       adminDb().collection("line_question_pools").get(),
       adminDb().collection("github_evidence").doc(uid).get(),
       adminDb().collection(RATE_LIMIT_COLLECTION).where("uid", "==", uid).get(),
+      adminDb().collection("users").doc(uid).get(),
     ]);
 
     /** subject → momento (epoch ms) en que vuelve a estar disponible. */
     const cooldowns: Record<string, number> = {};
     const now = Date.now();
     const windowMs = cooldownHours * 60 * 60 * 1000;
+    let combinedRetryAt: number | null = null;
     limitsSnap.forEach((doc) => {
       const data = doc.data();
       const scope = String(data.scope ?? "");
+      if (scope === COMBINED_SCOPE && windowMs > 0) {
+        const retryAt = Number(data.windowStart) + windowMs;
+        if (Number(data.count) >= 1 && retryAt > now) combinedRetryAt = retryAt;
+        return;
+      }
       if (!scope.startsWith(PRACTICE_SCOPE_PREFIX) || windowMs <= 0) return;
       const retryAt = Number(data.windowStart) + windowMs;
       if (Number(data.count) >= 1 && retryAt > now) {
@@ -69,10 +80,26 @@ export async function GET(req: NextRequest) {
       available[subject] = [...(available[subject] ?? []), level];
     });
 
+    // Prueba combinada de ESTE usuario: qué tecnologías entran, a qué nivel y cuáles aún no tienen
+    // preguntas (para avisarle antes de empezar).
+    const user = userSnap.data();
+    const technologies = normalizeLineTechnologies(user?.lineTechnologies);
+    const examSize = examSizeFor({ hasGithubEvidence: hasGithub });
+    const combined = {
+      technologies,
+      level: lineLevelFromSelfLevel(user?.candidateProfile?.selfLevel),
+      covered: technologies.filter((t) => (available[t] ?? []).length > 0),
+      uncovered: technologies.filter((t) => !(available[t] ?? []).length),
+      theoryAvailable: (available[THEORY_TECHNOLOGY_ID] ?? []).length > 0,
+      plan: planCombinedExam(examSize),
+      retryAt: combinedRetryAt,
+    };
+
     return NextResponse.json({
       available,
+      combined,
       hasGithub,
-      examSize: examSizeFor({ hasGithubEvidence: hasGithub }),
+      examSize,
       timeLimitMinutes: PRACTICE_TIME_LIMIT_MINUTES,
       cooldownHours,
       cooldowns,

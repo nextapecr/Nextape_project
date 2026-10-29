@@ -792,72 +792,69 @@ export function toQuestion(question: BankQuestion): MultipleChoiceQuestion {
  * Obtiene un conjunto de preguntas del banco (Firestore o Fallback determinista).
  * 0% consumo de IA en runtime. Respuesta instantánea <40ms.
  */
-export async function sampleBankQuestions(
-  requestedSkills: string[],
-  _level: string = "senior",
-  count: number = 5
-): Promise<MultipleChoiceQuestion[]> {
-  const normalizedSkills = requestedSkills.map((s) => s.toLowerCase().trim());
-  
-  const bankCandidates: BankQuestion[] = [];
-
-  // 1) Intentar consultar el banco persistido en Firestore, con techo de tiempo.
-  //    El `try/catch` por sí solo no basta: sin credenciales o con la red degradada, el Admin SDK
-  //    se queda esperando en vez de fallar, y esta función —que debe responder en milisegundos—
-  //    bloquea el arranque del examen. Con el timeout, el respaldo local entra enseguida.
+/**
+ * Preguntas del banco persistido en Firestore, con techo de tiempo. El `try/catch` por sí solo no
+ * basta: sin credenciales o con la red degradada, el Admin SDK se queda esperando en vez de fallar,
+ * y esta función —que debe responder en milisegundos— bloquea el arranque del examen. Con el
+ * timeout, el respaldo local entra enseguida. `[]` si Firestore no responde.
+ */
+async function fetchStoredQuestions(skills: string[]): Promise<BankQuestion[]> {
   try {
-    const db = adminDb();
-    const query = db
-      .collection("questions")
-      .where("skill", "in", normalizedSkills.slice(0, 10))
-      .get();
-
+    const query = adminDb().collection("questions").where("skill", "in", skills.slice(0, 10)).get();
     const snap = await Promise.race([
       query,
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("firestore_timeout")), FIRESTORE_TIMEOUT_MS)
       ),
     ]);
-
-    if (!snap.empty) {
-      snap.forEach((doc) => {
-        bankCandidates.push({ id: doc.id, ...doc.data() } as BankQuestion);
-      });
-    }
+    return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as BankQuestion);
   } catch (err) {
     console.warn(
       "[sampleBankQuestions] Firestore no disponible, se usa el banco local:",
       err instanceof Error ? err.message : err
     );
+    return [];
   }
+}
 
-  // 2) Si Firestore no tiene suficientes preguntas aún (modo inicial/fallback), filtrar el banco
-  //    semilla. `existingIds` se va actualizando en cada inserción: si se usa una foto tomada al
-  //    principio, la segunda pasada vuelve a añadir lo que añadió la primera y el candidato recibe
-  //    la misma pregunta dos veces en el mismo examen.
-  if (bankCandidates.length < count) {
-    const existingIds = new Set(bankCandidates.map((q) => q.id));
+/**
+ * Completa con el banco semilla: primero lo que casa con el stack pedido y, si aún faltan, el resto
+ * (hasta `count * 2`) para no devolver un examen corto. `existingIds` se actualiza en cada inserción:
+ * con una foto tomada al principio, la segunda pasada repetía lo de la primera y el candidato recibía
+ * la misma pregunta dos veces en el mismo examen.
+ */
+function fillFromSeedBank(candidates: BankQuestion[], skills: string[], count: number) {
+  const existingIds = new Set(candidates.map((q) => q.id));
+  const add = (item: BankQuestion) => {
+    if (existingIds.has(item.id)) return;
+    existingIds.add(item.id);
+    candidates.push(item);
+  };
+  const matchesStack = (item: BankQuestion) => {
+    const skill = item.skill.toLowerCase();
+    return skills.some((s) => skill.includes(s) || s.includes(skill));
+  };
 
-    const add = (item: BankQuestion) => {
-      if (existingIds.has(item.id)) return;
-      existingIds.add(item.id);
-      bankCandidates.push(item);
-    };
-
-    // Primero las que casan con el stack pedido.
-    for (const item of INITIAL_QUESTION_BANK) {
-      const skill = item.skill.toLowerCase();
-      if (normalizedSkills.some((s) => skill.includes(s) || s.includes(skill))) add(item);
-    }
-
-    // Si aún faltan, se completa con el resto del banco para no devolver un examen corto.
-    if (bankCandidates.length < count) {
-      for (const item of INITIAL_QUESTION_BANK) {
-        add(item);
-        if (bankCandidates.length >= count * 2) break;
-      }
-    }
+  INITIAL_QUESTION_BANK.filter(matchesStack).forEach(add);
+  if (candidates.length >= count) return;
+  for (const item of INITIAL_QUESTION_BANK) {
+    if (candidates.length >= count * 2) break;
+    add(item);
   }
+}
+
+export async function sampleBankQuestions(
+  requestedSkills: string[],
+  _level: string = "senior",
+  count: number = 5
+): Promise<MultipleChoiceQuestion[]> {
+  const normalizedSkills = requestedSkills.map((s) => s.toLowerCase().trim());
+
+  // 1) Banco persistido en Firestore.
+  const bankCandidates = await fetchStoredQuestions(normalizedSkills);
+
+  // 2) Si Firestore no tiene suficientes preguntas aún (modo inicial/fallback), banco semilla.
+  if (bankCandidates.length < count) fillFromSeedBank(bankCandidates, normalizedSkills, count);
 
   // 3) Barajar candidatos y seleccionar `count`. Fisher-Yates: `sort(() => Math.random() - 0.5)`
   //    da un reparto sesgado y con comparador inconsistente.

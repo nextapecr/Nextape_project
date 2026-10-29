@@ -17,9 +17,9 @@ import { initializeApp, getApps, cert, applicationDefault, deleteApp } from "fir
 import { getFirestore } from "firebase-admin/firestore";
 import type { Firestore } from "firebase-admin/firestore";
 
-import { computeRoadmap, inferFromLevel } from "@/lib/roadmap-engine";
+import { computeRoadmap } from "@/lib/roadmap-engine";
 import { SENIORITY_THRESHOLDS } from "@/services/github-engine/role-mapping/role-weights";
-import type { Skill, RoadmapRoute, RoadmapItem } from "@/types/roadmap.types";
+import type { Skill, RoadmapRoute } from "@/types/roadmap.types";
 
 // ─────────────────────────────────────────────────────────
 // Input sintético realista (sin escribir nada en Firestore)
@@ -173,8 +173,6 @@ async function main() {
   }
 
   console.log("\n── EJECUTANDO computeRoadmap() CON GITHUB ───────────────\n");
-  const targetScore = SENIORITY_THRESHOLDS[route.toLevel];
-
   const resultWithGithub = computeRoadmap({
     route,
     catalog,
@@ -375,14 +373,14 @@ async function main() {
   // 8c. The LINE tiene prioridad sobre GitHub Engine
   const lineOverGithubChecks: string[] = [];
   for (const item of items) {
-    if (MOCK_DNA[item.skillId] !== undefined && item.scoreSource !== "line") {
+    if (item.skillId in MOCK_DNA && item.scoreSource !== "line") {
       lineOverGithubChecks.push(
         `❌ "${item.skillId}" tiene score The LINE (${MOCK_DNA[item.skillId]}) pero scoreSource="${item.scoreSource}"`
       );
     }
   }
   if (lineOverGithubChecks.length === 0) {
-    const skillsWithDirectLine = items.filter((i) => MOCK_DNA[i.skillId] !== undefined);
+    const skillsWithDirectLine = items.filter((i) => i.skillId in MOCK_DNA);
     console.log(`✅ c. The LINE tiene prioridad sobre GitHub Engine en ${skillsWithDirectLine.length} skills con señal directa`);
   } else {
     lineOverGithubChecks.forEach((e) => console.error(e));

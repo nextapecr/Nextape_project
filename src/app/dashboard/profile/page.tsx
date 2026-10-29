@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Fingerprint, Zap, Loader2, User as UserIcon, Github, ArrowRight } from "lucide-react";
+import { Fingerprint, Zap, Loader2, User as UserIcon, ArrowRight, Briefcase, Pencil } from "lucide-react";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 import { SkillsService } from "@/services/skills.service";
 import { UserService } from "@/services/users.service";
 import { UserProfile } from "@/types/user.types";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import Link from "next/link";
 import { getTechnicalGrade } from "@/lib/grading";
+import { normalizeCandidateProfile, summarizeCandidate } from "@/lib/candidate-profile";
+import { findTechnology } from "@/lib/technologies";
 
 export default function ProfilePage() {
   const { user, authLoading } = useAuthUser();
@@ -49,6 +52,9 @@ export default function ProfilePage() {
 
     loadProfileData();
   }, [user, authLoading]);
+
+  const candidate = profile?.candidateProfile ? normalizeCandidateProfile(profile.candidateProfile) : null;
+  const summary = candidate ? summarizeCandidate(candidate) : null;
 
   if (loading) {
     return (
@@ -109,15 +115,78 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
+
+          {profile?.role !== "recruiter" && (
+            <div className="bg-white p-12 rounded-[3rem] shadow-apple border border-gray-50 space-y-8">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="p-4 bg-brand-blue/10 rounded-2xl">
+                    <Briefcase className="h-7 w-7 text-brand-blue" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-black italic">Perfil profesional</h2>
+                </div>
+                <Link href="/dashboard/onboarding">
+                  <span className="lift inline-flex items-center gap-2 rounded-full bg-gray-50 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-gray-500 hover:text-black">
+                    <Pencil className="h-3 w-3" /> {summary ? "Editar" : "Completar"}
+                  </span>
+                </Link>
+              </div>
+
+              {summary && candidate ? (
+                <div className="space-y-8 text-sm">
+                  <div className="space-y-1">
+                    <p className="text-xl font-bold italic">{summary.headline}</p>
+                    <p className="text-gray-400 font-medium">
+                      {[summary.selfLevel, summary.yearsOfExperience, summary.location, summary.workModes.join(" / "), summary.availability && `Disponibilidad: ${summary.availability}`]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  </div>
+                  {[
+                    { title: "Experiencia", items: summary.recentWork, empty: "Sin experiencia laboral declarada." },
+                    { title: "Estudios", items: summary.education, empty: "Sin estudios declarados." },
+                    { title: "Certificaciones", items: candidate.certifications, empty: "" },
+                    { title: "Idiomas", items: summary.languages, empty: "" },
+                    { title: "Tecnologías que evalúa The LINE", items: (profile?.lineTechnologies ?? candidate.technologies).map((t) => findTechnology(t)?.label ?? t), empty: "" },
+                  ]
+                    .filter((g) => g.items.length > 0 || g.empty)
+                    .map((g) => (
+                      <div key={g.title} className="space-y-2">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-300">{g.title}</p>
+                        {g.items.length > 0 ? (
+                          <ul className="space-y-1 font-medium text-gray-700">
+                            {g.items.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-gray-400 italic">{g.empty}</p>
+                        )}
+                      </div>
+                    ))}
+                  {candidate.lookingFor && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-300">Qué busca</p>
+                      <p className="font-medium text-gray-700 whitespace-pre-line">{candidate.lookingFor}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="py-6 text-center text-gray-400 italic font-medium">
+                  Aún no completaste tu perfil profesional: experiencia, estudios y dónde has trabajado.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="space-y-8">
            {/* La tarjeta completa vive en /dashboard/github, con su entrada de menú: aquí quedaba
                en la tercera columna bajo el DNA y en pantallas pequeñas nadie la encontraba. */}
            <Link href="/dashboard/github" className="block">
-             <div className="bg-white p-8 rounded-[2.5rem] shadow-apple border border-gray-50 hover:shadow-apple-lg transition-shadow space-y-4">
+             <div className="lift-sm bg-white p-8 rounded-[2.5rem] shadow-apple border border-gray-50 hover:shadow-apple-lg space-y-4">
                <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center">
-                 <Github className="h-6 w-6 text-white" />
+                 <GithubIcon className="h-6 w-6 text-white" />
                </div>
                <h3 className="text-xl font-bold italic">Evidencia de GitHub.</h3>
                <p className="text-xs text-gray-400 font-medium leading-relaxed">

@@ -8,7 +8,7 @@ import type { Question } from "@/types/question.types";
  * Existe por el hallazgo H1 de la auditoría (2026-10-12): el DNA se podía inflar repitiendo la
  * prueba. Se juntaban cuatro cosas: intentos ilimitados, DNA = MEJOR nota, el mismo banco de 25
  * preguntas casi siempre y ningún límite de tiempo. Además una nota en `junior` valía lo mismo
- * que en `senior`. Todo lo que sigue es lógica PURA (sin red) para poder testearla.
+ * que en `senior`. Lo que sigue es lógica PURA (sin red) para poder testearla.
  */
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -34,15 +34,19 @@ export function attemptRule(hours = attemptCooldownHours()): RateLimitRule | nul
   return { limit: 1, windowMs: hours * HOUR_MS };
 }
 
-/** Prefijo de los contadores de práctica en `api_rate_limits` (lo lee `/api/line/catalog`). */
+/** Prefijo de los contadores de práctica por tecnología (modo anterior a la prueba combinada). */
 export const PRACTICE_SCOPE_PREFIX = "line_practice_";
 
+/** Contador de la prueba combinada: 1 cada 24 h, sea cual sea el stack del candidato. */
+export const COMBINED_SCOPE = "line_combined";
+
 /**
- * Ámbito del límite. Práctica: por tecnología/especialidad, **sin importar el nivel** (si no,
- * bastaría con cambiar de nivel para repetir). Vacante: por vacante.
+ * Ámbito del límite. Vacante: por vacante. Prueba combinada (The LINE general desde 2026-10):
+ * uno solo por usuario. `subject` queda para el modo anterior por tecnología.
  */
-export function attemptScope({ jobId, subject }: { jobId?: string; subject?: string }): string {
+export function attemptScope({ jobId, subject, combined }: { jobId?: string; subject?: string; combined?: boolean }): string {
   if (jobId) return `line_job_${jobId}`;
+  if (combined) return COMBINED_SCOPE;
   return `${PRACTICE_SCOPE_PREFIX}${subject ?? "unknown"}`;
 }
 
@@ -195,7 +199,9 @@ export const SEEN_MEMORY = 150;
  */
 export function questionFingerprint(q: Pick<Question, "text" | "id">): string {
   const text = String(q.text ?? q.id ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-  return createHash("sha1").update(text).digest("hex").slice(0, 16);
+  // Huella para no repetir preguntas, no un uso criptográfico: cambiarla a otro hash reiniciaría
+  // el historial `line_seen` de todos los usuarios.
+  return createHash("sha1").update(text).digest("hex").slice(0, 16); // NOSONAR typescript:S4790
 }
 
 /**

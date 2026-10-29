@@ -34,11 +34,11 @@ export function SkillPicker({
   value,
   onChange,
   tone = "light",
-}: {
+}: Readonly<{
   value: string[];
   onChange: (next: string[]) => void;
   tone?: "light" | "dark";
-}) {
+}>) {
   const [available, setAvailable] = useState<Record<string, string[]> | null>(null);
   const [showAll, setShowAll] = useState(false);
   const dark = tone === "dark";
@@ -86,13 +86,11 @@ export function SkillPicker({
               disabled={!selected && (!hasBank || value.length >= MAX_JOB_SKILLS)}
               title={hasBank ? undefined : "Aún no hay preguntas para esta tecnología"}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors",
+                "lift inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold",
                 "disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue",
-                selected
-                  ? "bg-brand-blue text-white"
-                  : dark
-                    ? "bg-white/5 text-gray-300 hover:bg-white/10"
-                    : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                selected && "bg-brand-blue text-white",
+                !selected && dark && "bg-white/5 text-gray-300 hover:bg-white/10",
+                !selected && !dark && "bg-gray-50 text-gray-600 hover:bg-gray-100"
               )}
             >
               {selected && <Check className="h-3 w-3" />}

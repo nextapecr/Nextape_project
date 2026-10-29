@@ -37,10 +37,10 @@ if (-not $env:SONAR_TOKEN) {
     Write-Host "WARNING: SONAR_TOKEN environment variable not set" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "Set it with:" -ForegroundColor Yellow
-    Write-Host '  $env:SONAR_TOKEN = "f99c95a1a30829d7da97d4512d9e240b68f571fa"' -ForegroundColor Cyan
+    Write-Host '  $env:SONAR_TOKEN = "<tu-token-de-sonarcloud>"' -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Or permanently:" -ForegroundColor Yellow
-    Write-Host '  [System.Environment]::SetEnvironmentVariable("SONAR_TOKEN","f99c95a1a30829d7da97d4512d9e240b68f571fa","User")' -ForegroundColor Cyan
+    Write-Host '  [System.Environment]::SetEnvironmentVariable("SONAR_TOKEN","<tu-token-de-sonarcloud>","User")' -ForegroundColor Cyan
     Write-Host ""
     exit 1
 }

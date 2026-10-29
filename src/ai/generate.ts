@@ -118,11 +118,9 @@ export async function generateJsonWithFallback<T>(
     if (!rateLimited && !isProviderUnavailableError(err)) throw err;
 
     isGroq120bUnavailable = true;
-    console.warn(
-      rateLimited
-        ? '[ai/generate] ⚠️ Groq 120B rate limit alcanzado — cambiando a 20B para esta sesión...'
-        : `[ai/generate] ⚠️ Groq 120B no disponible (${err instanceof Error ? err.message.slice(0, 120) : err}) — cambiando a 20B para esta sesión...`,
-    );
+    const detail = err instanceof Error ? err.message.slice(0, 120) : String(err);
+    const why = rateLimited ? 'rate limit alcanzado' : `no disponible (${detail})`;
+    console.warn(`[ai/generate] ⚠️ Groq 120B ${why} — cambiando a 20B para esta sesión...`);
 
     const result = await generateJsonWithModel(prompt, schema, MODEL_20B, options);
     return { ...result, model: '20b' };
@@ -141,10 +139,22 @@ export async function generateJsonWithFallback<T>(
  *   2. Eliminar trailing commas antes de `}` o `]`.
  *   3. Eliminar comentarios de línea (`// …`).
  */
+/** Contenido del primer bloque ``` (o ```json), o `null` si no hay un bloque cerrado. */
+function extractFencedBlock(raw: string): string | null {
+  const open = raw.indexOf('```');
+  if (open === -1) return null;
+  let start = open + 3;
+  if (raw.slice(start, start + 4).toLowerCase() === 'json') start += 4;
+  const close = raw.indexOf('```', start);
+  if (close === -1) return null;
+  return raw.slice(start, close);
+}
+
 function extractJson(raw: string): string {
   // 1. Si hay un bloque ```json … ```, extraerlo.
-  const fenceMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)```/i);
-  const body = fenceMatch ? fenceMatch[1] : raw;
+  //    Con indexOf en vez de una regex con `[\s\S]*?`: la salida del modelo puede ser larga y esa
+  //    regex retrocede de forma superlineal si el bloque no cierra.
+  const body = extractFencedBlock(raw) ?? raw;
 
   // 2. Localizar el primer '{' y el último '}' (el objeto raíz).
   const start = body.indexOf('{');
@@ -157,7 +167,7 @@ function extractJson(raw: string): string {
 
   // 3. Quitar comentarios de bloque (/* … */) y de línea (// …).
   json = json.replace(/\/\*[\s\S]*?\*\//g, '');
-  json = json.replace(/^\s*\/\/.*$/gm, '');
+  json = json.replace(/^[ \t]*\/\/.*$/gm, '');
 
   // 4. Quitar trailing commas: `,` seguida de `}` o `]` (con espacios/saltos de línea opcionales).
   // Nota: Los modelos grandes generan JSON largo con múltiples trailing commas - necesitamos
@@ -203,6 +213,56 @@ export interface TokenUsage {
  * 
  * @returns Objeto con los datos parseados y métricas de uso
  */
+/**
+ * Métricas de uso de la API. Genkit las expone en sitios distintos según el plugin
+ * (`raw.usage` o `raw.response.usage`); `undefined` si no vienen.
+ */
+function extractUsage(response: unknown): TokenUsage | undefined {
+  const raw = ((response as { raw?: unknown }).raw ?? response) as {
+    usage?: Record<string, number>;
+    response?: { usage?: Record<string, number> };
+  };
+  const u = raw?.usage ?? raw?.response?.usage;
+  if (!u) return undefined;
+  return {
+    promptTokens: u.prompt_tokens || 0,
+    completionTokens: u.completion_tokens || 0,
+    totalTokens: u.total_tokens || 0,
+    reasoningTokens: u.reasoning_tokens,
+    cachedTokens: u.cached_tokens,
+  };
+}
+
+/** Una llamada al modelo: texto → JSON limpio → validado con el esquema. Lanza si algo falla. */
+async function generateOnce<T>(
+  prompt: string,
+  schema: z.ZodType<T>,
+  model: string,
+  options: GenerateJsonOptions,
+): Promise<{ data: T; usage?: TokenUsage }> {
+  const response = await ai.generate({
+    model,
+    prompt,
+    config: {
+      maxOutputTokens: options.maxTokens,
+      // Los parámetros específicos de Groq se pasan directamente en el nivel superior
+      // ya que el plugin openAICompatible los mapea correctamente
+      ...(options.reasoningEffort && { reasoning_effort: options.reasoningEffort }),
+      ...(options.includeReasoning !== undefined && { include_reasoning: options.includeReasoning }),
+    },
+  });
+  const text = response.text;
+
+  if (!text) {
+    throw new Error(`El modelo ${model} no devolvió texto.`);
+  }
+
+  const usage = extractUsage(response);
+
+  const cleaned = extractJson(text);
+  return { data: schema.parse(JSON.parse(cleaned)), usage };
+}
+
 async function generateJsonWithModel<T>(
   prompt: string,
   schema: z.ZodType<T>,
@@ -218,38 +278,7 @@ async function generateJsonWithModel<T>(
         await new Promise((r) => setTimeout(r, 3000));
       }
 
-      const response = await ai.generate({
-        model,
-        prompt,
-        config: {
-          maxOutputTokens: options.maxTokens,
-          // Los parámetros específicos de Groq se pasan directamente en el nivel superior
-          // ya que el plugin openAICompatible los mapea correctamente
-          ...(options.reasoningEffort && { reasoning_effort: options.reasoningEffort }),
-          ...(options.includeReasoning !== undefined && { include_reasoning: options.includeReasoning }),
-        },
-      });
-      const text = response.text;
-
-      if (!text) {
-        throw new Error(`El modelo ${model} no devolvió texto.`);
-      }
-
-      // Capturar métricas de uso de la API
-      // Nota: Genkit puede exponer usage en diferentes lugares dependiendo del plugin
-      const rawResponse = (response as any).raw || (response as any);
-      const usage: TokenUsage | undefined = rawResponse?.usage || rawResponse?.response?.usage
-        ? {
-            promptTokens: rawResponse.usage?.prompt_tokens || rawResponse.response?.usage?.prompt_tokens || 0,
-            completionTokens: rawResponse.usage?.completion_tokens || rawResponse.response?.usage?.completion_tokens || 0,
-            totalTokens: rawResponse.usage?.total_tokens || rawResponse.response?.usage?.total_tokens || 0,
-            reasoningTokens: rawResponse.usage?.reasoning_tokens || rawResponse.response?.usage?.reasoning_tokens,
-            cachedTokens: rawResponse.usage?.cached_tokens || rawResponse.response?.usage?.cached_tokens,
-          }
-        : undefined;
-
-      const cleaned = extractJson(text);
-      return { data: schema.parse(JSON.parse(cleaned)), usage };
+      return await generateOnce(prompt, schema, model, options);
     } catch (err) {
       console.warn(
         `[ai/generate] ⚠️ Intento ${attempt + 1} con ${model} falló:`,

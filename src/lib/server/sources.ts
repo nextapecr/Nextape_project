@@ -225,6 +225,14 @@ const TECHNOLOGY_SOURCES: Record<string, string[]> = {
   seguridad: SOURCE_CATALOG.security,
   owasp: ["https://owasp.org/www-project-top-ten", "https://cwe.mitre.org"],
   microservices: ["https://microservices.io", "https://martinfowler.com"],
+  // Teoría de ingeniería de software (SOLID, patrones, arquitectura, clean code).
+  "software-engineering": [
+    "https://refactoring.guru/design-patterns",
+    "https://martinfowler.com/architecture",
+    "https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html",
+    "https://refactoring.guru/refactoring",
+    "https://12factor.net",
+  ],
   microservicios: ["https://microservices.io", "https://martinfowler.com"],
   arquitectura: SOURCE_CATALOG.architecture,
   architecture: SOURCE_CATALOG.architecture,

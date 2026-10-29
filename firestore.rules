@@ -12,9 +12,17 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Perfiles de usuario
+    // Perfiles de usuario.
+    // `lineTechnologies` (qué tecnologías evalúa The LINE) es SERVER-ONLY: solo lo cambia
+    // POST /api/profile/technologies, que además borra del DNA las que el candidato quita. Si el
+    // cliente pudiera escribirlo, quitaría una tecnología sin perder sus puntos.
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+                    && !request.resource.data.keys().hasAny(['lineTechnologies']);
+      allow update: if isOwner(userId)
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['lineTechnologies']);
+      allow delete: if isOwner(userId);
     }
 
     // Habilidades y Scores (el "CORE" / DNA técnico).

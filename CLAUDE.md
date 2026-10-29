@@ -11,7 +11,9 @@ Plataforma de **evaluación técnica con IA** que construye el "DNA técnico ver
 Roles: `developer` y `recruiter`.
 - **The LINE**: examen técnico **determinista**. Las preguntas se **precargan** con IA en
   `line_question_pools/{tech}_{nivel}` (`npm run seed:questions`); en runtime **NO se llama al modelo**,
-  solo se sortean. 55 tecnologías × 3 niveles (`junior|mid|senior`), 5 tipos de pregunta.
+  solo se sortean. 55 tecnologías + teoría (`software-engineering`) × 3 niveles, 5 tipos de pregunta.
+  **Prueba combinada:** 70 % de las tecnologías del perfil (`users.lineTechnologies`, solo servidor, máx. 6)
+  + 30 % teoría, al nivel declarado. Quitar una tecnología borra sus puntos (`/api/profile/technologies`).
   **Es la única fuente del DNA.**
 - **CORE**: identidad técnica persistida (scores por skill) en Firestore.
 - **GitHub**: analiza el código real de tus repos con **tree-sitter (AST)** y produce 5 dimensiones de
@@ -166,10 +168,10 @@ Ya construido: capa de confianza en servidor (DNA/scoring), banco de preguntas p
 55 tecnologías), **motor de GitHub** (AST con tree-sitter, 21 lenguajes), **roadmap determinista v2**
 (112 skills / 10 rutas), cierre del loop reclutador (`candidate_matches`), rate limiting y CI.
 
-**Estado verificado (2026-10-14, rama `test-vernon`, Linux + Node 22 como CI):** `typecheck` limpio ·
-`lint` 0 errores / 50 warnings · `test` 224 pasan, 25 *skipped* (los de reglas necesitan el emulador y **CI no
+**Estado verificado (2026-10-28, rama `test-vernon`, Linux + Node 22 como CI):** `typecheck` limpio ·
+`lint` 0 errores / 19 warnings · `test` 248 pasan, 26 *skipped* (los de reglas necesitan el emulador y **CI no
 lo arranca**) · `build` OK con Next.js 15.5.27. En Windows, `typecheck` puede fallar si los bindings nativos de
-`tree-sitter` no se instalaron; en CI pasa.
+`tree-sitter` no se instalaron; en CI pasa. Auditoría SonarJS (2026-10-28): ver `docs/SONARQUBE_SETUP.md` §Última auditoría.
 
 **Pendiente destacado** (detalle en [`docs/CONTEXT.md`](./docs/CONTEXT.md) §9 y [`docs/TECH_DEBT.md`](./docs/TECH_DEBT.md)):
 - ✅ Roadmap y The LINE conectados (`src/lib/skill-technology-map.ts`): 62 de 112 skills del catálogo se miden

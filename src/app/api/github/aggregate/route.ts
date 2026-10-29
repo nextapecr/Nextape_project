@@ -61,7 +61,7 @@ function weightedMean(values: Array<{ value: number | null | undefined; weight: 
 function topKey(counts: Record<string, number> | undefined): string | null {
   const entries = Object.entries(counts ?? {});
   if (entries.length === 0) return null;
-  return entries.sort((a, b) => b[1] - a[1])[0][0];
+  return [...entries].sort((a, b) => b[1] - a[1])[0][0];
 }
 
 /**

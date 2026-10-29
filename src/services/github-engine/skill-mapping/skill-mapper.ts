@@ -45,7 +45,7 @@ export interface AnalyzerResults {
 
 export function mapSkills(results: AnalyzerResults): { metrics: EngineMetrics; skillScores: GithubSkillScores } {
   // `deadCode` ya no entra en la condición: su analizador está sin implementar y devuelve null,
-  // así que exigirlo dejaría TODO repositorio como "no analizable".
+  // así que exigirlo dejaría cualquier repositorio como "no analizable".
   const hasASTData =
     results.coupling.score !== null && results.complexity.score !== null;
 

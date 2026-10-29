@@ -8,7 +8,7 @@
  *   firebase emulators:exec --only firestore "npm test"
  * (o arranca el emulador y exporta FIRESTORE_EMULATOR_HOST=127.0.0.1:8080)
  */
-import { describe, it, beforeAll, afterAll } from "vitest";
+import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   initializeTestEnvironment,
@@ -19,6 +19,11 @@ import {
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 
 const hasEmulator = !!process.env.FIRESTORE_EMULATOR_HOST;
+
+/** La regla permite la operación. `expect` explícito para que la aserción se vea en el test. */
+const allowed = (op: Promise<unknown>) => expect(assertSucceeds(op).then(() => true)).resolves.toBe(true);
+/** La regla deniega la operación. */
+const denied = (op: Promise<unknown>) => expect(assertFails(op).then(() => true)).resolves.toBe(true);
 
 describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownership", () => {
   let testEnv: RulesTestEnvironment;
@@ -36,7 +41,7 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
 
   it("un usuario NO puede escribir su propio DNA (write:false, solo servidor)", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
-    await assertFails(
+    await denied(
       setDoc(doc(alice, "user_skill_scores/alice"), { uid: "alice", scores: { react: 100 } })
     );
   });
@@ -50,22 +55,36 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
     });
     const alice = testEnv.authenticatedContext("alice").firestore();
     const bob = testEnv.authenticatedContext("bob").firestore();
-    await assertSucceeds(getDoc(doc(alice, "user_skill_scores/alice")));
-    await assertFails(getDoc(doc(bob, "user_skill_scores/alice")));
+    await allowed(getDoc(doc(alice, "user_skill_scores/alice")));
+    await denied(getDoc(doc(bob, "user_skill_scores/alice")));
+  });
+
+  it("el usuario edita su perfil pero NO sus tecnologías de The LINE (server-only)", async () => {
+    const carla = testEnv.authenticatedContext("carla").firestore();
+    // Crear el perfil con lineTechnologies: denegado.
+    await denied(setDoc(doc(carla, "users/carla"), { uid: "carla", role: "developer", lineTechnologies: ["react"] }));
+    await allowed(setDoc(doc(carla, "users/carla"), { uid: "carla", role: "developer" }));
+    // Editar el perfil profesional: permitido.
+    await allowed(updateDoc(doc(carla, "users/carla"), { candidateProfile: { headline: "Dev" } }));
+    // Tocar lineTechnologies (p. ej. quitar python sin perder sus puntos): denegado.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), "users/carla"), { lineTechnologies: ["python"] });
+    });
+    await denied(updateDoc(doc(carla, "users/carla"), { lineTechnologies: [] }));
   });
 
   it("nadie puede leer sesiones ni claves de respuestas (server-only)", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
-    await assertFails(getDoc(doc(alice, "line_sessions/s1")));
-    await assertFails(getDoc(doc(alice, "job_answer_keys/j1")));
+    await denied(getDoc(doc(alice, "line_sessions/s1")));
+    await denied(getDoc(doc(alice, "job_answer_keys/j1")));
     // Preguntas vistas: si el cliente pudiera vaciarlas, elegiría qué preguntas le tocan.
-    await assertFails(getDoc(doc(alice, "line_seen/alice_react_senior")));
-    await assertFails(setDoc(doc(alice, "line_seen/alice_react_senior"), { fingerprints: [] }));
+    await denied(getDoc(doc(alice, "line_seen/alice_react_senior")));
+    await denied(setDoc(doc(alice, "line_seen/alice_react_senior"), { fingerprints: [] }));
   });
 
   it("nadie puede crear intentos desde cliente (create:false, solo servidor)", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
-    await assertFails(
+    await denied(
       setDoc(doc(alice, "assessment_attempts/a1"), { userId: "alice", score: 100 })
     );
   });
@@ -73,11 +92,11 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
   it("solo el reclutador dueño puede crear su vacante", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
     const bob = testEnv.authenticatedContext("bob").firestore();
-    await assertSucceeds(
+    await allowed(
       setDoc(doc(alice, "jobs/j1"), { createdBy: "alice", title: "React Architect" })
     );
     // bob no puede crear una vacante a nombre de alice
-    await assertFails(
+    await denied(
       setDoc(doc(bob, "jobs/j2"), { createdBy: "alice", title: "Fake" })
     );
   });
@@ -88,17 +107,17 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
     });
     const alice = testEnv.authenticatedContext("alice").firestore();
     const bob = testEnv.authenticatedContext("bob").firestore();
-    await assertSucceeds(getDoc(doc(alice, "github_evidence/alice/repos/alice__app")));
-    await assertFails(getDoc(doc(bob, "github_evidence/alice/repos/alice__app")));
-    await assertFails(
+    await allowed(getDoc(doc(alice, "github_evidence/alice/repos/alice__app")));
+    await denied(getDoc(doc(bob, "github_evidence/alice/repos/alice__app")));
+    await denied(
       setDoc(doc(alice, "github_evidence/alice/repos/alice__app"), { uid: "alice", skillScores: {} })
     );
   });
 
   it("los contadores de límite de peticiones son server-only", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
-    await assertFails(getDoc(doc(alice, "api_rate_limits/evaluate:alice")));
-    await assertFails(setDoc(doc(alice, "api_rate_limits/evaluate:alice"), { count: 0, windowStart: 0 }));
+    await denied(getDoc(doc(alice, "api_rate_limits/evaluate:alice")));
+    await denied(setDoc(doc(alice, "api_rate_limits/evaluate:alice"), { count: 0, windowStart: 0 }));
   });
 
   it("el dueño edita su vacante pero no los campos que escribe el servidor", async () => {
@@ -111,14 +130,14 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
       });
     });
     const alice = testEnv.authenticatedContext("alice").firestore();
-    await assertSucceeds(updateDoc(doc(alice, "jobs/j3"), { title: "Backend Senior", examQuestionCount: null }));
-    await assertFails(updateDoc(doc(alice, "jobs/j3"), { applicantsCount: 500 }));
-    await assertFails(updateDoc(doc(alice, "jobs/j3"), { assessmentReady: true, assessmentPoolSize: 999 }));
+    await allowed(updateDoc(doc(alice, "jobs/j3"), { title: "Backend Senior", examQuestionCount: null }));
+    await denied(updateDoc(doc(alice, "jobs/j3"), { applicantsCount: 500 }));
+    await denied(updateDoc(doc(alice, "jobs/j3"), { assessmentReady: true, assessmentPoolSize: 999 }));
   });
 
   it("create job con applicantsCount=999 → assertFails", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
-    await assertFails(
+    await denied(
       setDoc(doc(alice, "jobs/j_applicants_999"), {
         createdBy: "alice",
         title: "Job1",
@@ -129,7 +148,7 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
 
   it("create job con applicantsCount=0 → assertSucceeds", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
-    await assertSucceeds(
+    await allowed(
       setDoc(doc(alice, "jobs/j_applicants_0"), {
         createdBy: "alice",
         title: "Job2",
@@ -140,7 +159,7 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
 
   it("create job sin applicantsCount → assertSucceeds", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
-    await assertSucceeds(
+    await allowed(
       setDoc(doc(alice, "jobs/j_no_applicants"), {
         createdBy: "alice",
         title: "Job3",
@@ -150,7 +169,7 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
 
   it("create job con assessmentReady=true → assertFails", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
-    await assertFails(
+    await denied(
       setDoc(doc(alice, "jobs/j_ready_true"), {
         createdBy: "alice",
         title: "Job4",
@@ -161,7 +180,7 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
 
   it("create job con assessmentReady=false → assertSucceeds", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
-    await assertSucceeds(
+    await allowed(
       setDoc(doc(alice, "jobs/j_ready_false"), {
         createdBy: "alice",
         title: "Job5",
@@ -172,7 +191,7 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
 
   it("create job con assessmentPoolSize → assertFails", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
-    await assertFails(
+    await denied(
       setDoc(doc(alice, "jobs/j_pool"), {
         createdBy: "alice",
         title: "Job6",
@@ -183,7 +202,7 @@ describe.skipIf(!hasEmulator)("firestore.rules — integridad del DNA y ownershi
 
   it("create job con assessmentMissingSkills → assertFails", async () => {
     const alice = testEnv.authenticatedContext("alice").firestore();
-    await assertFails(
+    await denied(
       setDoc(doc(alice, "jobs/j_missing"), {
         createdBy: "alice",
         title: "Job7",

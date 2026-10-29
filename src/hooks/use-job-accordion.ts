@@ -15,7 +15,7 @@ export function useJobAccordion(recruiterId: string) {
   const [jobStates, setJobStates] = useState<Record<string, JobAccordionState>>({});
   
   // Tracking de requests en vuelo para cancelar obsoletas
-  const activeRequests = useRef<Record<string, number>>({});
+  const activeRequests = useRef<Partial<Record<string, number>>>({});
   
   // Refs para bloqueo sincrón de loadingMore
   const loadingMoreRefs = useRef<Record<string, boolean>>({});
@@ -58,8 +58,8 @@ export function useJobAccordion(recruiterId: string) {
         );
 
         // Descartar si hay una request más reciente
-        if (activeRequests.current[jobId] !== undefined && 
-            activeRequests.current[jobId] > requestId) {
+        const latest = activeRequests.current[jobId];
+        if (typeof latest === "number" && latest > requestId) {
           loadingMoreRefs.current[jobId] = false;
           return;
         }

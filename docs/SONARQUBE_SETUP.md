@@ -40,12 +40,16 @@ Write-Host "✅ SonarScanner instalado en: $env:SONAR_SCANNER_HOME"
 
 **⚠️ IMPORTANTE:** El token es **secreto**, no lo compartas ni lo subas a git.
 
+Genera el tuyo en SonarCloud → *My Account → Security → Generate Tokens*. Este documento y
+`sonar-scan.ps1` tenían un token real escrito (2026-10-07 → 2026-10-28); se quitó, pero sigue en el
+historial de git: **ese token debe revocarse** en SonarCloud.
+
 ```powershell
 # Temporal (solo sesión actual de PowerShell)
-$env:SONAR_TOKEN = "f99c95a1a30829d7da97d4512d9e240b68f571fa"
+$env:SONAR_TOKEN = "<tu-token-de-sonarcloud>"
 
 # Permanente (recomendado, persiste entre sesiones)
-[System.Environment]::SetEnvironmentVariable('SONAR_TOKEN','f99c95a1a30829d7da97d4512d9e240b68f571fa','User')
+[System.Environment]::SetEnvironmentVariable('SONAR_TOKEN','<tu-token-de-sonarcloud>','User')
 ```
 
 **Verificar:**
@@ -187,7 +191,7 @@ $env:PATH = "$env:SONAR_SCANNER_HOME\bin;$env:PATH"
 $env:SONAR_TOKEN
 
 # Si está vacío o incorrecto, configurarlo:
-$env:SONAR_TOKEN = "f99c95a1a30829d7da97d4512d9e240b68f571fa"
+$env:SONAR_TOKEN = "<tu-token-de-sonarcloud>"
 ```
 
 ### ❌ "Project key already exists"
@@ -253,7 +257,7 @@ jobs:
 
 **Configurar secreto:**
 1. Ve a Settings → Secrets → Actions
-2. Agrega `SONAR_TOKEN` con el valor `f99c95a1a30829d7da97d4512d9e240b68f571fa`
+2. Agrega `SONAR_TOKEN` con el valor `<tu-token-de-sonarcloud>`
 
 ---
 
@@ -263,6 +267,34 @@ jobs:
 - [SonarScanner CLI](https://docs.sonarsource.com/sonarqube/latest/analyzing-source-code/scanners/sonarscanner/)
 - [Analysis Parameters](https://docs.sonarsource.com/sonarqube/latest/analyzing-source-code/analysis-parameters/)
 - [TypeScript Analysis](https://docs.sonarsource.com/sonarqube/latest/analyzing-source-code/languages/typescript/)
+
+---
+
+## 🧾 Última auditoría (2026-10-28, rama `test-vernon`)
+
+SonarCloud no era accesible desde el entorno de la auditoría, así que se corrieron **las mismas reglas
+de TypeScript** con el plugin oficial de SonarSource para ESLint (`eslint-plugin-sonarjs@3`, perfil
+`recommended`), sin añadirlo al proyecto:
+
+```bash
+npm i --no-save eslint-plugin-sonarjs@3
+npx eslint -c sonar.eslint.tmp.mjs --no-config-lookup .   # config temporal con sonarjs.configs.recommended
+```
+
+**236 hallazgos → 0 en `src/`** (quedan 6 de complejidad en scripts, ver `docs/TECH_DEBT.md`).
+Lo más relevante:
+- **Seguridad:** token de SonarCloud escrito en `sonar-scan.ps1` y en este documento (quitado; **revocarlo**,
+  sigue en el historial). Regex con backtracking superlineal sobre salida del modelo (`src/ai/generate.ts`).
+  Sorteo de preguntas con `crypto.randomInt` en vez de `Math.random`.
+- **Bugs:** comparaciones siempre verdaderas por tipos, `sort()` que mutaba el array de entrada, contador de
+  bucle mal ubicado.
+- **Tests:** `oauth/revoke/route.test.ts` probaba constantes copiadas (pasaba aunque el handler cambiara);
+  ahora prueba `src/lib/server/github-revoke.ts`, la lógica real extraída del handler.
+- **Deprecaciones:** `React.ElementRef` → `ComponentRef`; icono `Github` de lucide → `GithubIcon` (simple-icons).
+
+Revisados como seguros y marcados con `// NOSONAR <regla> — motivo` (SonarQube los respeta; el plugin de
+ESLint no): sha1 de huella de pregunta (`line-policy.ts`), `Math.random` decorativo y de ids de log, y
+literales `http://`/`javascript:` en tests que prueban justamente su manejo.
 
 ---
 

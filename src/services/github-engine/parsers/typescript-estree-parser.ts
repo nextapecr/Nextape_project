@@ -15,6 +15,23 @@ import { parse } from '@typescript-eslint/typescript-estree';
 import type { TSESTree } from '@typescript-eslint/typescript-estree';
 import type { LanguageParser, ParsedAST, ASTNode } from './language-parser.interface';
 
+const METADATA_KEYS = new Set(['type', 'loc', 'range', 'parent']);
+
+function isESTreeNode(value: unknown): value is TSESTree.Node {
+  return !!value && typeof value === 'object' && 'type' in value;
+}
+
+/** Hijos directos de un nodo ESTree: cada propiedad que es un nodo o un array de nodos. */
+function childNodes(node: TSESTree.Node): TSESTree.Node[] {
+  const out: TSESTree.Node[] = [];
+  for (const [key, value] of Object.entries(node)) {
+    if (METADATA_KEYS.has(key)) continue;
+    if (Array.isArray(value)) out.push(...value.filter(isESTreeNode));
+    else if (isESTreeNode(value)) out.push(value);
+  }
+  return out;
+}
+
 /**
  * Convierte un nodo ESTree al formato ASTNode genérico que el motor consume.
  * ESTree tiene una estructura distinta a Tree-sitter:
@@ -31,34 +48,11 @@ function convertESTreeNode(
   // Extraer texto del source usando range
   const text = node.range ? source.slice(node.range[0], node.range[1]) : '';
 
-  // Recolectar children de propiedades del nodo
-  const children: ASTNode[] = [];
-  
-  if (currentDepth < maxDepth) {
-    // ESTree nodes tienen children en propiedades específicas, no en un array
-    // Iteramos todas las propiedades y convertimos los que son nodos
-    for (const key of Object.keys(node)) {
-      if (key === 'type' || key === 'loc' || key === 'range' || key === 'parent') {
-        continue; // Skip metadata
-      }
-      
-      const value = (node as unknown as Record<string, unknown>)[key];
-      
-      if (value && typeof value === 'object') {
-        if (Array.isArray(value)) {
-          // Array de nodos (ej: body: Statement[])
-          for (const item of value) {
-            if (item && typeof item === 'object' && 'type' in item) {
-              children.push(convertESTreeNode(item as TSESTree.Node, source, maxDepth, currentDepth + 1));
-            }
-          }
-        } else if ('type' in value) {
-          // Nodo individual (ej: expression: Expression)
-          children.push(convertESTreeNode(value as TSESTree.Node, source, maxDepth, currentDepth + 1));
-        }
-      }
-    }
-  }
+  // ESTree no tiene un array de hijos: están en propiedades tipadas (body, expression…).
+  const children =
+    currentDepth < maxDepth
+      ? childNodes(node).map((child) => convertESTreeNode(child, source, maxDepth, currentDepth + 1))
+      : [];
 
   return {
     type: node.type,

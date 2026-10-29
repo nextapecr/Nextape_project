@@ -44,6 +44,37 @@ function selectCentralFiles(fileIRs: FileIR[], maxFiles = 8): FileIR[] {
     .slice(0, maxFiles);
 }
 
+/** Parsea un archivo a IR; `null` si el lenguaje no está soportado o el parser falla. */
+function parseToIR(file: SourceFile): FileIR | null {
+  if (!universalParser.canParse(file.filename)) return null;
+  try {
+    const parsedAST = universalParser.parse(file.content, file.filename);
+    return buildUniversalIR(parsedAST.root, file.filename, parsedAST.language, parsedAST.hasParseErrors);
+  } catch (err) {
+    console.warn(`[github-engine] Fallo al parsear ${file.filename}:`, err);
+    return null;
+  }
+}
+
+/** Totales de funciones, clases, tests, complejidad, documentación e imports externos. */
+function sumFileMetrics(files: FileIR[]) {
+  const totals = { totalFunctions: 0, totalClasses: 0, totalTests: 0, totalCyclomatic: 0, documentedFnCount: 0 };
+  const externalImports = new Set<string>();
+  for (const f of files) {
+    totals.totalFunctions += f.functions.length;
+    totals.totalClasses += f.classes.length;
+    totals.totalTests += f.testCount;
+    for (const fn of f.functions) {
+      totals.totalCyclomatic += fn.cyclomaticComplexity;
+      if (fn.hasDoc) totals.documentedFnCount++;
+    }
+    for (const imp of f.imports) {
+      if (imp.isExternal) externalImports.add(imp.source);
+    }
+  }
+  return { ...totals, externalImports };
+}
+
 /**
  * Ejecuta el motor determinístico sobre una lista de archivos fuentes recuperados de un repositorio.
  */
@@ -51,49 +82,13 @@ export function analyzeRepositorySources(
   files: SourceFile[],
   signals?: RepoSignals,
 ): EngineAnalysisResult {
-  const fileIRs: FileIR[] = [];
-
-  for (const file of files) {
-    if (universalParser.canParse(file.filename)) {
-      try {
-        const parsedAST = universalParser.parse(file.content, file.filename);
-        const fileIR = buildUniversalIR(
-          parsedAST.root,
-          file.filename,
-          parsedAST.language,
-          parsedAST.hasParseErrors,
-        );
-        fileIRs.push(fileIR);
-      } catch (err) {
-        console.warn(`[github-engine] Fallo al parsear ${file.filename}:`, err);
-      }
-    }
-  }
+  const fileIRs = files.map(parseToIR).filter((ir): ir is FileIR => ir !== null);
 
   // Seleccionar máximo 5-8 archivos centrales
   const centralFiles = selectCentralFiles(fileIRs, 8);
 
-  let totalFunctions = 0;
-  let totalClasses = 0;
-  let totalTests = 0;
-  let totalCyclomatic = 0;
-  let documentedFnCount = 0;
-  const externalImportsSet = new Set<string>();
-
-  for (const f of centralFiles) {
-    totalFunctions += f.functions.length;
-    totalClasses += f.classes.length;
-    totalTests += f.testCount;
-
-    for (const fn of f.functions) {
-      totalCyclomatic += fn.cyclomaticComplexity;
-      if (fn.hasDoc) documentedFnCount++;
-    }
-
-    for (const imp of f.imports) {
-      if (imp.isExternal) externalImportsSet.add(imp.source);
-    }
-  }
+  const { totalFunctions, totalClasses, totalTests, totalCyclomatic, documentedFnCount, externalImports } =
+    sumFileMetrics(centralFiles);
 
   const avgCyclomaticComplexity =
     totalFunctions > 0 ? totalCyclomatic / totalFunctions : 1;
@@ -104,7 +99,7 @@ export function analyzeRepositorySources(
     files: centralFiles,
     totalFunctions,
     totalClasses,
-    totalExternalImports: externalImportsSet.size,
+    totalExternalImports: externalImports.size,
     totalTests,
     avgCyclomaticComplexity: Math.round(avgCyclomaticComplexity * 10) / 10,
     docCoverageRatio: Math.round(docCoverageRatio * 100) / 100,

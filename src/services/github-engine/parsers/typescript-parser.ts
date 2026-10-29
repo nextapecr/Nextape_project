@@ -8,7 +8,7 @@
  * Protecciones en el proyecto:
  *   - next.config.ts → `serverExternalPackages`: Next.js los excluye del bundle.
  *   - open-next.config.ts → `edgeExternals`: esbuild los excluye del Worker.
- *   - Todo route handler que importe este módulo (directamente o via el engine)
+ *   - Cualquier route handler que importe este módulo (directamente o via el engine)
  *     DEBE declarar `export const runtime = "nodejs"`.
  *
  * Implementa la interfaz LanguageParser — agregar un nuevo lenguaje = un archivo

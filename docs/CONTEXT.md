@@ -100,12 +100,13 @@ en `line_question_pools/{tech}_{level}`; en runtime solo se **sortean**.
 **Esquema del repertorio:** `{key, kind, label, category, level, questions[] (CON clave), count,
 status: complete|incomplete, byType, generator, updatedAt}`. Regla: `read, write: if false`.
 
-**Catálogo:** **55 tecnologías** (`src/lib/technologies.ts`) en 10 categorías × **3 niveles**
-(`junior|mid|senior`) + 3 stacks históricos = **174 combinaciones** (~4 350 preguntas, ~58 min de seed).
+**Catálogo:** **55 tecnologías + 1 banco de teoría** (`software-engineering`: SOLID, patrones, arquitectura) en
+`src/lib/technologies.ts`, 10 categorías × **3 niveles** (`junior|mid|senior`) + 3 stacks históricos =
+**177 combinaciones** (~4 425 preguntas).
 Alias → id canónico en `TECHNOLOGY_ALIASES` (40 entradas). Los `id` van **en minúsculas** (invariante del DNA).
 
 Reparto por categoría: frontend 9 · backend 8 · **languages 9** · mobile 4 · databases 6 · cloud 3 ·
-devops 5 · api 3 · testing 5 · architecture 3.
+devops 5 · api 3 · testing 5 · architecture 4 (incluye la teoría).
 
 **Los 5 tipos de pregunta** (`src/types/question.types.ts`):
 
@@ -122,6 +123,22 @@ devops 5 · api 3 · testing 5 · architecture 3.
 **Invariante I1 — las claves nunca salen.** `toPublicQuestion` construye la versión pública **por lista
 blanca**, no borrando campos: un tipo nuevo con clave nueva no se filtra por descuido. Verificado:
 `correctIndex|correctIndexes|correctOrder` → 0 apariciones en `src/app/dashboard` y `src/components`.
+
+**Prueba combinada (2026-10) — el candidato ya NO elige tecnología ni nivel.** Cada prueba de práctica
+([`combined-exam.ts`](../src/lib/server/combined-exam.ts)) mezcla:
+- **70 %** preguntas de **sus tecnologías** (`users.lineTechnologies`, máx. 6), repartidas por turnos; y
+- **30 %** teoría de ingeniería de software (`software-engineering_{nivel}`),
+- al **nivel que declaró en su perfil** (`candidateProfile.selfLevel`: trainee/junior → junior, mid → mid,
+  senior/lead → senior; si falta un nivel se usa el de respaldo de `levelFallbackOrder`).
+- Si una tecnología (o la teoría) aún no tiene banco, se informa (`uncoveredTechnologies`, `theoryIncluded`)
+  y su cuota pasa a las demás. Errores: `409 profile_incomplete` (sin nivel), `409 no_technologies`,
+  `503 pool_not_seeded` (ninguna tiene preguntas). Un solo enfriamiento de 24 h para toda la prueba
+  (`scope = line_combined`). Cada pregunta lleva `tag` = id de su tecnología, así el DNA se actualiza por
+  tecnología como antes (y `software-engineering` también tiene su nota).
+- **Cambiar tecnologías:** solo vía `POST /api/profile/technologies` (las reglas bloquean
+  `users.lineTechnologies` al cliente). **Quitar una tecnología borra sus puntos del DNA** (nota e
+  historial, comparando por id canónico) en la misma transacción — decisión de producto: no se puede
+  conservar la nota de algo que ya no se declara. El formulario avisa antes de guardar.
 
 **Flujo:** `/api/line/start` lee el repertorio, sortea con `pickRandomQuestions` (estratificado por
 `(tag, tipo)` para que los scores sean comparables entre candidatos), crea `line_sessions` (con las claves,
@@ -148,8 +165,9 @@ guarda en `job_answer_keys`. Si no alcanza 10 preguntas → `422 no_bank_for_ski
 repertorio, `/api/line/start` lo compone al vuelo **en transacción**, para que dos candidatos simultáneos
 compartan el mismo.
 
-**Tecnología sin banco:** `503 pool_not_seeded`. El selector **solo ofrece lo precargado**
-(`/api/line/catalog`) — decisión explícita: ofrecer algo que no funciona es peor que no ofrecerlo.
+**Tecnología sin banco:** el formulario del perfil la marca "sin preguntas aún" y The LINE la tacha; si
+ninguna tiene banco → `503 pool_not_seeded`. `/api/line/catalog` devuelve `available` (bancos sembrados) y
+`combined` (tecnologías, nivel, cubiertas, reparto y `retryAt`).
 
 ### 3.2 Motor de GitHub
 
@@ -232,13 +250,14 @@ marcado `@deprecated` y **solo lo importa el Dev UI de Genkit**: es código muer
 
 ---
 
-## 5. Endpoints — 7 rutas, todas `runtime = "nodejs"`
+## 5. Endpoints — 8 rutas, todas `runtime = "nodejs"`
 
 | Endpoint | Qué hace | Auth | Rate limit |
 |---|---|---|---|
-| `POST /api/line/start` | Sortea preguntas, crea sesión, devuelve `PublicQuestion[]` | ID token | ✅ 1 / 24 h por tecnología o vacante |
+| `POST /api/line/start` | Arma la prueba combinada (o la de la vacante), crea sesión, devuelve `PublicQuestion[]` | ID token | ✅ 1 / 24 h (prueba combinada) o por vacante |
 | `POST /api/line/submit` | Corrige, escribe DNA + intento + candidatura | ID token + dueño de la sesión | ❌ |
-| `GET /api/line/catalog` | Combinaciones disponibles + `examSize` (nunca preguntas) | ID token | ❌ |
+| `GET /api/line/catalog` | Bancos disponibles, `examSize` y plan de la prueba combinada (nunca preguntas) | ID token | ❌ |
+| `POST /api/profile/technologies` | Guarda `users.lineTechnologies` (máx. 6) y borra del DNA las quitadas | ID token, solo `developer` | ❌ |
 | `POST /api/jobs/assessment` | Compone el repertorio de una vacante | ID token + dueño del job | ❌ |
 | `POST /api/github/repos` | Lista repos + poda evidencia | ID token | ✅ 12/h |
 | `POST /api/github/evaluate` | Analiza 1 repo (AST) | ID token + owner == username | ✅ 150/h |

@@ -101,7 +101,7 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
       const db = recruiter2Ctx.firestore();
       
       // Query directa sin filtro recruiterId (debería fallar por reglas)
-      await assertFails(
+      const denied = assertFails(
         getDocs(query(
           collection(db, "candidate_matches"),
           where("jobId", "==", job1),
@@ -109,6 +109,7 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
           limit(10)
         ))
       );
+      await expect(denied.then(() => true)).resolves.toBe(true);
     });
 
     it("jobId ajeno → error controlado (Job not found or access denied)", async () => {
@@ -225,7 +226,7 @@ describe.skipIf(!hasEmulator)("getMatchesForJob — security & pagination agains
       ];
       expect(allUserIds).toHaveLength(3);
       expect(new Set(allUserIds).size).toBe(3); // No duplicados
-      expect(allUserIds.sort()).toEqual(["userA", "userB", "userC"].sort());
+      expect([...allUserIds].sort((a, b) => a.localeCompare(b))).toEqual(["userA", "userB", "userC"]);
     });
 
     it("5 matches con mismo completedAt, pageSize 2 → verificar que se recuperan todos", async () => {

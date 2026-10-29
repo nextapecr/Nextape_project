@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { languageForPath, selectRepresentativeFiles, type RepoTreeEntry } from "./github-signals.service";
+import { languageForPath, selectRepresentativeFiles, treeSignals, type RepoTreeEntry } from "./github-signals.service";
 import { EXTENSION_MAP } from "./github-engine/parsers/universal-parser";
 
 const blob = (path: string, size: number): RepoTreeEntry => ({ path, type: "blob", size });
@@ -59,5 +59,28 @@ describe("selectRepresentativeFiles", () => {
 
   it("devuelve vacío si no hay código soportado", () => {
     expect(selectRepresentativeFiles([blob("README.md", 3000)], 10)).toEqual([]);
+  });
+});
+
+describe("treeSignals", () => {
+  const file = (path: string, size = 100) => blob(path, size);
+
+  it("detecta tests de varios lenguajes, CI y README", () => {
+    expect(treeSignals([file("src/app.test.ts")]).hasTests).toBe(true);
+    expect(treeSignals([file("pkg/handler_test.go")]).hasTests).toBe(true);
+    expect(treeSignals([file("app/test_models.py")]).hasTests).toBe(true);
+    expect(treeSignals([file("tests/conftest.py")]).hasTests).toBe(true);
+    expect(treeSignals([file(".github/workflows/ci.yml")]).hasCI).toBe(true);
+    expect(treeSignals([file("Jenkinsfile")]).hasCI).toBe(true);
+    expect(treeSignals([file("README.md", 1234)])).toMatchObject({ hasReadme: true, readmeLength: 1234 });
+  });
+
+  it("un repo sin nada de eso queda en falso", () => {
+    expect(treeSignals([file("src/index.ts"), file("docs/guide.md")])).toEqual({
+      hasTests: false,
+      hasCI: false,
+      hasReadme: false,
+      readmeLength: 0,
+    });
   });
 });

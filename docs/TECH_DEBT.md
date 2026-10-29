@@ -79,6 +79,13 @@ Ver detalle en [`CHANGELOG_FIXES.md`](./CHANGELOG_FIXES.md).
 - `src/ai/dev.ts` vacío → los flows no se registran en Genkit Dev UI.
 - The LINE sin guard cuando `questions` llega vacío (crash potencial).
 
+## 🟡 Complejidad cognitiva en scripts (SonarJS S3776)
+
+Quedan por encima del límite (15) los `main()` de scripts de CLI que se ejecutan a mano y **escriben en
+Firestore de producción**: `seed-question-bank` (44), `seed-skill-catalog-full` (44), `seed-skill-catalog` (36),
+`verify-roadmap-engine` (65), `inventory-question-pools` (21) y `test-github-feedback-tokens` (16). No se
+refactorizaron a ciegas (no se pueden probar sin credenciales). Hacerlo cuando se toquen, probándolos con `--dry-run`.
+
 ## Notas de proceso
 
 - **No modificar** este comportamiento sin acordarlo con el equipo (3 personas). Este archivo es el

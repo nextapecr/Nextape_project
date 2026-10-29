@@ -4,10 +4,11 @@ import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
-import { technologiesByCategory, CATEGORY_LABELS } from "@/lib/technologies";
-import { LEVELS, LEVEL_LABELS } from "@/lib/levels";
-import { Terminal, Cpu, Loader2, CheckCircle2, AlertCircle, Github, Timer } from "lucide-react";
+import { findTechnology } from "@/lib/technologies";
+import { cn } from "@/lib/utils";
+import { LEVEL_LABELS } from "@/lib/levels";
+import { Terminal, Cpu, Loader2, CheckCircle2, AlertCircle, Timer } from "lucide-react";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 import { apiPost, apiGet, ApiError } from "@/lib/api";
 import { JobService } from "@/services/jobs.service";
 import { QuestionCard, QuestionTypeBadge } from "@/components/line/QuestionCard";
@@ -33,7 +34,18 @@ function formatWait(ms: number): string {
   const totalMin = Math.max(1, Math.ceil(ms / 60000));
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
-  return h > 0 ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
+  if (h === 0) return `${m} min`;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+interface CombinedInfo {
+  technologies: string[];
+  level: string | null;
+  covered: string[];
+  uncovered: string[];
+  theoryAvailable: boolean;
+  plan: { theory: number; technologies: number };
+  retryAt: number | null;
 }
 
 interface SubmitResult {
@@ -64,20 +76,14 @@ function LineContent() {
   const submittingRef = useRef(false);
   /** Respuestas actuales, para el envío automático desde el temporizador. */
   const answersRef = useRef<Answer[]>([]);
-  // En el modo práctica el usuario elige una tecnología concreta del catálogo (o un stack amplio).
-  // Preselección desde enlaces (p. ej. "Practicar en The LINE" del roadmap: ?technology=&level=).
-  const [technology, setTechnology] = useState(searchParams.get("technology") ?? "react");
-  const [difficulty, setLevel] = useState(searchParams.get("level") ?? "senior");
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * Qué combinaciones tienen repertorio precargado (`subject → niveles`).
-   *
-   * El selector mostraba las 55 tecnologías del catálogo pero solo 13 estaban precargadas: el 76 %
-   * de las opciones devolvía 503 y el usuario lo interpretaba, con razón, como "The LINE está
-   * roto". Ahora solo se ofrece lo que de verdad se puede practicar.
+   * Prueba combinada (sin vacante): el candidato NO elige tecnología ni nivel. El servidor arma
+   * ~70 % de sus tecnologías del perfil + ~30 % de teoría de ingeniería de software, al nivel que
+   * declaró. Aquí solo se muestra qué va a entrar y qué falta.
    */
-  const [available, setAvailable] = useState<Record<string, string[]> | null>(null);
+  const [combined, setCombined] = useState<CombinedInfo | null>(null);
 
   /** Tamaño del examen antes de empezar: 10 con GitHub analizado, 20 sin él (lo decide el servidor). */
   const [examInfo, setExamInfo] = useState<{ examSize: number; hasGithub: boolean } | null>(null);
@@ -85,7 +91,8 @@ function LineContent() {
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(DEFAULT_TIME_LIMIT_MINUTES);
   /** Horas entre intentos de una misma tecnología, y cuándo vuelve a estar libre cada una. */
   const [cooldownHours, setCooldownHours] = useState(24);
-  const [cooldowns, setCooldowns] = useState<Record<string, number>>({});
+  /** Cuándo vuelve a estar disponible la prueba combinada (epoch ms), si ya se hizo hoy. */
+  const [retryAt, setRetryAt] = useState<number | null>(null);
   const [loadingLabel, setLoadingLabel] = useState("Preparando tu prueba");
 
   useEffect(() => {
@@ -101,49 +108,31 @@ function LineContent() {
       return;
     }
     apiGet<{
-      available: Record<string, string[]>;
+      combined: CombinedInfo;
       examSize: number;
       hasGithub: boolean;
       timeLimitMinutes?: number;
       cooldownHours?: number;
-      cooldowns?: Record<string, number>;
     }>("/api/line/catalog")
       .then((res) => {
-        setAvailable(res.available);
+        setCombined(res.combined);
+        setRetryAt(res.combined?.retryAt ?? null);
         setExamInfo({ examSize: res.examSize, hasGithub: res.hasGithub });
         if (res.timeLimitMinutes) setTimeLimitMinutes(res.timeLimitMinutes);
         if (typeof res.cooldownHours === "number") setCooldownHours(res.cooldownHours);
-        setCooldowns(res.cooldowns ?? {});
       })
-      .catch((err) => {
-        // Sin catálogo se muestra el listado completo: es preferible a dejar el selector vacío.
-        console.error("[line] no se pudo cargar el catálogo disponible:", err);
-        setAvailable({});
-      });
+      .catch((err) => console.error("[line] no se pudo cargar tu prueba:", err));
   }, [jobId]);
 
-  // Si la tecnología elegida por defecto no está precargada, se salta a la primera que sí lo esté.
-  useEffect(() => {
-    if (!available) return;
-    const subjects = Object.keys(available);
-    if (subjects.length === 0) return;
-    if (!available[technology]) setTechnology(subjects.includes("react") ? "react" : subjects[0]);
-  }, [available, technology]);
-
-  const levelsForTechnology = available?.[technology] ?? [...LEVELS];
-
-  /** Milisegundos hasta poder volver a intentar la tecnología elegida (0 = disponible). */
+  /** Milisegundos hasta poder volver a hacer la prueba (0 = disponible). */
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
   }, []);
-  const waitMs = !jobId && cooldowns[technology] ? Math.max(0, cooldowns[technology] - now) : 0;
-
-  useEffect(() => {
-    if (!levelsForTechnology.includes(difficulty)) setLevel(levelsForTechnology[0] ?? "senior");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [technology, available]);
+  const waitMs = !jobId && retryAt ? Math.max(0, retryAt - now) : 0;
+  /** Sin vacante, hace falta nivel en el perfil y al menos una tecnología con preguntas (o teoría). */
+  const setupMissing = jobId ? null : missingSetup(combined);
 
   /**
    * Bloquea el scroll del documento mientras el examen ocupa la pantalla.
@@ -175,7 +164,8 @@ function LineContent() {
     try {
       // Las preguntas se sortean EN SERVIDOR de un repertorio ya existente y llegan SIN la
       // respuesta correcta.
-      const payload = jobId ? { jobId } : { technology, level: difficulty };
+      // Sin vacante no se manda tecnología ni nivel: el servidor los toma del perfil.
+      const payload = jobId ? { jobId } : {};
       const data = await apiPost<{
         sessionId: string;
         questions: PublicQuestion[];
@@ -199,29 +189,9 @@ function LineContent() {
       setStatus("active");
     } catch (err) {
       console.error("Simulation failed to start:", err);
-      // `pool_not_seeded` = esa tecnología/nivel aún no está en el banco precargado. Es un caso
-      // esperado y accionable, no un fallo genérico: lo resuelve `npm run seed:questions`.
-      const code = err instanceof ApiError ? err.code : err instanceof Error ? err.message : "";
-      if (code === "rate_limited") {
-        const wait = err instanceof ApiError && err.retryAfterSeconds ? err.retryAfterSeconds * 1000 : 0;
-        if (!jobId && wait) setCooldowns((c) => ({ ...c, [technology]: Date.now() + wait }));
-        setError(
-          `Solo se permite 1 intento cada ${cooldownHours} h ${jobId ? "por vacante" : "por tecnología"}.` +
-            (wait ? ` Podrás volver a intentarlo en ${formatWait(wait)}.` : "")
-        );
-        setStatus("idle");
-        return;
-      }
-      // Cada motivo tiene su mensaje: antes todo lo que no fuera "sin banco" se mostraba como un
-      // error de conexión, también cuando el problema era la vacante.
-      const messages: Record<string, string> = {
-        pool_not_seeded: "Todavía no hay preguntas para esa tecnología y nivel. Prueba con otra combinación.",
-        job_incomplete: "Esta vacante no tiene skills o empresa asignadas, así que no se puede evaluar.",
-        job_without_bank: "Las skills de esta vacante aún no tienen preguntas. La empresa debe ajustarlas.",
-        job_closed: "Esta vacante está cerrada y ya no admite candidaturas.",
-        job_not_found: "Esta vacante ya no existe.",
-      };
-      setError(messages[code] ?? "No se pudo iniciar la prueba. Revisa tu conexión e inténtalo de nuevo.");
+      const failure = describeStartError(err, { jobId, cooldownHours });
+      if (failure.retryAt) setRetryAt(failure.retryAt);
+      setError(failure.message);
       setStatus("idle");
     }
   };
@@ -302,51 +272,7 @@ function LineContent() {
     );
   }
 
-  if (status === "finished") {
-    return (
-      <div className="max-w-2xl mx-auto py-20 text-center space-y-10">
-        <div className="w-24 h-24 bg-brand-green/10 rounded-full mx-auto flex items-center justify-center">
-          <CheckCircle2 className="h-12 w-12 text-brand-green" />
-        </div>
-        <div className="space-y-4">
-          <h2 className="text-5xl font-black italic tracking-tighter">SIMULACIÓN COMPLETADA.</h2>
-          <p className="text-gray-500 font-medium">Tus resultados han sido integrados en tu identidad CORE.</p>
-          {timedOut && (
-            <p className="text-brand-orange text-sm font-bold">
-              Se acabó el tiempo: las preguntas sin responder contaron como falladas.
-            </p>
-          )}
-        </div>
-        <div className="bg-white p-12 rounded-[3rem] shadow-apple border border-gray-50 inline-block">
-          <span className="text-8xl font-black text-brand-blue tracking-tighter italic">{result?.overall ?? 0}%</span>
-          <span className="block text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300 mt-4">Puntuación Verificada</span>
-        </div>
-        {result && Object.keys(result.dnaScores ?? {}).length > 0 && (
-          <div className="max-w-md mx-auto bg-gray-50 rounded-[2rem] p-6 space-y-3 text-left">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              Tu DNA quedó así
-              {result.level ? ` · nivel ${LEVEL_LABELS[result.level] ?? result.level} ${LEVEL_WEIGHT_LABELS[result.level] ?? ""}` : ""}
-            </p>
-            {Object.entries(result.dnaScores).map(([skill, dna]) => (
-              <div key={skill} className="flex items-center justify-between text-sm">
-                <span className="font-bold">{skill}</span>
-                <span className="text-gray-500">
-                  prueba {result.skillScores[skill] ?? 0}% → DNA <span className="font-bold text-black">{dna}%</span>
-                </span>
-              </div>
-            ))}
-            <p className="text-[11px] text-gray-400 leading-relaxed">
-              El DNA es el promedio de tus últimos 3 intentos, ponderado por nivel: un 100 % en Junior
-              aporta 60, en Mid 80 y en Senior 100.
-            </p>
-          </div>
-        )}
-        <div className="pt-10">
-          <Button onClick={() => window.location.href = "/dashboard/core"} className="h-16 px-12 bg-black text-white rounded-2xl font-bold uppercase tracking-widest shadow-apple-lg">Ir al CORE</Button>
-        </div>
-      </div>
-    );
-  }
+  if (status === "finished") return <FinishedView result={result} timedOut={timedOut} />;
 
   return (
     <div className="space-y-12 max-w-6xl mx-auto">
@@ -369,73 +295,11 @@ function LineContent() {
             </div>
 
             <div className="space-y-6">
-              {!jobId && (
-                <>
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-gray-300 ml-1">Lenguaje o tecnología</label>
-                    <Select value={technology} onValueChange={setTechnology}>
-                      <SelectTrigger className="bg-gray-50 border-none h-16 rounded-2xl font-bold text-lg px-6">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="rounded-2xl border-none shadow-apple-lg max-h-[50vh]">
-                        <SelectGroup>
-                          <SelectLabel className="text-[9px] uppercase tracking-widest text-gray-400">Stacks completos</SelectLabel>
-                          {[
-                            { id: "frontend", label: "Arquitectura Frontend" },
-                            { id: "backend", label: "Backend y Sistemas" },
-                            { id: "devops", label: "Cloud y DevOps" },
-                          ]
-                            .filter((s) => !available || available[s.id])
-                            .map((s) => (
-                              <SelectItem key={s.id} value={s.id}>
-                                {s.label}
-                              </SelectItem>
-                            ))}
-                        </SelectGroup>
-                        {technologiesByCategory()
-                          .map(({ category, items }) => ({
-                            category,
-                            // Solo lo que tiene repertorio precargado. Ofrecer una opción que
-                            // devuelve 503 es peor que no ofrecerla.
-                            items: available ? items.filter((t) => available[t.id]) : items,
-                          }))
-                          .filter(({ items }) => items.length > 0)
-                          .map(({ category, items }) => (
-                            <SelectGroup key={category}>
-                              <SelectLabel className="text-[9px] uppercase tracking-widest text-gray-400">
-                                {CATEGORY_LABELS[category]}
-                              </SelectLabel>
-                              {items.map((tech) => (
-                                <SelectItem key={tech.id} value={tech.id}>
-                                  {tech.label}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-gray-300 ml-1">Nivel Objetivo</label>
-                    <Select value={difficulty} onValueChange={setLevel}>
-                      <SelectTrigger className="bg-gray-50 border-none h-16 rounded-2xl font-bold text-lg px-6">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="rounded-2xl border-none shadow-apple-lg">
-                        {levelsForTechnology.map((lv) => (
-                          <SelectItem key={lv} value={lv}>
-                            {LEVEL_LABELS[lv] ?? lv}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              )}
+              {!jobId && combined && <CombinedPlan combined={combined} setupMissing={setupMissing} />}
 
               {!jobId && examInfo && (
                 <div className="flex items-start gap-3 bg-gray-50 p-4 rounded-2xl text-xs font-medium text-gray-500">
-                  <Github className="h-4 w-4 shrink-0 mt-0.5 text-gray-400" />
+                  <GithubIcon className="h-4 w-4 shrink-0 mt-0.5 text-gray-400" />
                   <p className="leading-relaxed">
                     Tu prueba tendrá <span className="font-bold text-black">{examInfo.examSize} preguntas</span>.{" "}
                     {examInfo.hasGithub ? (
@@ -457,13 +321,13 @@ function LineContent() {
                 <p className="leading-relaxed">
                   Tendrás <span className="font-bold text-black">{timeLimitMinutes} minutos</span>. Al
                   acabarse el tiempo la prueba se envía sola. Puedes hacer 1 intento cada {cooldownHours} h{" "}
-                  {jobId ? "por vacante" : "por tecnología"}, y el intento cuenta desde que empiezas.
+                  {jobId ? "por vacante" : "en The LINE"}, y el intento cuenta desde que empiezas.
                 </p>
               </div>
 
               {waitMs > 0 && (
                 <div className="flex items-center gap-2 text-brand-orange text-xs font-bold bg-brand-orange/5 p-4 rounded-xl">
-                  <AlertCircle className="h-4 w-4 shrink-0" /> Ya hiciste esta tecnología hoy. Disponible en {formatWait(waitMs)}.
+                  <AlertCircle className="h-4 w-4 shrink-0" /> Ya hiciste tu prueba de hoy. Disponible en {formatWait(waitMs)}.
                 </div>
               )}
 
@@ -475,7 +339,7 @@ function LineContent() {
 
               <Button
                 onClick={startSimulation}
-                disabled={waitMs > 0}
+                disabled={waitMs > 0 || setupMissing !== null || (!jobId && !combined)}
                 className="w-full h-16 bg-black text-white rounded-2xl text-base font-bold shadow-apple uppercase tracking-widest hover:scale-[1.02] transition-transform"
               >
                 Iniciar Sincronización
@@ -559,5 +423,173 @@ export default function LinePage() {
     <Suspense fallback={<div className="h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin" /></div>}>
       <LineContent />
     </Suspense>
+  );
+}
+
+/** Qué le falta al candidato para hacer la prueba combinada, o `null` si está listo. */
+function missingSetup(combined: CombinedInfo | null): "profile" | "technologies" | "bank" | null {
+  if (!combined) return null;
+  if (!combined.level) return "profile";
+  if (combined.technologies.length === 0) return "technologies";
+  if (combined.covered.length === 0 && !combined.theoryAvailable) return "bank";
+  return null;
+}
+
+/** Código de error de la API (`ApiError.code`) o el mensaje de un `Error`. */
+function errorCode(err: unknown): string {
+  if (err instanceof ApiError) return err.code;
+  if (err instanceof Error) return err.message;
+  return "";
+}
+
+/**
+ * Cada motivo de fallo al empezar tiene su mensaje: antes cualquier error que no fuera "sin banco"
+ * se mostraba como uno de conexión, también cuando el problema era la vacante.
+ * `pool_not_seeded` es esperado y accionable: lo resuelve `npm run seed:questions`.
+ */
+const START_ERROR_MESSAGES: Record<string, string> = {
+  pool_not_seeded: "Todavía no hay preguntas para tus tecnologías. Agrega otra en tu perfil o vuelve más tarde.",
+  profile_incomplete: "Completa tu perfil profesional (tu nivel) para que armemos tu prueba.",
+  no_technologies: "Elige tus tecnologías en tu perfil profesional para que armemos tu prueba.",
+  job_incomplete: "Esta vacante no tiene skills o empresa asignadas, así que no se puede evaluar.",
+  job_without_bank: "Las skills de esta vacante aún no tienen preguntas. La empresa debe ajustarlas.",
+  job_closed: "Esta vacante está cerrada y ya no admite candidaturas.",
+  job_not_found: "Esta vacante ya no existe.",
+};
+
+/** Mensaje para el usuario y, si se agotó el intento del día, cuándo vuelve a estar libre. */
+function describeStartError(
+  err: unknown,
+  { jobId, cooldownHours }: { jobId: string | null; cooldownHours: number },
+): { message: string; retryAt?: number } {
+  const code = errorCode(err);
+  if (code !== "rate_limited") {
+    return {
+      message: START_ERROR_MESSAGES[code] ?? "No se pudo iniciar la prueba. Revisa tu conexión e inténtalo de nuevo.",
+    };
+  }
+  const wait = err instanceof ApiError && err.retryAfterSeconds ? err.retryAfterSeconds * 1000 : 0;
+  const where = jobId ? "por vacante" : "en The LINE";
+  const when = wait ? ` Podrás volver a intentarlo en ${formatWait(wait)}.` : "";
+  return {
+    message: `Solo se permite 1 intento cada ${cooldownHours} h ${where}.${when}`,
+    retryAt: !jobId && wait ? Date.now() + wait : undefined,
+  };
+}
+
+/** Resultado de la prueba: nota, cómo quedó el DNA y cómo se calcula. */
+function FinishedView({ result, timedOut }: Readonly<{ result: SubmitResult | null; timedOut: boolean }>) {
+  return (
+    <div className="max-w-2xl mx-auto py-20 text-center space-y-10">
+      <div className="w-24 h-24 bg-brand-green/10 rounded-full mx-auto flex items-center justify-center">
+        <CheckCircle2 className="h-12 w-12 text-brand-green" />
+      </div>
+      <div className="space-y-4">
+        <h2 className="text-5xl font-black italic tracking-tighter">SIMULACIÓN COMPLETADA.</h2>
+        <p className="text-gray-500 font-medium">Tus resultados han sido integrados en tu identidad CORE.</p>
+        {timedOut && (
+          <p className="text-brand-orange text-sm font-bold">
+            Se acabó el tiempo: las preguntas sin responder contaron como falladas.
+          </p>
+        )}
+      </div>
+      <div className="bg-white p-12 rounded-[3rem] shadow-apple border border-gray-50 inline-block">
+        <span className="text-8xl font-black text-brand-blue tracking-tighter italic">{result?.overall ?? 0}%</span>
+        <span className="block text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300 mt-4">Puntuación Verificada</span>
+      </div>
+      {result && Object.keys(result.dnaScores ?? {}).length > 0 && (
+        <div className="max-w-md mx-auto bg-gray-50 rounded-[2rem] p-6 space-y-3 text-left">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            Tu DNA quedó así
+            {result.level ? ` · nivel ${LEVEL_LABELS[result.level] ?? result.level} ${LEVEL_WEIGHT_LABELS[result.level] ?? ""}` : ""}
+          </p>
+          {Object.entries(result.dnaScores).map(([skill, dna]) => (
+            <div key={skill} className="flex items-center justify-between text-sm">
+              <span className="font-bold">{skill}</span>
+              <span className="text-gray-500">
+                prueba {result.skillScores[skill] ?? 0}% → DNA <span className="font-bold text-black">{dna}%</span>
+              </span>
+            </div>
+          ))}
+          <p className="text-[11px] text-gray-400 leading-relaxed">
+            El DNA es el promedio de tus últimos 3 intentos, ponderado por nivel: un 100 % en Junior
+            aporta 60, en Mid 80 y en Senior 100.
+          </p>
+        </div>
+      )}
+      <div className="pt-10">
+        <Button onClick={() => window.location.href = "/dashboard/core"} className="h-16 px-12 bg-black text-white rounded-2xl font-bold uppercase tracking-widest shadow-apple-lg">Ir al CORE</Button>
+      </div>
+    </div>
+  );
+}
+
+/** Qué entra en la prueba combinada (tecnologías, teoría y nivel) y qué le falta al candidato. */
+function CombinedPlan({
+  combined,
+  setupMissing,
+}: Readonly<{ combined: CombinedInfo; setupMissing: "profile" | "technologies" | "bank" | null }>) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-300 ml-1">Tu prueba combinada</p>
+        <div className="flex flex-wrap gap-2">
+          {combined.technologies.map((t) => (
+            <span
+              key={t}
+              className={cn(
+                "rounded-full px-4 py-2 text-xs font-bold",
+                combined.covered.includes(t) ? "bg-brand-blue/10 text-brand-blue" : "bg-gray-100 text-gray-400 line-through",
+              )}
+              title={combined.covered.includes(t) ? undefined : "Aún no hay preguntas de esta tecnología"}
+            >
+              {findTechnology(t)?.label ?? t}
+            </span>
+          ))}
+          {combined.theoryAvailable && (
+            <span className="rounded-full px-4 py-2 text-xs font-bold bg-black text-white">
+              + Ingeniería de software
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-gray-400 font-medium leading-relaxed ml-1">
+          {combined.level ? (
+            <>
+              Nivel <span className="font-bold text-black">{LEVEL_LABELS[combined.level] ?? combined.level}</span>, según tu perfil.{" "}
+              {combined.theoryAvailable
+                ? `${combined.plan.technologies} preguntas de tus tecnologías y ${combined.plan.theory} de teoría (SOLID, patrones, arquitectura).`
+                : "La parte de teoría todavía no está disponible: todas las preguntas serán de tus tecnologías."}
+            </>
+          ) : (
+            "Falta tu nivel en el perfil profesional."
+          )}{" "}
+          <Link href="/dashboard/onboarding" className="font-bold text-brand-blue">
+            Cambiar en mi perfil
+          </Link>
+        </p>
+      </div>
+
+      {combined.uncovered.length > 0 && combined.covered.length > 0 && (
+        <div className="flex items-start gap-2 text-brand-orange text-xs font-bold bg-brand-orange/5 p-4 rounded-xl">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          Aún no hay preguntas de {combined.uncovered.map((t) => findTechnology(t)?.label ?? t).join(", ")}: por ahora
+          no entran en tu prueba.
+        </div>
+      )}
+
+      {setupMissing && (
+        <div className="flex items-start gap-3 bg-gray-950 text-white p-5 rounded-2xl text-sm font-medium">
+          <AlertCircle className="h-5 w-5 shrink-0 text-brand-blue" />
+          <p className="leading-relaxed">
+            {setupMissing === "profile" && "Antes de tu primera prueba, completa tu perfil profesional: con tu nivel armamos las preguntas."}
+            {setupMissing === "technologies" && "Elige en tu perfil las tecnologías que quieres que te evaluemos (hasta 6)."}
+            {setupMissing === "bank" && "Todavía no hay preguntas para ninguna de tus tecnologías. Agrega otra en tu perfil o vuelve más tarde."}{" "}
+            <Link href="/dashboard/onboarding" className="font-bold text-brand-blue">
+              Ir a mi perfil
+            </Link>
+          </p>
+        </div>
+      )}
+    </div>
   );
 }

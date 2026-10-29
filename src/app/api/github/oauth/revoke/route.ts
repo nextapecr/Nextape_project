@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb, verifyRequestUid } from "@/lib/firebase/admin";
+import { classifyRevocation, shouldDeleteEncryptedToken, type RevokeOutcome } from "@/lib/server/github-revoke";
 
 export const runtime = "nodejs";
 
@@ -75,76 +76,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Attempt to revoke on GitHub (best-effort, but we track success)
-    let githubRevoked = false;
-    let reason: 'other_app' | 'temporary' | null = null;
-    
-    try {
-      if (token && process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
-        const basicAuth = Buffer.from(
-          `${process.env.GITHUB_CLIENT_ID}:${process.env.GITHUB_CLIENT_SECRET}`
-        ).toString('base64');
-        
-        // First, check if token belongs to our app (POST /applications/{client_id}/{endpoint})
-        // This distinguishes "already revoked by us" (404) from "token from another app" (404)
-        const checkResponse = await fetch(`https://api.github.com/applications/${process.env.GITHUB_CLIENT_ID}/${GITHUB_REVOKE_ENDPOINT}`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Basic ${basicAuth}`,
-            'Accept': 'application/vnd.github+json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ access_token: token }),
-        });
-
-        if (checkResponse.status === 404) {
-          // Token doesn't belong to our app (different app or already revoked)
-          // Cannot confirm it's safe to delete encrypted data
-          reason = 'other_app';
-          console.warn('[github/oauth/revoke] Token check returned 404 (not our app or already revoked):', {
-            status: 404,
-            uid,
-          });
-        } else if (checkResponse.ok) {
-          // Token belongs to our app and is valid, proceed with revocation
-          const deleteResponse = await fetch(`https://api.github.com/applications/${process.env.GITHUB_CLIENT_ID}/${GITHUB_REVOKE_ENDPOINT}`, {
-            method: 'DELETE',
-            headers: {
-              'Authorization': `Basic ${basicAuth}`,
-              'Accept': 'application/vnd.github+json',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ access_token: token }),
-          });
-
-          if (deleteResponse.status === 204) {
-            githubRevoked = true;
-            console.log('[github/oauth/revoke] GitHub revocation successful:', {
-              status: 204,
-              uid,
-            });
-          } else {
-            reason = 'temporary';
-            console.warn('[github/oauth/revoke] GitHub revocation failed:', {
-              status: deleteResponse.status,
-              uid,
-            });
-          }
-        } else {
-          reason = 'temporary';
-          console.warn('[github/oauth/revoke] Token check failed:', {
-            status: checkResponse.status,
-            uid,
-          });
-        }
-      }
-    } catch {
-      // Network or fetch error
-      reason = 'temporary';
-      console.warn('[github/oauth/revoke] GitHub revocation error:', {
-        status: 'network_error',
-        uid,
-      });
-    }
+    const { githubRevoked, reason } = token
+      ? await revokeOnGithub(token, uid, GITHUB_REVOKE_ENDPOINT)
+      : { githubRevoked: false, reason: null };
 
     // Mark token as revoked (always, even if GitHub revocation failed)
     const updates: Record<string, unknown> = {
@@ -152,7 +86,7 @@ export async function POST(req: NextRequest) {
     };
 
     // Only delete encrypted data if GitHub revocation succeeded
-    if (githubRevoked) {
+    if (shouldDeleteEncryptedToken({ githubRevoked, reason })) {
       updates.encryptedToken = FieldValue.delete();
       updates.iv = FieldValue.delete();
       updates.authTag = FieldValue.delete();
@@ -167,4 +101,40 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ error: "server_error" }, { status: 500 });
   }
+}
+
+/** Pide a GitHub que revoque el token (check + DELETE). Solo registra códigos HTTP, nunca el token. */
+async function revokeOnGithub(token: string, uid: string, endpoint: string): Promise<RevokeOutcome> {
+  const clientId = process.env.GITHUB_CLIENT_ID;
+  const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return { githubRevoked: false, reason: null };
+
+  const url = `https://api.github.com/applications/${clientId}/${endpoint}`;
+  const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const init = (method: "POST" | "DELETE"): RequestInit => ({
+    method,
+    headers: {
+      Authorization: `Basic ${basicAuth}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ access_token: token }),
+  });
+
+  // Error de red → "network_error": `classifyRevocation` lo trata como temporal.
+  const statusOf = (method: "POST" | "DELETE") =>
+    fetch(url, init(method)).then(
+      (res) => res.status,
+      () => "network_error" as const,
+    );
+
+  // El check distingue "token de nuestra app" (200) de "otra app o ya revocado" (404).
+  const checkStatus = await statusOf("POST");
+  const checkOk = typeof checkStatus === "number" && checkStatus >= 200 && checkStatus < 300;
+  const deleteStatus = checkOk ? await statusOf("DELETE") : undefined;
+
+  const outcome = classifyRevocation(checkStatus, deleteStatus);
+  const log = outcome.githubRevoked ? console.log : console.warn;
+  log("[github/oauth/revoke] GitHub revocation:", { checkStatus, deleteStatus, reason: outcome.reason, uid });
+  return outcome;
 }
